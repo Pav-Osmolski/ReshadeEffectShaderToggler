@@ -661,9 +661,6 @@ static void on_destroy_device(device* device) {
 }
 
 void state_tracking::register_events(bool track) {
-    // disable for now
-    track = false;
-
     track_descriptors = track;
     descriptor_tracking::register_events(track);
 
