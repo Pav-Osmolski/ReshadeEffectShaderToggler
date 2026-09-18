@@ -154,20 +154,26 @@ const ResourceViewData RenderingManager::FindAutoRenderResourceView(command_list
     uint32_t frameWidth = 0, frameHeight = 0;
     deviceData.current_runtime->get_screenshot_width_and_height(&frameWidth, &frameHeight);
 
+    // Format is only a tie-breaker. In modern deferred renderers, HDR-looking formats
+    // are frequently lighting/G-buffer intermediates rather than the final pre-upscale scene.
+    // Let render-target history and resolution dominate candidate selection instead.
     auto formatScore = [](reshade::api::format value) -> int32_t {
         switch (format_to_default_typed(value, 0)) {
+            case reshade::api::format::r8g8b8a8_unorm:
+            case reshade::api::format::b8g8r8a8_unorm:
+                return 1600;
             case reshade::api::format::r16g16b16a16_float:
-                return 6000;
-            case reshade::api::format::r11g11b10_float:
-                return 5500;
-            case reshade::api::format::r32g32b32_float:
-            case reshade::api::format::r32g32b32a32_float:
-                return 5000;
+                return 1400;
             case reshade::api::format::r10g10b10a2_unorm:
             case reshade::api::format::b10g10r10a2_unorm:
-                return 2500;
+                return 1200;
+            case reshade::api::format::r11g11b10_float:
+                return 900;
+            case reshade::api::format::r32g32b32_float:
+            case reshade::api::format::r32g32b32a32_float:
+                return 800;
             case reshade::api::format::r16g16b16a16_unorm:
-                return 1800;
+                return 700;
             default:
                 return 500;
         }
