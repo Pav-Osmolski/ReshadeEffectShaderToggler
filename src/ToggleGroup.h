@@ -151,6 +151,8 @@ class ToggleGroup {
     bool getRenderToResourceViews() const { return _renderToResourceViews; }
     void setRenderToResourceViews(bool render) { _renderToResourceViews = render; }
     bool getAutoRenderSRV() const { return _autoRenderSRV; }
+    bool getAutoSceneColourProbe() const { return _autoSceneColourProbe; }
+    void setAutoSceneColourProbe(bool probe) { _autoSceneColourProbe = probe; }
     void setAutoRenderSRV(bool autoRender) {
         if (autoRender != _autoRenderSRV) {
             _autoRenderSRVSelectionPinned = false;
@@ -318,6 +320,7 @@ class ToggleGroup {
     volatile bool _copyTextureBinding;
     bool _renderToResourceViews;
     bool _autoRenderSRV = false;
+    bool _autoSceneColourProbe = false;
     bool _autoRenderSRVSelectionValid = false;
     uint32_t _autoRenderSRVSelectedStage = 0;
     uint32_t _autoRenderSRVSelectedSlot = 0;
