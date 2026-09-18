@@ -160,6 +160,14 @@ class ToggleGroup {
     uint32_t getAutoRenderSRVSelectedHeight() const { return _autoRenderSRVSelectedHeight; }
     reshade::api::format getAutoRenderSRVSelectedFormat() const { return _autoRenderSRVSelectedFormat; }
     int32_t getAutoRenderSRVSelectedScore() const { return _autoRenderSRVSelectedScore; }
+    uint64_t getDebugEffectRenderCalls() const { return _debugEffectRenderCalls; }
+    uint32_t getDebugLastRenderedTechniqueCount() const { return _debugLastRenderedTechniqueCount; }
+    uint64_t getDebugLastRenderTarget() const { return _debugLastRenderTarget; }
+    void recordDebugEffectRender(uint32_t techniqueCount, uint64_t targetHandle) {
+        ++_debugEffectRenderCalls;
+        _debugLastRenderedTechniqueCount = techniqueCount;
+        _debugLastRenderTarget = targetHandle;
+    }
     uint32_t getAutoRenderSRVCandidateIndex() const { return _autoRenderSRVCandidateIndex; }
     uint32_t getAutoRenderSRVCandidateCount() const { return _autoRenderSRVCandidateCount; }
     void setAutoRenderSRVCandidateIndex(uint32_t index) { _autoRenderSRVCandidateIndex = index; }
@@ -296,6 +304,9 @@ class ToggleGroup {
     uint32_t _autoRenderSRVSelectedHeight = 0;
     reshade::api::format _autoRenderSRVSelectedFormat = reshade::api::format::unknown;
     int32_t _autoRenderSRVSelectedScore = 0;
+    uint64_t _debugEffectRenderCalls = 0;
+    uint32_t _debugLastRenderedTechniqueCount = 0;
+    uint64_t _debugLastRenderTarget = 0;
     uint32_t _autoRenderSRVCandidateIndex = 0;
     uint32_t _autoRenderSRVCandidateCount = 0;
     bool _extractConstants;
