@@ -424,6 +424,11 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
                                 group->getDebugLastRenderedTechniqueCount(),
                                 static_cast<unsigned long long>(group->getDebugLastRenderTarget()));
                     ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::Text("Technique order");
+                    ImGui::TableNextColumn();
+                    ImGui::TextUnformatted(group->getDebugLastTechniqueOrder().empty() ? "(none)" : group->getDebugLastTechniqueOrder().c_str());
+                    ImGui::TableNextRow();
 
                     if (group->hasAutoRenderSRVSelection()) {
                         static const char* autoStageItems[] = { "PIXEL", "VERTEX", "COMPUTE" };
