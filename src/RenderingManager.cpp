@@ -139,6 +139,8 @@ const ResourceViewData RenderingManager::FindAutoRenderResourceView(command_list
         return best;
 
     state_tracking& state = cmd_list->get_private_data<state_tracking>();
+    descriptor_tracking& descriptorState = device->get_private_data<descriptor_tracking>();
+
     uint32_t frameWidth = 0, frameHeight = 0;
     deviceData.current_runtime->get_screenshot_width_and_height(&frameWidth, &frameHeight);
 
@@ -168,91 +170,154 @@ const ResourceViewData RenderingManager::FindAutoRenderResourceView(command_list
 
     const uint32_t matchMode = group->getMatchSwapchainResolution();
 
+    auto considerDescriptor = [&](const descriptor_tracking::descriptor_data* data,
+                                  uint32_t stage,
+                                  uint32_t slot,
+                                  uint32_t descriptor,
+                                  int32_t bindlessBonus = 0) {
+        if (data == nullptr || data->view == 0)
+            return;
+
+        if (data->type != descriptor_type::shader_resource_view && data->type != descriptor_type::sampler_with_resource_view)
+            return;
+
+        resource candidate = device->get_resource_from_view(data->view);
+        if (candidate == 0)
+            return;
+
+        const resource_desc desc = device->get_resource_desc(candidate);
+        if (desc.type != resource_type::texture_2d)
+            return;
+
+        const resource_view_desc viewDesc = device->get_resource_view_desc(data->view);
+        if (!IsColorBuffer(viewDesc.format) && !IsColorBuffer(desc.texture.format))
+            return;
+
+        if (!static_cast<uint32_t>(desc.usage & resource_usage::render_target))
+            return;
+
+        const bool exactResolution =
+          frameWidth != 0 && frameHeight != 0 && desc.texture.width == frameWidth && desc.texture.height == frameHeight;
+
+        const bool aspectCompatible =
+          frameWidth != 0 && frameHeight != 0 &&
+          check_aspect_ratio(static_cast<float>(desc.texture.width),
+                             static_cast<float>(desc.texture.height),
+                             frameWidth,
+                             frameHeight,
+                             matchMode == SWAPCHAIN_MATCH_MODE_EXTENDED_ASPECT_RATIO ? matchMode : SWAPCHAIN_MATCH_MODE_ASPECT_RATIO);
+
+        if (matchMode == SWAPCHAIN_MATCH_MODE_RESOLUTION && !exactResolution)
+            return;
+        if (!exactResolution && !aspectCompatible)
+            return;
+
+        int32_t score = bindlessBonus;
+
+        if (exactResolution) {
+            score += 100000;
+        } else if (aspectCompatible) {
+            score += 15000;
+
+            const double candidatePixels = static_cast<double>(desc.texture.width) * static_cast<double>(desc.texture.height);
+            const double framePixels = static_cast<double>(frameWidth) * static_cast<double>(frameHeight);
+            if (framePixels > 0.0) {
+                const double ratio = std::min(candidatePixels, framePixels) / std::max(candidatePixels, framePixels);
+                score += static_cast<int32_t>(ratio * 10000.0);
+            }
+        }
+
+        const reshade::api::format candidateFormat =
+          viewDesc.format != reshade::api::format::unknown ? viewDesc.format : desc.texture.format;
+        score += formatScore(candidateFormat);
+
+        if (stage == 0)
+            score += 1500;
+        else if (stage == 2)
+            score += 250;
+
+        if (static_cast<uint32_t>(desc.usage & resource_usage::shader_resource))
+            score += 500;
+
+        if (group->hasAutoRenderSRVSelection() &&
+            group->getAutoRenderSRVSelectedStage() == stage &&
+            group->getAutoRenderSRVSelectedSlot() == slot &&
+            group->getAutoRenderSRVSelectedDescriptor() == descriptor) {
+            score += 750;
+        }
+
+        if (score <= bestScore)
+            return;
+
+        bestScore = score;
+        best = ResourceViewData(candidate, candidateFormat);
+        bestStage = stage;
+        bestSlot = slot;
+        bestDescriptor = descriptor;
+        bestDesc = desc;
+        bestFormat = candidateFormat;
+    };
+
     for (uint32_t stage = 0; stage < 3; ++stage) {
         const size_t slotCount = state.get_root_table_size_at(stage);
+
+        // First scan REST's normal bounded descriptor snapshots.
         for (uint32_t slot = 0; slot < slotCount; ++slot) {
             const size_t descriptorCount = state.get_root_table_entry_size_at(stage, slot);
             for (uint32_t descriptor = 0; descriptor < descriptorCount; ++descriptor) {
-                const descriptor_tracking::descriptor_data* data = state.get_descriptor_at(stage, slot, descriptor);
-                if (data == nullptr || data->view == 0)
+                considerDescriptor(state.get_descriptor_at(stage, slot, descriptor), stage, slot, descriptor);
+            }
+        }
+
+        // D3D12 games frequently use unbounded/bindless descriptor ranges. REST intentionally
+        // omits these from descriptor_buffer because their declared size is UINT32_MAX, so
+        // inspect the currently bound descriptor table directly from the tracked heap.
+        if (device->get_api() != device_api::d3d12)
+            continue;
+
+        const auto& [layout, rootEntries] = state.root_tables[stage];
+        if (layout == 0)
+            continue;
+
+        for (uint32_t slot = 0; slot < rootEntries.size(); ++slot) {
+            const auto& rootEntry = rootEntries[slot];
+            if (rootEntry.type != StateTracking::root_entry_type::descriptor_table || rootEntry.descriptor_table == 0)
+                continue;
+
+            pipeline_layout_param param = {};
+            if (!descriptorState.try_get_pipeline_layout_param(layout, slot, param) ||
+                param.type != pipeline_layout_param_type::descriptor_table) {
+                continue;
+            }
+
+            for (uint32_t rangeIndex = 0; rangeIndex < param.descriptor_table.count; ++rangeIndex) {
+                const descriptor_range& range = param.descriptor_table.ranges[rangeIndex];
+                if (range.count != UINT32_MAX ||
+                    (range.type != descriptor_type::shader_resource_view && range.type != descriptor_type::sampler_with_resource_view)) {
                     continue;
-
-                if (data->type != descriptor_type::shader_resource_view && data->type != descriptor_type::sampler_with_resource_view)
-                    continue;
-
-                resource candidate = device->get_resource_from_view(data->view);
-                if (candidate == 0)
-                    continue;
-
-                const resource_desc desc = device->get_resource_desc(candidate);
-                if (desc.type != resource_type::texture_2d)
-                    continue;
-
-                const resource_view_desc viewDesc = device->get_resource_view_desc(data->view);
-                if (!IsColorBuffer(viewDesc.format) && !IsColorBuffer(desc.texture.format))
-                    continue;
-
-                if (!static_cast<uint32_t>(desc.usage & resource_usage::render_target))
-                    continue;
-
-                const bool exactResolution = frameWidth != 0 && frameHeight != 0 && desc.texture.width == frameWidth && desc.texture.height == frameHeight;
-                const bool aspectCompatible =
-                  frameWidth != 0 && frameHeight != 0 &&
-                  check_aspect_ratio(static_cast<float>(desc.texture.width),
-                                     static_cast<float>(desc.texture.height),
-                                     frameWidth,
-                                     frameHeight,
-                                     matchMode == SWAPCHAIN_MATCH_MODE_EXTENDED_ASPECT_RATIO ? matchMode : SWAPCHAIN_MATCH_MODE_ASPECT_RATIO);
-
-                if (matchMode == SWAPCHAIN_MATCH_MODE_RESOLUTION && !exactResolution)
-                    continue;
-                if (!exactResolution && !aspectCompatible)
-                    continue;
-
-                int32_t score = 0;
-
-                if (exactResolution) {
-                    score += 100000;
-                } else if (aspectCompatible) {
-                    score += 15000;
-
-                    const double candidatePixels = static_cast<double>(desc.texture.width) * static_cast<double>(desc.texture.height);
-                    const double framePixels = static_cast<double>(frameWidth) * static_cast<double>(frameHeight);
-                    if (framePixels > 0.0) {
-                        const double ratio = std::min(candidatePixels, framePixels) / std::max(candidatePixels, framePixels);
-                        score += static_cast<int32_t>(ratio * 10000.0);
-                    }
                 }
 
-                const reshade::api::format candidateFormat =
-                  viewDesc.format != reshade::api::format::unknown ? viewDesc.format : desc.texture.format;
-                score += formatScore(candidateFormat);
-
-                if (stage == 0)
-                    score += 1500;
-                else if (stage == 2)
-                    score += 250;
-
-                if (static_cast<uint32_t>(desc.usage & resource_usage::shader_resource))
-                    score += 500;
-
-                if (group->hasAutoRenderSRVSelection() &&
-                    group->getAutoRenderSRVSelectedStage() == stage &&
-                    group->getAutoRenderSRVSelectedSlot() == slot &&
-                    group->getAutoRenderSRVSelectedDescriptor() == descriptor) {
-                    score += 750;
-                }
-
-                if (score <= bestScore)
+                descriptor_heap heap = { 0 };
+                uint32_t baseOffset = 0;
+                device->get_descriptor_heap_offset(rootEntry.descriptor_table, range.binding, 0, &heap, &baseOffset);
+                if (heap == 0)
                     continue;
 
-                bestScore = score;
-                best = ResourceViewData(candidate, candidateFormat);
-                bestStage = stage;
-                bestSlot = slot;
-                bestDescriptor = descriptor;
-                bestDesc = desc;
-                bestFormat = candidateFormat;
+                const size_t heapSize = descriptorState.get_descriptor_heap_size(heap);
+                if (baseOffset >= heapSize)
+                    continue;
+
+                // Bindless heaps may contain hundreds of thousands of descriptors. This scan
+                // occurs only at a matched shader draw, but keep a generous cap to avoid a
+                // pathological frame hitch while still covering typical scene-resource tables.
+                constexpr size_t MAX_BINDLESS_SCAN = 131072;
+                const size_t scanEnd = std::min(heapSize, static_cast<size_t>(baseOffset) + MAX_BINDLESS_SCAN);
+
+                for (size_t heapOffset = baseOffset; heapOffset < scanEnd; ++heapOffset) {
+                    const auto* data = descriptorState.get_descriptor_data(heap, static_cast<uint32_t>(heapOffset));
+                    const uint32_t relativeDescriptor = static_cast<uint32_t>(heapOffset - baseOffset);
+                    considerDescriptor(data, stage, slot, relativeDescriptor, 100);
+                }
             }
         }
     }
