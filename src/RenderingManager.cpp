@@ -145,21 +145,21 @@ const ResourceViewData RenderingManager::FindAutoRenderResourceView(command_list
     int32_t bestScore = -2147483647 - 1;
     uint32_t bestStage = 0, bestSlot = 0, bestDescriptor = 0;
     resource_desc bestDesc = {};
-    format bestFormat = format::unknown;
+    reshade::api::format bestFormat = reshade::api::format::unknown;
 
-    auto formatScore = [](format value) -> int32_t {
+    auto formatScore = [](reshade::api::format value) -> int32_t {
         switch (format_to_default_typed(value, 0)) {
-            case format::r16g16b16a16_float:
+            case reshade::api::format::r16g16b16a16_float:
                 return 6000;
-            case format::r11g11b10_float:
+            case reshade::api::format::r11g11b10_float:
                 return 5500;
-            case format::r32g32b32_float:
-            case format::r32g32b32a32_float:
+            case reshade::api::format::r32g32b32_float:
+            case reshade::api::format::r32g32b32a32_float:
                 return 5000;
-            case format::r10g10b10a2_unorm:
-            case format::b10g10r10a2_unorm:
+            case reshade::api::format::r10g10b10a2_unorm:
+            case reshade::api::format::b10g10r10a2_unorm:
                 return 2500;
-            case format::r16g16b16a16_unorm:
+            case reshade::api::format::r16g16b16a16_unorm:
                 return 1800;
             default:
                 return 500;
@@ -224,7 +224,8 @@ const ResourceViewData RenderingManager::FindAutoRenderResourceView(command_list
                     }
                 }
 
-                const format candidateFormat = viewDesc.format != format::unknown ? viewDesc.format : desc.texture.format;
+                const reshade::api::format candidateFormat =
+                  viewDesc.format != reshade::api::format::unknown ? viewDesc.format : desc.texture.format;
                 score += formatScore(candidateFormat);
 
                 if (stage == 0)
