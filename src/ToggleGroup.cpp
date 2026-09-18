@@ -79,6 +79,9 @@ ToggleGroup::ToggleGroup(string name, int id) {
     _group_buffers[static_cast<uint32_t>(GroupResourceType::RESOURCE_CONSTANTS_COPY)] = {
         {}, {}, {}, {}, {}, {}, {}, [&]() { return _extractConstants; }, [&]() { return false; }, GroupResourceState::RESOURCE_INVALID, true
     };
+    _group_buffers[static_cast<uint32_t>(GroupResourceType::RESOURCE_NATIVE_STAGING)] = {
+        {}, {}, {}, {}, {}, {}, {}, [&]() { return _autoRenderSRV; }, [&]() { return false; }, GroupResourceState::RESOURCE_INVALID, true
+    };
 }
 
 ToggleGroup::ToggleGroup()
