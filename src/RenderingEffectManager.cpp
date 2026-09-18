@@ -101,6 +101,17 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
             continue;
         }
 
+        const bool transitionAutoSRV =
+          group->getAutoRenderSRV() && cmd_list->get_device()->get_api() == device_api::d3d12;
+
+        // Auto scene-colour targets are discovered as SRVs at the matched game draw.
+        // D3D12 therefore has them in shader-resource state when REST temporarily renders
+        // the selected techniques into the same texture. Restore shader-resource state
+        // before the game's draw resumes so its original descriptor binding remains valid.
+        if (transitionAutoSRV) {
+            cmd_list->barrier(active_resource.resource, resource_usage::shader_resource, resource_usage::render_target);
+        }
+
         if (group->getPreserveAlpha()) {
             if (groupResourceManager.IsCompatibleWithGroupFormat(runtime->get_device(), GroupResourceType::RESOURCE_ALPHA, active_resource.resource, group)) {
                 resource group_res = {};
@@ -156,6 +167,10 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
 
             if (target_view_non_srgb != 0)
                 shaderManager.CopyResourceMaskAlpha(cmd_list, group_view, target_view_non_srgb, desc.texture.width, desc.texture.height);
+        }
+
+        if (transitionAutoSRV) {
+            cmd_list->barrier(active_resource.resource, resource_usage::render_target, resource_usage::shader_resource);
         }
     }
 
