@@ -344,6 +344,29 @@ const ResourceViewData RenderingManager::FindAutoRenderResourceView(command_list
         }
     }
 
+    // Prefer conventional RGBA scene-colour surfaces over packed RGB lighting
+    // intermediates when both are otherwise plausible. BG3 exposes the complete pre-DLSS
+    // scene as R8G8B8A8, while its sparse character/lighting intermediate is R11G11B10.
+    // Keep this as a relative preference only: if no RGBA candidate exists, the RGB
+    // candidate remains available and can still be selected automatically or manually.
+    const bool hasRGBA8Candidate = std::any_of(candidates.begin(), candidates.end(), [](const AutoCandidate& candidate) {
+        const reshade::api::format fmt = format_to_default_typed(candidate.format, 0);
+        return fmt == reshade::api::format::r8g8b8a8_unorm ||
+               fmt == reshade::api::format::b8g8r8a8_unorm;
+    });
+
+    if (hasRGBA8Candidate) {
+        for (AutoCandidate& candidate : candidates) {
+            const reshade::api::format fmt = format_to_default_typed(candidate.format, 0);
+            if (fmt == reshade::api::format::r8g8b8a8_unorm ||
+                fmt == reshade::api::format::b8g8r8a8_unorm) {
+                candidate.score += 12000;
+            } else if (fmt == reshade::api::format::r11g11b10_float) {
+                candidate.score -= 4000;
+            }
+        }
+    }
+
     std::sort(candidates.begin(), candidates.end(), [](const AutoCandidate& a, const AutoCandidate& b) {
         if (a.score != b.score)
             return a.score > b.score;
