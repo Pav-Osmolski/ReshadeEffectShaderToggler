@@ -246,11 +246,27 @@ const ResourceViewData RenderingManager::FindAutoRenderResourceView(command_list
         if (static_cast<uint32_t>(desc.usage & resource_usage::shader_resource))
             score += 500;
 
-        if (group->hasAutoRenderSRVSelection() &&
-            group->getAutoRenderSRVSelectedStage() == stage &&
-            group->getAutoRenderSRVSelectedSlot() == slot &&
-            group->getAutoRenderSRVSelectedDescriptor() == descriptor) {
-            score += 750;
+        const auto historyIt = state.render_target_history.find(candidateResource.handle);
+        if (historyIt != state.render_target_history.end()) {
+            const auto& history = historyIt->second;
+            const uint64_t age = state.render_target_bind_serial >= history.bind_serial ?
+              state.render_target_bind_serial - history.bind_serial : 0;
+
+            if (age == 0)
+                score += 6000;
+            else if (age == 1)
+                score += 4500;
+            else if (age <= 3)
+                score += 2500;
+            else if (age <= 8)
+                score += 1000;
+
+            if (history.slot == 0)
+                score += 3500;
+            else if (history.slot == 1)
+                score += 500;
+            else
+                score -= 500;
         }
 
         seenResources.emplace(candidateResource.handle);
