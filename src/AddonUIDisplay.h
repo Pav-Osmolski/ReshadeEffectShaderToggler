@@ -446,12 +446,12 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
                         if (candidateCount > 1) {
                             ImGui::SameLine();
                             if (ImGui::SmallButton("<##AutoScenePrev") && candidateIndex > 0) {
-                                group->setAutoRenderSRVCandidateIndex(candidateIndex - 1);
+                                group->requestAutoRenderSRVCandidateIndex(candidateIndex - 1);
                             }
 
                             ImGui::SameLine();
                             if (ImGui::SmallButton(">##AutoSceneNext") && candidateIndex + 1 < candidateCount) {
-                                group->setAutoRenderSRVCandidateIndex(candidateIndex + 1);
+                                group->requestAutoRenderSRVCandidateIndex(candidateIndex + 1);
                             }
                         }
                     } else {
