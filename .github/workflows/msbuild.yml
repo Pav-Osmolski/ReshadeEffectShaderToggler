@@ -52,3 +52,5 @@ jobs:
         name: REST-auto-scene-colour-x64
         path: src/x64/Release/ReshadeEffectShaderToggler.addon64
         if-no-files-found: error
+
+# trigger build after enabling Actions
