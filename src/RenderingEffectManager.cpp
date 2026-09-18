@@ -102,7 +102,8 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
         }
 
         const bool transitionAutoSRV =
-          group->getAutoRenderSRV() && cmd_list->get_device()->get_api() == device_api::d3d12;
+          group->getAutoRenderSRV() && group->getRenderToResourceViews() &&
+          cmd_list->get_device()->get_api() == device_api::d3d12;
 
         // Auto scene-colour targets are discovered as SRVs at the matched game draw.
         // D3D12 therefore has them in shader-resource state when REST temporarily renders
