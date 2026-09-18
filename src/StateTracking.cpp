@@ -197,6 +197,8 @@ void state_block::clear() {
     current_pipeline.fill(pipeline{ 0 });
     current_pipeline_stage.fill(static_cast<pipeline_stage>(0));
     resource_barrier_track.clear();
+    render_target_bind_serial = 0;
+    render_target_history.clear();
 }
 
 void state_block::clear_present(effect_runtime* runtime) {
@@ -247,6 +249,20 @@ static void on_bind_render_targets_and_depth_stencil(command_list* cmd_list, uin
     auto& state = cmd_list->get_private_data<state_tracking>();
     state.render_targets.assign(rtvs, rtvs + count);
     state.depth_stencil = dsv;
+
+    ++state.render_target_bind_serial;
+    device* device = cmd_list->get_device();
+    if (device != nullptr) {
+        for (uint32_t i = 0; i < count; ++i) {
+            if (rtvs[i] == 0)
+                continue;
+
+            resource res = device->get_resource_from_view(rtvs[i]);
+            if (res != 0) {
+                state.render_target_history[res.handle] = { state.render_target_bind_serial, i };
+            }
+        }
+    }
 }
 
 static void on_bind_pipeline(command_list* cmd_list, pipeline_stage stages, pipeline pipeline) {
