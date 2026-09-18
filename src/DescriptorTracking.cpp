@@ -50,6 +50,19 @@ buffer_range descriptor_tracking::get_buffer_range(descriptor_heap heap, uint32_
     return { 0 };
 }
 
+const descriptor_tracking::descriptor_data* descriptor_tracking::get_descriptor_data(descriptor_heap heap, uint32_t offset) const {
+    const auto it = heaps.find(heap);
+    if (it == heaps.end() || offset >= it->second.descriptors.size())
+        return nullptr;
+
+    return &it->second.descriptors[offset];
+}
+
+size_t descriptor_tracking::get_descriptor_heap_size(descriptor_heap heap) const {
+    const auto it = heaps.find(heap);
+    return it == heaps.end() ? 0 : it->second.descriptors.size();
+}
+
 void descriptor_tracking::set_all_descriptors(reshade::api::descriptor_heap heap,
                                               uint32_t offset,
                                               uint32_t count,
