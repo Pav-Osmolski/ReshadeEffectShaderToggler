@@ -80,7 +80,20 @@ ToggleGroup::ToggleGroup(string name, int id) {
         {}, {}, {}, {}, {}, {}, {}, [&]() { return _extractConstants; }, [&]() { return false; }, GroupResourceState::RESOURCE_INVALID, true
     };
     _group_buffers[static_cast<uint32_t>(GroupResourceType::RESOURCE_NATIVE_STAGING)] = {
-        {}, {}, {}, {}, {}, {}, {}, [&]() { return _autoRenderSRV; }, [&]() { return false; }, GroupResourceState::RESOURCE_INVALID, true
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        [this]() {
+            const GroupResource& staging = _group_buffers[static_cast<uint32_t>(GroupResourceType::RESOURCE_NATIVE_STAGING)];
+            return _autoRenderSRV && staging.target_description.texture.width > 0 && staging.target_description.texture.height > 0;
+        },
+        [this]() { return false; },
+        GroupResourceState::RESOURCE_INVALID,
+        true
     };
 }
 
