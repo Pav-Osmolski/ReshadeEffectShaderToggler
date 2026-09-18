@@ -172,7 +172,8 @@ void ToggleGroupResourceManager::CheckGroupBuffers(reshade::api::effect_runtime*
             DisposeGroupResources(runtime->get_device(), resources.res, resources.rtv, resources.rtv_srgb, resources.srv);
 
             if (static_cast<GroupResourceType>(i) == GroupResourceType::RESOURCE_ALPHA ||
-                static_cast<GroupResourceType>(i) == GroupResourceType::RESOURCE_BINDING) {
+                static_cast<GroupResourceType>(i) == GroupResourceType::RESOURCE_BINDING ||
+                static_cast<GroupResourceType>(i) == GroupResourceType::RESOURCE_NATIVE_STAGING) {
                 reshade::api::resource_usage res_usage = resource_usage::copy_dest | resource_usage::copy_source | resource_usage::shader_resource;
 
                 bool validRT = isValidRenderTarget(resources.target_description.texture.format);
@@ -251,7 +252,7 @@ bool ToggleGroupResourceManager::IsCompatibleWithGroupFormat(reshade::api::devic
     resource_desc tdesc = device->get_resource_desc(res);
     resource_desc preview_desc = device->get_resource_desc(resources.res);
 
-    if (type == GroupResourceType::RESOURCE_ALPHA || type == GroupResourceType::RESOURCE_BINDING) {
+    if (type == GroupResourceType::RESOURCE_ALPHA || type == GroupResourceType::RESOURCE_BINDING || type == GroupResourceType::RESOURCE_NATIVE_STAGING) {
         if (format_to_typeless(tdesc.texture.format) == format_to_typeless(preview_desc.texture.format) && tdesc.texture.width == preview_desc.texture.width &&
             tdesc.texture.height == preview_desc.texture.height && tdesc.texture.levels == preview_desc.texture.levels) {
             return true;
