@@ -130,24 +130,29 @@ bool RenderingManager::ValidFormat(effect_runtime* runtime, const resource_desc&
 const ResourceViewData RenderingManager::FindAutoRenderResourceView(command_list* cmd_list,
                                                                     DeviceDataContainer& deviceData,
                                                                     ToggleGroup* group) {
-    ResourceViewData best;
+    struct AutoCandidate {
+        ResourceViewData view;
+        uint32_t stage = 0;
+        uint32_t slot = 0;
+        uint32_t descriptor = 0;
+        resource_desc desc = {};
+        reshade::api::format format = reshade::api::format::unknown;
+        int32_t score = 0;
+    };
+
+    ResourceViewData empty;
     if (cmd_list == nullptr || group == nullptr || deviceData.current_runtime == nullptr)
-        return best;
+        return empty;
 
     device* device = cmd_list->get_device();
     if (device == nullptr)
-        return best;
+        return empty;
 
     state_tracking& state = cmd_list->get_private_data<state_tracking>();
     descriptor_tracking& descriptorState = device->get_private_data<descriptor_tracking>();
 
     uint32_t frameWidth = 0, frameHeight = 0;
     deviceData.current_runtime->get_screenshot_width_and_height(&frameWidth, &frameHeight);
-
-    int32_t bestScore = -2147483647 - 1;
-    uint32_t bestStage = 0, bestSlot = 0, bestDescriptor = 0;
-    resource_desc bestDesc = {};
-    reshade::api::format bestFormat = reshade::api::format::unknown;
 
     auto formatScore = [](reshade::api::format value) -> int32_t {
         switch (format_to_default_typed(value, 0)) {
@@ -169,6 +174,8 @@ const ResourceViewData RenderingManager::FindAutoRenderResourceView(command_list
     };
 
     const uint32_t matchMode = group->getMatchSwapchainResolution();
+    std::vector<AutoCandidate> candidates;
+    std::unordered_set<uint64_t> seenResources;
 
     auto considerDescriptor = [&](const descriptor_tracking::descriptor_data* data,
                                   uint32_t stage,
@@ -181,11 +188,11 @@ const ResourceViewData RenderingManager::FindAutoRenderResourceView(command_list
         if (data->type != descriptor_type::shader_resource_view && data->type != descriptor_type::sampler_with_resource_view)
             return;
 
-        resource candidate = device->get_resource_from_view(data->view);
-        if (candidate == 0)
+        resource candidateResource = device->get_resource_from_view(data->view);
+        if (candidateResource == 0 || seenResources.contains(candidateResource.handle))
             return;
 
-        const resource_desc desc = device->get_resource_desc(candidate);
+        const resource_desc desc = device->get_resource_desc(candidateResource);
         if (desc.type != resource_type::texture_2d)
             return;
 
@@ -246,22 +253,21 @@ const ResourceViewData RenderingManager::FindAutoRenderResourceView(command_list
             score += 750;
         }
 
-        if (score <= bestScore)
-            return;
-
-        bestScore = score;
-        best = ResourceViewData(candidate, candidateFormat);
-        bestStage = stage;
-        bestSlot = slot;
-        bestDescriptor = descriptor;
-        bestDesc = desc;
-        bestFormat = candidateFormat;
+        seenResources.emplace(candidateResource.handle);
+        candidates.push_back({
+            ResourceViewData(candidateResource, candidateFormat),
+            stage,
+            slot,
+            descriptor,
+            desc,
+            candidateFormat,
+            score
+        });
     };
 
     for (uint32_t stage = 0; stage < 3; ++stage) {
         const size_t slotCount = state.get_root_table_size_at(stage);
 
-        // First scan REST's normal bounded descriptor snapshots.
         for (uint32_t slot = 0; slot < slotCount; ++slot) {
             const size_t descriptorCount = state.get_root_table_entry_size_at(stage, slot);
             for (uint32_t descriptor = 0; descriptor < descriptorCount; ++descriptor) {
@@ -269,9 +275,6 @@ const ResourceViewData RenderingManager::FindAutoRenderResourceView(command_list
             }
         }
 
-        // D3D12 games frequently use unbounded/bindless descriptor ranges. REST intentionally
-        // omits these from descriptor_buffer because their declared size is UINT32_MAX, so
-        // inspect the currently bound descriptor table directly from the tracked heap.
         if (device->get_api() != device_api::d3d12)
             continue;
 
@@ -307,9 +310,6 @@ const ResourceViewData RenderingManager::FindAutoRenderResourceView(command_list
                 if (baseOffset >= heapSize)
                     continue;
 
-                // Bindless heaps may contain hundreds of thousands of descriptors. This scan
-                // occurs only at a matched shader draw, but keep a generous cap to avoid a
-                // pathological frame hitch while still covering typical scene-resource tables.
                 constexpr size_t MAX_BINDLESS_SCAN = 131072;
                 const size_t scanEnd = std::min(heapSize, static_cast<size_t>(baseOffset) + MAX_BINDLESS_SCAN);
 
@@ -322,19 +322,35 @@ const ResourceViewData RenderingManager::FindAutoRenderResourceView(command_list
         }
     }
 
-    if (best.resource != 0) {
-        group->setAutoRenderSRVSelection(bestStage,
-                                         bestSlot,
-                                         bestDescriptor,
-                                         bestDesc.texture.width,
-                                         bestDesc.texture.height,
-                                         bestFormat,
-                                         bestScore);
-    } else {
+    std::sort(candidates.begin(), candidates.end(), [](const AutoCandidate& a, const AutoCandidate& b) {
+        if (a.score != b.score)
+            return a.score > b.score;
+        if (a.stage != b.stage)
+            return a.stage < b.stage;
+        if (a.slot != b.slot)
+            return a.slot < b.slot;
+        return a.descriptor < b.descriptor;
+    });
+
+    group->setAutoRenderSRVCandidateCount(static_cast<uint32_t>(candidates.size()));
+    if (candidates.empty()) {
         group->clearAutoRenderSRVSelection();
+        return empty;
     }
 
-    return best;
+    const uint32_t selectedIndex =
+      std::min(group->getAutoRenderSRVCandidateIndex(), static_cast<uint32_t>(candidates.size() - 1));
+    const AutoCandidate& selected = candidates[selectedIndex];
+
+    group->setAutoRenderSRVSelection(selected.stage,
+                                     selected.slot,
+                                     selected.descriptor,
+                                     selected.desc.texture.width,
+                                     selected.desc.texture.height,
+                                     selected.format,
+                                     selected.score);
+
+    return selected.view;
 }
 
 const ResourceViewData RenderingManager::GetCurrentResourceView(command_list* cmd_list,
