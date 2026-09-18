@@ -310,7 +310,10 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
     uint32_t selectedSwapchainMatchMode = group->getMatchSwapchainResolution();
     const char* typesSelectedSwapchainMatchMode = swapchainMatchOptions[selectedSwapchainMatchMode];
 
-    bool supportsSRVwrite = runtime->get_device()->get_api() < reshade::api::device_api::d3d12 || autoSceneColour;
+    const reshade::api::device_api deviceApi = runtime->get_device()->get_api();
+    const bool autoSceneColourSupported = deviceApi <= reshade::api::device_api::d3d12;
+    bool supportsSRVwrite = deviceApi < reshade::api::device_api::d3d12 ||
+                            (deviceApi == reshade::api::device_api::d3d12 && autoSceneColour);
 
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
     if (ImGui::BeginChild("RenderTargets", { 0, height / 1.5f }, true, ImGuiChildFlags_AlwaysAutoResize)) {
@@ -322,11 +325,15 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
             ImGui::TableNextColumn();
             ImGui::Text("Auto scene colour");
             ImGui::TableNextColumn();
-            if (!instance.GetTrackDescriptors())
+            const bool disableAutoSceneColour = !instance.GetTrackDescriptors() || !autoSceneColourSupported;
+            if (disableAutoSceneColour)
                 ImGui::BeginDisabled();
             ImGui::Checkbox("##AutoSceneColour", &autoSceneColour);
-            if (!instance.GetTrackDescriptors())
+            if (disableAutoSceneColour)
                 ImGui::EndDisabled();
+
+            if (!autoSceneColourSupported)
+                autoSceneColour = false;
 
             if (autoSceneColour) {
                 selectedDestIndex = 1;
