@@ -443,6 +443,9 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
                     ImGui::TextUnformatted(group->getDebugLastTechniqueOrder().empty() ? "(none)" : group->getDebugLastTechniqueOrder().c_str());
                     ImGui::TableNextRow();
 
+                    ImGui::TableNextColumn();
+                    ImGui::Text("Candidate");
+                    ImGui::TableNextColumn();
                     if (group->hasAutoRenderSRVSelection()) {
                         static const char* autoStageItems[] = { "PIXEL", "VERTEX", "COMPUTE" };
                         const uint32_t autoStage = std::min(group->getAutoRenderSRVSelectedStage(), static_cast<uint32_t>(2));
@@ -459,7 +462,7 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
                         uint32_t candidateIndex = group->getAutoRenderSRVCandidateIndex();
 
                         ImGui::SameLine();
-                        ImGui::Text("  [%u/%u]", candidateCount == 0 ? 0 : candidateIndex + 1, candidateCount);
+                        ImGui::Text("[%u/%u]", candidateCount == 0 ? 0 : candidateIndex + 1, candidateCount);
 
                         if (candidateCount > 1) {
                             ImGui::SameLine();
