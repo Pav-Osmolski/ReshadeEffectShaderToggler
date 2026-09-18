@@ -419,6 +419,12 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
                     ImGui::TableNextColumn();
                     ImGui::Text("Auto selection");
                     ImGui::TableNextColumn();
+                    ImGui::Text("Render calls: %llu  Last techniques: %u  Target: 0x%llx",
+                                static_cast<unsigned long long>(group->getDebugEffectRenderCalls()),
+                                group->getDebugLastRenderedTechniqueCount(),
+                                static_cast<unsigned long long>(group->getDebugLastRenderTarget()));
+                    ImGui::TableNextRow();
+
                     if (group->hasAutoRenderSRVSelection()) {
                         static const char* autoStageItems[] = { "PIXEL", "VERTEX", "COMPUTE" };
                         const uint32_t autoStage = std::min(group->getAutoRenderSRVSelectedStage(), static_cast<uint32_t>(2));
