@@ -145,7 +145,16 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
         }
 
         uint32_t renderedTechniqueCount = 0;
+        std::string renderedTechniqueOrder;
         for (const auto& effectTech : effectList) {
+            char techniqueName[256] = {};
+            size_t techniqueNameSize = sizeof(techniqueName);
+            runtime->get_technique_name(effectTech->technique, techniqueName, &techniqueNameSize);
+
+            if (!renderedTechniqueOrder.empty())
+                renderedTechniqueOrder += " -> ";
+            renderedTechniqueOrder += techniqueName;
+
             runtime->render_technique(effectTech->technique, cmd_list, view_non_srgb, view_srgb);
 
             effectTech->rendered = true;
@@ -157,7 +166,7 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
         }
 
         if (renderedTechniqueCount > 0) {
-            group->recordDebugEffectRender(renderedTechniqueCount, active_resource.resource.handle);
+            group->recordDebugEffectRender(renderedTechniqueCount, active_resource.resource.handle, renderedTechniqueOrder);
         }
 
         if (group->getToneMap() && runtimeData.specialEffects[REST_TONEMAP_TO_HDR].technique != 0) {
