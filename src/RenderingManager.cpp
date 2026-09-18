@@ -142,7 +142,7 @@ const ResourceViewData RenderingManager::FindAutoRenderResourceView(command_list
     uint32_t frameWidth = 0, frameHeight = 0;
     deviceData.current_runtime->get_screenshot_width_and_height(&frameWidth, &frameHeight);
 
-    int32_t bestScore = INT32_MIN;
+    int32_t bestScore = -2147483647 - 1;
     uint32_t bestStage = 0, bestSlot = 0, bestDescriptor = 0;
     resource_desc bestDesc = {};
     format bestFormat = format::unknown;
@@ -177,6 +177,9 @@ const ResourceViewData RenderingManager::FindAutoRenderResourceView(command_list
                 if (data == nullptr || data->view == 0)
                     continue;
 
+                if (data->type != descriptor_type::shader_resource_view && data->type != descriptor_type::sampler_with_resource_view)
+                    continue;
+
                 resource candidate = device->get_resource_from_view(data->view);
                 if (candidate == 0)
                     continue;
@@ -203,7 +206,7 @@ const ResourceViewData RenderingManager::FindAutoRenderResourceView(command_list
 
                 if (matchMode == SWAPCHAIN_MATCH_MODE_RESOLUTION && !exactResolution)
                     continue;
-                if ((matchMode == SWAPCHAIN_MATCH_MODE_ASPECT_RATIO || matchMode == SWAPCHAIN_MATCH_MODE_EXTENDED_ASPECT_RATIO) && !aspectCompatible)
+                if (!exactResolution && !aspectCompatible)
                     continue;
 
                 int32_t score = 0;
@@ -221,7 +224,8 @@ const ResourceViewData RenderingManager::FindAutoRenderResourceView(command_list
                     }
                 }
 
-                score += formatScore(viewDesc.format != format::unknown ? viewDesc.format : desc.texture.format);
+                const format candidateFormat = viewDesc.format != format::unknown ? viewDesc.format : desc.texture.format;
+                score += formatScore(candidateFormat);
 
                 if (stage == 0)
                     score += 1500;
@@ -242,12 +246,12 @@ const ResourceViewData RenderingManager::FindAutoRenderResourceView(command_list
                     continue;
 
                 bestScore = score;
-                best = ResourceViewData(candidate, viewDesc.format);
+                best = ResourceViewData(candidate, candidateFormat);
                 bestStage = stage;
                 bestSlot = slot;
                 bestDescriptor = descriptor;
                 bestDesc = desc;
-                bestFormat = viewDesc.format;
+                bestFormat = candidateFormat;
             }
         }
     }
