@@ -160,6 +160,17 @@ class ToggleGroup {
     uint32_t getAutoRenderSRVSelectedHeight() const { return _autoRenderSRVSelectedHeight; }
     reshade::api::format getAutoRenderSRVSelectedFormat() const { return _autoRenderSRVSelectedFormat; }
     int32_t getAutoRenderSRVSelectedScore() const { return _autoRenderSRVSelectedScore; }
+    uint32_t getAutoRenderSRVCandidateIndex() const { return _autoRenderSRVCandidateIndex; }
+    uint32_t getAutoRenderSRVCandidateCount() const { return _autoRenderSRVCandidateCount; }
+    void setAutoRenderSRVCandidateIndex(uint32_t index) { _autoRenderSRVCandidateIndex = index; }
+    void setAutoRenderSRVCandidateCount(uint32_t count) {
+        _autoRenderSRVCandidateCount = count;
+        if (_autoRenderSRVCandidateCount == 0) {
+            _autoRenderSRVCandidateIndex = 0;
+        } else if (_autoRenderSRVCandidateIndex >= _autoRenderSRVCandidateCount) {
+            _autoRenderSRVCandidateIndex = _autoRenderSRVCandidateCount - 1;
+        }
+    }
     void setAutoRenderSRVSelection(uint32_t stage,
                                    uint32_t slot,
                                    uint32_t descriptor,
@@ -285,6 +296,8 @@ class ToggleGroup {
     uint32_t _autoRenderSRVSelectedHeight = 0;
     reshade::api::format _autoRenderSRVSelectedFormat = reshade::api::format::unknown;
     int32_t _autoRenderSRVSelectedScore = 0;
+    uint32_t _autoRenderSRVCandidateIndex = 0;
+    uint32_t _autoRenderSRVCandidateCount = 0;
     bool _extractConstants;
     bool _extractResourceViews;
     volatile bool _clearBindings;
