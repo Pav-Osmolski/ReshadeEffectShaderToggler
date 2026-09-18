@@ -170,10 +170,12 @@ class ToggleGroup {
     uint64_t getDebugEffectRenderCalls() const { return _debugEffectRenderCalls; }
     uint32_t getDebugLastRenderedTechniqueCount() const { return _debugLastRenderedTechniqueCount; }
     uint64_t getDebugLastRenderTarget() const { return _debugLastRenderTarget; }
-    void recordDebugEffectRender(uint32_t techniqueCount, uint64_t targetHandle) {
+    const std::string& getDebugLastTechniqueOrder() const { return _debugLastTechniqueOrder; }
+    void recordDebugEffectRender(uint32_t techniqueCount, uint64_t targetHandle, const std::string& techniqueOrder) {
         ++_debugEffectRenderCalls;
         _debugLastRenderedTechniqueCount = techniqueCount;
         _debugLastRenderTarget = targetHandle;
+        _debugLastTechniqueOrder = techniqueOrder;
     }
     uint32_t getAutoRenderSRVCandidateIndex() const { return _autoRenderSRVCandidateIndex; }
     uint32_t getAutoRenderSRVCandidateCount() const { return _autoRenderSRVCandidateCount; }
@@ -327,6 +329,7 @@ class ToggleGroup {
     uint64_t _debugEffectRenderCalls = 0;
     uint32_t _debugLastRenderedTechniqueCount = 0;
     uint64_t _debugLastRenderTarget = 0;
+    std::string _debugLastTechniqueOrder;
     uint32_t _autoRenderSRVCandidateIndex = 0;
     uint32_t _autoRenderSRVCandidateCount = 0;
     bool _autoRenderSRVSelectionPinned = false;
