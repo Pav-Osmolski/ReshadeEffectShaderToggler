@@ -105,18 +105,19 @@ static void DisplayTechniqueSelection(reshade::api::effect_runtime* runtime,
     // Take a stable snapshot of technique names. ReShade can rebuild allTechniques during
     // effect reload/reorder events; iterating that unordered_map directly while also
     // reconstructing the group's selection can otherwise silently drop selected entries.
-    std::vector<std::string> availableTechniques;
+    std::vector<std::pair<std::string, bool>> availableTechniques;
     {
         std::shared_lock<std::shared_mutex> techLock(runtimeData.technique_mutex);
         availableTechniques.reserve(runtimeData.allTechniques.size());
-        for (const auto& [name, _] : runtimeData.allTechniques) {
-            availableTechniques.push_back(name);
+        for (const auto& [name, effectData] : runtimeData.allTechniques) {
+            availableTechniques.emplace_back(name, effectData.enabled);
         }
     }
 
     // unordered_map iteration order changes whenever ReShade rebuilds its technique list.
     // Keep the UI deterministic so selections do not appear to jump around between reloads.
-    std::sort(availableTechniques.begin(), availableTechniques.end());
+    std::sort(availableTechniques.begin(), availableTechniques.end(),
+              [](const auto& lhs, const auto& rhs) { return lhs.first < rhs.first; });
 
     bool allowAll = group->getAllowAllTechniques();
     bool exceptions = group->getHasTechniqueExceptions();
@@ -185,7 +186,7 @@ static void DisplayTechniqueSelection(reshade::api::effect_runtime* runtime,
 
         std::string searchString(searchBuf);
 
-        for (const auto& name : availableTechniques) {
+        for (const auto& [name, globallyEnabled] : availableTechniques) {
             bool enabled = newTechniques.contains(name);
 
             const bool visible =
@@ -204,6 +205,10 @@ static void DisplayTechniqueSelection(reshade::api::effect_runtime* runtime,
                     } else {
                         newTechniques.erase(name);
                     }
+                }
+                if (!globallyEnabled) {
+                    ImGui::SameLine();
+                    ImGui::TextDisabled("(disabled in ReShade)");
                 }
             }
         }
