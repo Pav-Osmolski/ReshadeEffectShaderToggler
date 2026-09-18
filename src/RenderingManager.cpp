@@ -357,13 +357,41 @@ const ResourceViewData RenderingManager::FindAutoRenderResourceView(command_list
     group->setAutoRenderSRVCandidateCount(static_cast<uint32_t>(candidates.size()));
     if (candidates.empty()) {
         group->clearAutoRenderSRVSelection();
+        group->clearAutoRenderSRVPin();
         return empty;
     }
 
-    const uint32_t selectedIndex =
-      std::min(group->getAutoRenderSRVCandidateIndex(), static_cast<uint32_t>(candidates.size() - 1));
+    uint32_t selectedIndex = 0;
+    bool foundPinnedSelection = false;
+
+    // Once a real descriptor identity has been selected, follow that descriptor instead
+    // of a numeric rank. Candidate scores/order can legitimately change across frames.
+    if (group->getAutoRenderSRVSelectionPinned() && group->hasAutoRenderSRVSelection()) {
+        for (uint32_t i = 0; i < candidates.size(); ++i) {
+            const AutoCandidate& candidate = candidates[i];
+            if (candidate.stage == group->getAutoRenderSRVSelectedStage() &&
+                candidate.slot == group->getAutoRenderSRVSelectedSlot() &&
+                candidate.descriptor == group->getAutoRenderSRVSelectedDescriptor()) {
+                selectedIndex = i;
+                foundPinnedSelection = true;
+                break;
+            }
+        }
+    }
+
+    const bool manualCandidateChange = group->consumeAutoRenderSRVManualCandidatePending();
+    if (manualCandidateChange) {
+        selectedIndex =
+          std::min(group->getAutoRenderSRVCandidateIndex(), static_cast<uint32_t>(candidates.size() - 1));
+        foundPinnedSelection = true;
+    } else if (!foundPinnedSelection) {
+        // Automatic mode always starts from the current best-ranked candidate.
+        selectedIndex = 0;
+    }
+
     const AutoCandidate& selected = candidates[selectedIndex];
 
+    group->setAutoRenderSRVResolvedCandidateIndex(selectedIndex);
     group->setAutoRenderSRVSelection(selected.stage,
                                      selected.slot,
                                      selected.descriptor,
@@ -371,6 +399,7 @@ const ResourceViewData RenderingManager::FindAutoRenderResourceView(command_list
                                      selected.desc.texture.height,
                                      selected.format,
                                      selected.score);
+    group->pinAutoRenderSRVSelection();
 
     return selected.view;
 }
