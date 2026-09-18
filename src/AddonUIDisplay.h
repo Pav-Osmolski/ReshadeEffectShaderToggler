@@ -305,11 +305,12 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
     bool tonemap = group->getToneMap();
     bool preserveAlpha = group->getPreserveAlpha();
     bool flipbuffer = group->getFlipBuffer();
+    bool autoSceneColour = group->getAutoRenderSRV();
     static const char* swapchainMatchOptions[] = { "RESOLUTION", "ASPECT RATIO", "EXTENDED ASPECT RATIO", "NONE" };
     uint32_t selectedSwapchainMatchMode = group->getMatchSwapchainResolution();
     const char* typesSelectedSwapchainMatchMode = swapchainMatchOptions[selectedSwapchainMatchMode];
 
-    bool supportsSRVwrite = runtime->get_device()->get_api() < reshade::api::device_api::d3d12;
+    bool supportsSRVwrite = runtime->get_device()->get_api() < reshade::api::device_api::d3d12 || autoSceneColour;
 
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
     if (ImGui::BeginChild("RenderTargets", { 0, height / 1.5f }, true, ImGuiChildFlags_AlwaysAutoResize)) {
@@ -317,6 +318,23 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
 
         if (ImGui::BeginTable("RenderTargetsSettings", 2, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoBordersInBody)) {
             ImGui::TableSetupColumn("##RTcolumnsetup", ImGuiTableColumnFlags_WidthFixed, ImGui::GetWindowWidth() / 3);
+
+            ImGui::TableNextColumn();
+            ImGui::Text("Auto scene colour");
+            ImGui::TableNextColumn();
+            if (!instance.GetTrackDescriptors())
+                ImGui::BeginDisabled();
+            ImGui::Checkbox("##AutoSceneColour", &autoSceneColour);
+            if (!instance.GetTrackDescriptors())
+                ImGui::EndDisabled();
+
+            if (autoSceneColour) {
+                selectedDestIndex = 1;
+                typeSelectedDestItem = typeDestItems[1];
+                supportsSRVwrite = true;
+            }
+
+            ImGui::TableNextRow();
 
             if (supportsSRVwrite) {
                 ImGui::TableNextColumn();
@@ -345,6 +363,30 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
                 } else {
                     group->setRenderToResourceViews(true);
                 }
+
+                if (autoSceneColour) {
+                    ImGui::TableNextColumn();
+                    ImGui::Text("Auto selection");
+                    ImGui::TableNextColumn();
+                    if (group->hasAutoRenderSRVSelection()) {
+                        static const char* autoStageItems[] = { "PIXEL", "VERTEX", "COMPUTE" };
+                        const uint32_t autoStage = std::min(group->getAutoRenderSRVSelectedStage(), static_cast<uint32_t>(2));
+                        ImGui::Text("%s %u:%u  %ux%u  fmt %u  score %d",
+                                    autoStageItems[autoStage],
+                                    group->getAutoRenderSRVSelectedSlot(),
+                                    group->getAutoRenderSRVSelectedDescriptor(),
+                                    group->getAutoRenderSRVSelectedWidth(),
+                                    group->getAutoRenderSRVSelectedHeight(),
+                                    static_cast<uint32_t>(group->getAutoRenderSRVSelectedFormat()),
+                                    group->getAutoRenderSRVSelectedScore());
+                    } else {
+                        ImGui::TextUnformatted("Waiting for a matching scene-colour resource...");
+                    }
+                    ImGui::TableNextRow();
+                }
+
+                if (autoSceneColour)
+                    ImGui::BeginDisabled();
 
                 ImGui::TableNextColumn();
                 ImGui::Text("Shader Stage");
@@ -406,6 +448,9 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
                     }
                     ImGui::PopID();
                 }
+
+                if (autoSceneColour)
+                    ImGui::EndDisabled();
 
                 if (!instance.GetTrackDescriptors()) {
                     ImGui::EndDisabled();
@@ -501,6 +546,7 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
 
         group->setRequeueAfterRTMatchingFailure(retry);
         group->setMatchSwapchainResolution(selectedSwapchainMatchMode);
+        group->setAutoRenderSRV(autoSceneColour);
         group->setInvocationLocation(selectedIndex);
         group->setToneMap(tonemap);
         group->setPreserveAlpha(preserveAlpha);
