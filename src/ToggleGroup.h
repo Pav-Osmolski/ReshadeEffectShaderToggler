@@ -150,6 +150,39 @@ class ToggleGroup {
     void setExtractResourceViews(bool extract) { _extractResourceViews = extract; }
     bool getRenderToResourceViews() const { return _renderToResourceViews; }
     void setRenderToResourceViews(bool render) { _renderToResourceViews = render; }
+    bool getAutoRenderSRV() const { return _autoRenderSRV; }
+    void setAutoRenderSRV(bool autoRender) { _autoRenderSRV = autoRender; }
+    bool hasAutoRenderSRVSelection() const { return _autoRenderSRVSelectionValid; }
+    uint32_t getAutoRenderSRVSelectedStage() const { return _autoRenderSRVSelectedStage; }
+    uint32_t getAutoRenderSRVSelectedSlot() const { return _autoRenderSRVSelectedSlot; }
+    uint32_t getAutoRenderSRVSelectedDescriptor() const { return _autoRenderSRVSelectedDescriptor; }
+    uint32_t getAutoRenderSRVSelectedWidth() const { return _autoRenderSRVSelectedWidth; }
+    uint32_t getAutoRenderSRVSelectedHeight() const { return _autoRenderSRVSelectedHeight; }
+    reshade::api::format getAutoRenderSRVSelectedFormat() const { return _autoRenderSRVSelectedFormat; }
+    int32_t getAutoRenderSRVSelectedScore() const { return _autoRenderSRVSelectedScore; }
+    void setAutoRenderSRVSelection(uint32_t stage,
+                                   uint32_t slot,
+                                   uint32_t descriptor,
+                                   uint32_t width,
+                                   uint32_t height,
+                                   reshade::api::format format,
+                                   int32_t score) {
+        _autoRenderSRVSelectionValid = true;
+        _autoRenderSRVSelectedStage = stage;
+        _autoRenderSRVSelectedSlot = slot;
+        _autoRenderSRVSelectedDescriptor = descriptor;
+        _autoRenderSRVSelectedWidth = width;
+        _autoRenderSRVSelectedHeight = height;
+        _autoRenderSRVSelectedFormat = format;
+        _autoRenderSRVSelectedScore = score;
+    }
+    void clearAutoRenderSRVSelection() {
+        _autoRenderSRVSelectionValid = false;
+        _autoRenderSRVSelectedWidth = 0;
+        _autoRenderSRVSelectedHeight = 0;
+        _autoRenderSRVSelectedFormat = reshade::api::format::unknown;
+        _autoRenderSRVSelectedScore = 0;
+    }
     void setBindingSRVSlotIndex(uint32_t index) { _bindingSrvSlotIndex = index; }
     uint32_t getBindingSRVSlotIndex() const { return _bindingSrvSlotIndex; }
     void setRenderSRVSlotIndex(uint32_t index) { _renderSrvSlotIndex = index; }
@@ -243,6 +276,15 @@ class ToggleGroup {
     volatile bool _isProvidingTextureBinding;
     volatile bool _copyTextureBinding;
     bool _renderToResourceViews;
+    bool _autoRenderSRV = false;
+    bool _autoRenderSRVSelectionValid = false;
+    uint32_t _autoRenderSRVSelectedStage = 0;
+    uint32_t _autoRenderSRVSelectedSlot = 0;
+    uint32_t _autoRenderSRVSelectedDescriptor = 0;
+    uint32_t _autoRenderSRVSelectedWidth = 0;
+    uint32_t _autoRenderSRVSelectedHeight = 0;
+    reshade::api::format _autoRenderSRVSelectedFormat = reshade::api::format::unknown;
+    int32_t _autoRenderSRVSelectedScore = 0;
     bool _extractConstants;
     bool _extractResourceViews;
     volatile bool _clearBindings;
