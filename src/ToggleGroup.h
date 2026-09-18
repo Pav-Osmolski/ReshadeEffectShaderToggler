@@ -151,7 +151,14 @@ class ToggleGroup {
     bool getRenderToResourceViews() const { return _renderToResourceViews; }
     void setRenderToResourceViews(bool render) { _renderToResourceViews = render; }
     bool getAutoRenderSRV() const { return _autoRenderSRV; }
-    void setAutoRenderSRV(bool autoRender) { _autoRenderSRV = autoRender; }
+    void setAutoRenderSRV(bool autoRender) {
+        if (autoRender != _autoRenderSRV) {
+            _autoRenderSRVSelectionPinned = false;
+            _autoRenderSRVManualCandidatePending = false;
+            _autoRenderSRVCandidateIndex = 0;
+        }
+        _autoRenderSRV = autoRender;
+    }
     bool hasAutoRenderSRVSelection() const { return _autoRenderSRVSelectionValid; }
     uint32_t getAutoRenderSRVSelectedStage() const { return _autoRenderSRVSelectedStage; }
     uint32_t getAutoRenderSRVSelectedSlot() const { return _autoRenderSRVSelectedSlot; }
@@ -170,7 +177,20 @@ class ToggleGroup {
     }
     uint32_t getAutoRenderSRVCandidateIndex() const { return _autoRenderSRVCandidateIndex; }
     uint32_t getAutoRenderSRVCandidateCount() const { return _autoRenderSRVCandidateCount; }
-    void setAutoRenderSRVCandidateIndex(uint32_t index) { _autoRenderSRVCandidateIndex = index; }
+    bool getAutoRenderSRVSelectionPinned() const { return _autoRenderSRVSelectionPinned; }
+    bool consumeAutoRenderSRVManualCandidatePending() {
+        const bool pending = _autoRenderSRVManualCandidatePending;
+        _autoRenderSRVManualCandidatePending = false;
+        return pending;
+    }
+    void requestAutoRenderSRVCandidateIndex(uint32_t index) {
+        _autoRenderSRVCandidateIndex = index;
+        _autoRenderSRVSelectionPinned = false;
+        _autoRenderSRVManualCandidatePending = true;
+    }
+    void setAutoRenderSRVResolvedCandidateIndex(uint32_t index) { _autoRenderSRVCandidateIndex = index; }
+    void pinAutoRenderSRVSelection() { _autoRenderSRVSelectionPinned = true; }
+    void clearAutoRenderSRVPin() { _autoRenderSRVSelectionPinned = false; }
     void setAutoRenderSRVCandidateCount(uint32_t count) {
         _autoRenderSRVCandidateCount = count;
         if (_autoRenderSRVCandidateCount == 0) {
@@ -309,6 +329,8 @@ class ToggleGroup {
     uint64_t _debugLastRenderTarget = 0;
     uint32_t _autoRenderSRVCandidateIndex = 0;
     uint32_t _autoRenderSRVCandidateCount = 0;
+    bool _autoRenderSRVSelectionPinned = false;
+    bool _autoRenderSRVManualCandidatePending = false;
     bool _extractConstants;
     bool _extractResourceViews;
     volatile bool _clearBindings;
