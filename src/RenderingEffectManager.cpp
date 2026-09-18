@@ -144,14 +144,20 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
             runtime->render_technique(runtimeData.specialEffects[REST_TONEMAP_TO_SDR].technique, cmd_list, view_non_srgb, view_srgb);
         }
 
+        uint32_t renderedTechniqueCount = 0;
         for (const auto& effectTech : effectList) {
             runtime->render_technique(effectTech->technique, cmd_list, view_non_srgb, view_srgb);
 
             effectTech->rendered = true;
+            ++renderedTechniqueCount;
 
             removalList.push_back(effectTech);
 
             rendered = true;
+        }
+
+        if (renderedTechniqueCount > 0) {
+            group->recordDebugEffectRender(renderedTechniqueCount, active_resource.resource.handle);
         }
 
         if (group->getToneMap() && runtimeData.specialEffects[REST_TONEMAP_TO_HDR].technique != 0) {
