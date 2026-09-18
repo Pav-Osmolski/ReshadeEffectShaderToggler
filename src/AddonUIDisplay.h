@@ -425,6 +425,19 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
                                 static_cast<unsigned long long>(group->getDebugLastRenderTarget()));
                     ImGui::TableNextRow();
                     ImGui::TableNextColumn();
+                    ImGui::Text("Debug scene-colour probe");
+                    ImGui::TableNextColumn();
+                    bool autoProbe = group->getAutoSceneColourProbe();
+                    if (ImGui::Checkbox("##AutoSceneColourProbe", &autoProbe)) {
+                        group->setAutoSceneColourProbe(autoProbe);
+                    }
+                    if (autoProbe) {
+                        ImGui::SameLine();
+                        ImGui::TextDisabled("clears selected SRV magenta before the matched draw");
+                    }
+
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
                     ImGui::Text("Technique order");
                     ImGui::TableNextColumn();
                     ImGui::TextUnformatted(group->getDebugLastTechniqueOrder().empty() ? "(none)" : group->getDebugLastTechniqueOrder().c_str());
