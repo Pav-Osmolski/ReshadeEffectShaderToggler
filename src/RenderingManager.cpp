@@ -127,6 +127,146 @@ bool RenderingManager::ValidFormat(effect_runtime* runtime, const resource_desc&
     return true;
 }
 
+const ResourceViewData RenderingManager::FindAutoRenderResourceView(command_list* cmd_list,
+                                                                    DeviceDataContainer& deviceData,
+                                                                    ToggleGroup* group) {
+    ResourceViewData best;
+    if (cmd_list == nullptr || group == nullptr || deviceData.current_runtime == nullptr)
+        return best;
+
+    device* device = cmd_list->get_device();
+    if (device == nullptr)
+        return best;
+
+    state_tracking& state = cmd_list->get_private_data<state_tracking>();
+    uint32_t frameWidth = 0, frameHeight = 0;
+    deviceData.current_runtime->get_screenshot_width_and_height(&frameWidth, &frameHeight);
+
+    int32_t bestScore = INT32_MIN;
+    uint32_t bestStage = 0, bestSlot = 0, bestDescriptor = 0;
+    resource_desc bestDesc = {};
+    format bestFormat = format::unknown;
+
+    auto formatScore = [](format value) -> int32_t {
+        switch (format_to_default_typed(value, 0)) {
+            case format::r16g16b16a16_float:
+                return 6000;
+            case format::r11g11b10_float:
+                return 5500;
+            case format::r32g32b32_float:
+            case format::r32g32b32a32_float:
+                return 5000;
+            case format::r10g10b10a2_unorm:
+            case format::b10g10r10a2_unorm:
+                return 2500;
+            case format::r16g16b16a16_unorm:
+                return 1800;
+            default:
+                return 500;
+        }
+    };
+
+    const uint32_t matchMode = group->getMatchSwapchainResolution();
+
+    for (uint32_t stage = 0; stage < 3; ++stage) {
+        const size_t slotCount = state.get_root_table_size_at(stage);
+        for (uint32_t slot = 0; slot < slotCount; ++slot) {
+            const size_t descriptorCount = state.get_root_table_entry_size_at(stage, slot);
+            for (uint32_t descriptor = 0; descriptor < descriptorCount; ++descriptor) {
+                const descriptor_tracking::descriptor_data* data = state.get_descriptor_at(stage, slot, descriptor);
+                if (data == nullptr || data->view == 0)
+                    continue;
+
+                resource candidate = device->get_resource_from_view(data->view);
+                if (candidate == 0)
+                    continue;
+
+                const resource_desc desc = device->get_resource_desc(candidate);
+                if (desc.type != resource_type::texture_2d)
+                    continue;
+
+                const resource_view_desc viewDesc = device->get_resource_view_desc(data->view);
+                if (!IsColorBuffer(viewDesc.format) && !IsColorBuffer(desc.texture.format))
+                    continue;
+
+                if (!static_cast<uint32_t>(desc.usage & resource_usage::render_target))
+                    continue;
+
+                const bool exactResolution = frameWidth != 0 && frameHeight != 0 && desc.texture.width == frameWidth && desc.texture.height == frameHeight;
+                const bool aspectCompatible =
+                  frameWidth != 0 && frameHeight != 0 &&
+                  check_aspect_ratio(static_cast<float>(desc.texture.width),
+                                     static_cast<float>(desc.texture.height),
+                                     frameWidth,
+                                     frameHeight,
+                                     matchMode == SWAPCHAIN_MATCH_MODE_EXTENDED_ASPECT_RATIO ? matchMode : SWAPCHAIN_MATCH_MODE_ASPECT_RATIO);
+
+                if (matchMode == SWAPCHAIN_MATCH_MODE_RESOLUTION && !exactResolution)
+                    continue;
+                if ((matchMode == SWAPCHAIN_MATCH_MODE_ASPECT_RATIO || matchMode == SWAPCHAIN_MATCH_MODE_EXTENDED_ASPECT_RATIO) && !aspectCompatible)
+                    continue;
+
+                int32_t score = 0;
+
+                if (exactResolution) {
+                    score += 100000;
+                } else if (aspectCompatible) {
+                    score += 15000;
+
+                    const double candidatePixels = static_cast<double>(desc.texture.width) * static_cast<double>(desc.texture.height);
+                    const double framePixels = static_cast<double>(frameWidth) * static_cast<double>(frameHeight);
+                    if (framePixels > 0.0) {
+                        const double ratio = std::min(candidatePixels, framePixels) / std::max(candidatePixels, framePixels);
+                        score += static_cast<int32_t>(ratio * 10000.0);
+                    }
+                }
+
+                score += formatScore(viewDesc.format != format::unknown ? viewDesc.format : desc.texture.format);
+
+                if (stage == 0)
+                    score += 1500;
+                else if (stage == 2)
+                    score += 250;
+
+                if (static_cast<uint32_t>(desc.usage & resource_usage::shader_resource))
+                    score += 500;
+
+                if (group->hasAutoRenderSRVSelection() &&
+                    group->getAutoRenderSRVSelectedStage() == stage &&
+                    group->getAutoRenderSRVSelectedSlot() == slot &&
+                    group->getAutoRenderSRVSelectedDescriptor() == descriptor) {
+                    score += 750;
+                }
+
+                if (score <= bestScore)
+                    continue;
+
+                bestScore = score;
+                best = ResourceViewData(candidate, viewDesc.format);
+                bestStage = stage;
+                bestSlot = slot;
+                bestDescriptor = descriptor;
+                bestDesc = desc;
+                bestFormat = viewDesc.format;
+            }
+        }
+    }
+
+    if (best.resource != 0) {
+        group->setAutoRenderSRVSelection(bestStage,
+                                         bestSlot,
+                                         bestDescriptor,
+                                         bestDesc.texture.width,
+                                         bestDesc.texture.height,
+                                         bestFormat,
+                                         bestScore);
+    } else {
+        group->clearAutoRenderSRVSelection();
+    }
+
+    return best;
+}
+
 const ResourceViewData RenderingManager::GetCurrentResourceView(command_list* cmd_list,
                                                                 DeviceDataContainer& deviceData,
                                                                 ToggleGroup* group,
@@ -145,10 +285,14 @@ const ResourceViewData RenderingManager::GetCurrentResourceView(command_list* cm
     const vector<resource_view>& rtvs = state.render_targets;
 
     size_t index = group->getRenderTargetIndex();
-    index = std::min(index, rtvs.size() - 1);
-
     size_t bindingRTindex = group->getBindingRenderTargetIndex();
-    bindingRTindex = std::min(bindingRTindex, rtvs.size() - 1);
+    if (!rtvs.empty()) {
+        index = std::min(index, rtvs.size() - 1);
+        bindingRTindex = std::min(bindingRTindex, rtvs.size() - 1);
+    } else {
+        index = 0;
+        bindingRTindex = 0;
+    }
 
     // Only return SRVs in case of bindings
     if (action & MATCH_BINDING && group->getExtractResourceViews()) {
@@ -210,6 +354,12 @@ const ResourceViewData RenderingManager::GetCurrentResourceView(command_list* cm
         active_data.resource = rs;
         active_data.format = v_desc.format;
     } else if (action & (MATCH_EFFECT | MATCH_PREVIEW) && group->getRenderToResourceViews()) {
+        if (group->getAutoRenderSRV()) {
+            active_data = FindAutoRenderResourceView(cmd_list, deviceData, group);
+            if (active_data.resource != 0)
+                return active_data;
+        }
+
         uint32_t stageIndex = std::min(static_cast<uint32_t>(2), group->getRenderSRVShaderStage());
 
         int32_t slot_size = static_cast<int32_t>(state.get_root_table_size_at(stageIndex));
