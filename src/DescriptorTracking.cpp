@@ -83,6 +83,15 @@ pipeline_layout_param descriptor_tracking::get_pipeline_layout_param(pipeline_la
     return layout_data.params[param];
 }
 
+bool descriptor_tracking::try_get_pipeline_layout_param(pipeline_layout layout, uint32_t param, pipeline_layout_param& out) const {
+    const auto it = layouts.find(layout);
+    if (it == layouts.end() || param >= it->second.params.size())
+        return false;
+
+    out = it->second.params[param];
+    return true;
+}
+
 void descriptor_tracking::register_pipeline_layout(pipeline_layout layout, uint32_t count, const pipeline_layout_param* params) {
     pipeline_layout_data& layout_data = layouts[layout];
     layout_data.params.assign(params, params + count);
