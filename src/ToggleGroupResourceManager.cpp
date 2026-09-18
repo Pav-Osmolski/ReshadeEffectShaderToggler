@@ -185,7 +185,10 @@ void ToggleGroupResourceManager::CheckGroupBuffers(reshade::api::effect_runtime*
                 resource_desc group_desc =
                   resource_desc(desc.texture.width, desc.texture.height, 1, 1, format_to_typeless(desc.texture.format), 1, memory_heap::gpu_only, res_usage);
 
-                if (!runtime->get_device()->create_resource(group_desc, nullptr, resource_usage::copy_dest, &resources.res)) {
+                const resource_usage initial_state =
+                  static_cast<GroupResourceType>(i) == GroupResourceType::RESOURCE_NATIVE_STAGING ? resource_usage::render_target : resource_usage::copy_dest;
+
+                if (!runtime->get_device()->create_resource(group_desc, nullptr, initial_state, &resources.res)) {
                     reshade::log::message(reshade::log::level::error, "Failed to create group render target!");
                 }
 
