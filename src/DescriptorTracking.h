@@ -68,6 +68,9 @@ class __declspec(uuid("33319e83-387c-448e-881c-7e68fc2e52c4")) descriptor_tracki
     /// Gets the description that was used to create the specified pipeline layout parameter.
     /// </summary>
     reshade::api::pipeline_layout_param get_pipeline_layout_param(reshade::api::pipeline_layout layout, uint32_t param) const;
+    bool try_get_pipeline_layout_param(reshade::api::pipeline_layout layout,
+                                       uint32_t param,
+                                       reshade::api::pipeline_layout_param& out) const;
 
   private:
     void register_pipeline_layout(reshade::api::pipeline_layout layout, uint32_t count, const reshade::api::pipeline_layout_param* params);
