@@ -386,6 +386,24 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
                                     group->getAutoRenderSRVSelectedHeight(),
                                     static_cast<uint32_t>(group->getAutoRenderSRVSelectedFormat()),
                                     group->getAutoRenderSRVSelectedScore());
+
+                        const uint32_t candidateCount = group->getAutoRenderSRVCandidateCount();
+                        uint32_t candidateIndex = group->getAutoRenderSRVCandidateIndex();
+
+                        ImGui::SameLine();
+                        ImGui::Text("  [%u/%u]", candidateCount == 0 ? 0 : candidateIndex + 1, candidateCount);
+
+                        if (candidateCount > 1) {
+                            ImGui::SameLine();
+                            if (ImGui::SmallButton("<##AutoScenePrev") && candidateIndex > 0) {
+                                group->setAutoRenderSRVCandidateIndex(candidateIndex - 1);
+                            }
+
+                            ImGui::SameLine();
+                            if (ImGui::SmallButton(">##AutoSceneNext") && candidateIndex + 1 < candidateCount) {
+                                group->setAutoRenderSRVCandidateIndex(candidateIndex + 1);
+                            }
+                        }
                     } else {
                         ImGui::TextUnformatted("Waiting for a matching scene-colour resource...");
                     }
