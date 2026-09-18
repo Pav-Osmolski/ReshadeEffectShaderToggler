@@ -101,6 +101,20 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
             continue;
         }
 
+        if (group->getAutoRenderSRV() && group->getAutoSceneColourProbe()) {
+            // Diagnostic only: prove whether the selected SRV is causally consumed by
+            // the matched BG3 draw. Clear it immediately before the draw and restore it
+            // to shader-resource state. If the visible frame turns magenta, this is a
+            // live scene-colour input rather than a history/copy buffer.
+            if (view->rtv != 0) {
+                static const float probeColor[4] = { 1.0f, 0.0f, 1.0f, 1.0f };
+                cmd_list->barrier(active_resource.resource, resource_usage::shader_resource, resource_usage::render_target);
+                cmd_list->clear_render_target_view(view->rtv, probeColor);
+                cmd_list->barrier(active_resource.resource, resource_usage::render_target, resource_usage::shader_resource);
+            }
+            continue;
+        }
+
         uint32_t runtimeWidth = 0, runtimeHeight = 0;
         runtime->get_screenshot_width_and_height(&runtimeWidth, &runtimeHeight);
 
