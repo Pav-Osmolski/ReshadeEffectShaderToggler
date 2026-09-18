@@ -275,6 +275,30 @@ const ResourceViewData RenderingManager::FindAutoRenderResourceView(command_list
                 score -= 500;
         }
 
+        const auto barrierIt = state.barrier_history.find(candidateResource.handle);
+        if (barrierIt != state.barrier_history.end()) {
+            const auto& barrier = barrierIt->second;
+            const uint64_t age = state.barrier_serial >= barrier.serial ? state.barrier_serial - barrier.serial : 0;
+
+            const bool wasRenderTarget =
+              static_cast<uint32_t>(barrier.old_usage & resource_usage::render_target) != 0;
+            const bool nowShaderResource =
+              static_cast<uint32_t>(barrier.new_usage & resource_usage::shader_resource) != 0;
+
+            if (wasRenderTarget && nowShaderResource) {
+                if (age == 0)
+                    score += 30000;
+                else if (age <= 2)
+                    score += 24000;
+                else if (age <= 6)
+                    score += 16000;
+                else if (age <= 16)
+                    score += 8000;
+                else if (age <= 64)
+                    score += 2500;
+            }
+        }
+
         seenResources.emplace(candidateResource.handle);
         candidates.push_back({
             ResourceViewData(candidateResource, candidateFormat),
