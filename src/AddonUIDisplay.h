@@ -100,8 +100,23 @@ static void DisplayTechniqueSelection(reshade::api::effect_runtime* runtime,
     RuntimeDataContainer& runtimeData = runtime->get_private_data<RuntimeDataContainer>();
 
     std::unordered_set<std::string> curTechniques = group->preferredTechniques();
-    std::unordered_set<std::string> newTechniques;
     static char searchBuf[256] = "\0";
+
+    // Take a stable snapshot of technique names. ReShade can rebuild allTechniques during
+    // effect reload/reorder events; iterating that unordered_map directly while also
+    // reconstructing the group's selection can otherwise silently drop selected entries.
+    std::vector<std::string> availableTechniques;
+    {
+        std::shared_lock<std::shared_mutex> techLock(runtimeData.technique_mutex);
+        availableTechniques.reserve(runtimeData.allTechniques.size());
+        for (const auto& [name, _] : runtimeData.allTechniques) {
+            availableTechniques.push_back(name);
+        }
+    }
+
+    // unordered_map iteration order changes whenever ReShade rebuilds its technique list.
+    // Keep the UI deterministic so selections do not appear to jump around between reloads.
+    std::sort(availableTechniques.begin(), availableTechniques.end());
 
     bool allowAll = group->getAllowAllTechniques();
     bool exceptions = group->getHasTechniqueExceptions();
@@ -126,6 +141,19 @@ static void DisplayTechniqueSelection(reshade::api::effect_runtime* runtime,
         }
 
         ImGui::TableNextColumn();
+        ImGui::Text("Mode");
+        ImGui::TableNextColumn();
+        if (!allowAll) {
+            ImGui::TextUnformatted("Only ticked enabled techniques are applied");
+        } else if (exceptions) {
+            ImGui::TextUnformatted("Ticked techniques are EXCLUDED");
+        } else {
+            ImGui::TextUnformatted("All globally enabled techniques are applied");
+        }
+
+        ImGui::TableNextRow();
+
+        ImGui::TableNextColumn();
         ImGui::Text("Search");
         ImGui::TableNextColumn();
         ImGui::InputText("##techniqueSearch", searchBuf, 256, ImGuiInputTextFlags_None);
@@ -137,33 +165,45 @@ static void DisplayTechniqueSelection(reshade::api::effect_runtime* runtime,
             curTechniques.clear();
         }
         ImGui::TableNextColumn();
+        ImGui::Text("%zu selected / %zu available", curTechniques.size(), availableTechniques.size());
 
         ImGui::EndTable();
     }
 
     ImGui::Separator();
 
+    // Start from the group's existing selection rather than rebuilding from an empty set.
+    // This preserves selected names that are temporarily absent while ReShade reloads effects.
+    std::unordered_set<std::string> newTechniques = curTechniques;
+
     if (allowAll && !exceptions) {
         ImGui::BeginDisabled();
     }
+
     if (ImGui::BeginTable("Technique selection##table", 3, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_ScrollY | ImGuiTableFlags_NoBordersInBody)) {
         ImGui::TableSetupColumn("##columnsetupSelection", ImGuiTableColumnFlags_WidthFixed, tblWidth);
 
         std::string searchString(searchBuf);
 
-        if (runtimeData.allTechniques.size() > 0) {
-            for (const auto& [name, effData] : runtimeData.allTechniques) {
-                bool enabled = curTechniques.contains(name);
+        for (const auto& name : availableTechniques) {
+            bool enabled = newTechniques.contains(name);
 
-                if (std::ranges::search(
-                      name, searchString, [](const wchar_t lhs, const wchar_t rhs) { return lhs == rhs; }, std::towupper, std::towupper)
-                      .begin() != name.end()) {
-                    ImGui::TableNextColumn();
-                    ImGui::Checkbox(name.c_str(), &enabled);
-                }
+            const bool visible =
+              std::ranges::search(name,
+                                  searchString,
+                                  [](const wchar_t lhs, const wchar_t rhs) { return lhs == rhs; },
+                                  std::towupper,
+                                  std::towupper)
+                .begin() != name.end();
 
-                if (enabled) {
-                    newTechniques.insert(name);
+            if (visible) {
+                ImGui::TableNextColumn();
+                if (ImGui::Checkbox(name.c_str(), &enabled)) {
+                    if (enabled) {
+                        newTechniques.insert(name);
+                    } else {
+                        newTechniques.erase(name);
+                    }
                 }
             }
         }
@@ -177,12 +217,11 @@ static void DisplayTechniqueSelection(reshade::api::effect_runtime* runtime,
 
     group->setHasTechniqueExceptions(exceptions);
     group->setAllowAllTechniques(allowAll);
+    group->setPreferredTechniques(newTechniques);
 
+    // Rebind saved names to the current EffectData instances using a stable map.
     std::shared_lock<std::shared_mutex> techLock(runtimeData.technique_mutex);
-    if (runtimeData.allTechniques.size() > 0) {
-        group->setPreferredTechniques(newTechniques);
-        instance.AssignPreferredGroupTechniques(runtimeData.allTechniques);
-    }
+    instance.AssignPreferredGroupTechniques(runtimeData.allTechniques);
 }
 
 static void DrawPreview(unsigned long long textureId, uint32_t srcWidth, uint32_t srcHeight) {
