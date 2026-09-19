@@ -355,9 +355,7 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
     const char* typesSelectedSwapchainMatchMode = swapchainMatchOptions[selectedSwapchainMatchMode];
 
     const reshade::api::device_api deviceApi = runtime->get_device()->get_api();
-    const bool autoSceneColourSupported =
-      deviceApi == reshade::api::device_api::d3d11 ||
-      deviceApi == reshade::api::device_api::d3d12;
+    const bool autoSceneColourSupported = ShaderToggler::IsAutoSceneColourSupported(deviceApi);
     const bool supportsSRVwrite = deviceApi < reshade::api::device_api::d3d12;
 
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
