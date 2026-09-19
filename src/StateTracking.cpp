@@ -661,8 +661,7 @@ static void on_destroy_device(device* device) {
 }
 
 void state_tracking::register_events(bool track) {
-    // Descriptor table tracking is not required for automatic live render-target injection.
-    // Keep the original REST behaviour here.
+    // disable for now
     track = false;
 
     track_descriptors = track;
