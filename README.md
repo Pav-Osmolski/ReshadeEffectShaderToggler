@@ -16,6 +16,8 @@ Both 64-bit and 32-bit are first-class build targets. CI builds and validates bo
 - Extract and reuse constant-buffer or texture-binding data where supported.
 - **Automatic scene-colour injection for D3D10/D3D11/D3D12 games using DLSS or other dynamic-resolution/upscaling paths.**
 - Preserve technique selections reliably across ReShade effect reloads and ordering changes.
+- Search, filter and recollect shaders with mouse controls or configurable keyboard shortcuts.
+- Track unsaved configuration changes, clone groups safely, confirm deletions and flag shortcut conflicts.
 
 ## Compatibility
 
@@ -43,13 +45,22 @@ Start the game and open the ReShade overlay. The **Add-ons** tab should list **R
 ## Basic workflow
 
 1. Open the ReShade overlay and expand **Reshade Effect Shader Toggler**.
-2. Click **New** to create a toggle group.
+2. Click **New group** to create a toggle group.
 3. Click **Edit** to give the group a useful name and optional hotkey.
-4. Use **Change Shaders** to hunt and mark the shader(s) that define where the group should run.
-5. Use **Change Effects** to select which ReShade techniques the group should apply.
-6. Test the group, then click **Save all Toggle Groups**.
+4. Click **Settings** and keep the relevant scene visible while REST collects active shaders.
+5. Use the shader search/filter controls, mouse navigation buttons or configured hunting shortcuts to locate and mark the shader(s) that define the desired boundary.
+6. In the **Effects** tab, select the ReShade techniques the group should apply and enable **Auto scene colour** when appropriate.
+7. Click **Done**, test the group, then click **Save changes** when the unsaved-changes indicator is shown.
 
-The saved configuration is written to `ReshadeEffectShaderToggler.ini` beside the add-on.
+The saved configuration is written to `ReshadeEffectShaderToggler.ini` beside the add-on. REST also persists the shader-collection frame count, overlay opacity and configurable hunting shortcuts.
+
+### Group management
+
+- **Clone** copies a group's shader hashes, effects and settings into a new inactive group with no hotkey, so it can be adjusted safely.
+- **Delete** requires confirmation and is not written to disk until **Save changes** is used.
+- Each group shows compact pixel/vertex/compute shader counts, selected-effect count and an **Auto Scene Colour** indicator when enabled.
+- REST warns when group hotkeys conflict with another group or with a configured REST action.
+- The **Saved / Unsaved changes** indicator reflects the configuration that would be written to disk, while ordinary runtime Active toggles do not create false dirty-state warnings.
 
 ## Configuring effects
 
@@ -87,7 +98,7 @@ This is why effects such as AO can remain **under the UI** while still using the
 
 Auto mode intentionally ignores manual render-target index, SRV slot/binding, swapchain-match and alpha-preservation settings while it is active. Those manual settings are preserved unchanged underneath Auto mode and become effective again when Auto is disabled. You do not need to choose a shader stage, SRV slot or descriptor binding.
 
-The group editor reports the live **scene resolution**, **effect resolution**, technique order and render status to make validation easier.
+The group editor reports the live **scene resolution**, **effect resolution**, technique order, injection status and native-staging state. **Copy diagnostics** places the relevant REST version, API, resolutions, technique information, render-call count and target handle on the clipboard for support reports.
 
 For setup details, limitations and troubleshooting, see [Automatic Scene Colour](docs/automatic-scene-colour.md).
 
@@ -95,18 +106,26 @@ For setup details, limitations and troubleshooting, see [Automatic Scene Colour]
 
 Make the element that defines your desired injection boundary visible before starting shader hunting. A debug-heavy effect such as AO can make it easier to see whether a UI, fog or other game pass is being drawn before or after the current shader.
 
-Click **Change Shaders**. REST first collects active shaders for the configured number of frames, then lets you browse them.
+Click **Settings** on the group. REST first collects active shaders for the configured number of frames, then lets you browse them. The shader pane provides:
 
-Default controls:
+- case-insensitive hash search;
+- **All / Marked / Unmarked** filtering;
+- **Prev**, **Next**, **Prev marked**, **Mark / unmark** and **Next marked** mouse controls;
+- collected and marked shader counts;
+- **Recollect**, which starts a fresh collection for pixel, vertex and compute shaders while preserving the current marked hashes.
+
+The traditional defaults remain available for pixel and vertex shader hunting:
 
 - `Numpad 1` / `Numpad 2`: previous/next pixel shader.
 - `Numpad 3`: add/remove the current pixel shader from the group.
-- `Ctrl + Numpad 1` / `Ctrl + Numpad 2`: browse shaders already marked in the current group.
+- `Ctrl + Numpad 1` / `Ctrl + Numpad 2`: browse marked pixel shaders.
 - `Numpad 4` / `Numpad 5`: previous/next vertex shader.
 - `Numpad 6`: add/remove the current vertex shader from the group.
 - `Ctrl + Numpad 4` / `Ctrl + Numpad 5`: browse marked vertex shaders.
 
-Use the group's **Active** checkbox or assigned hotkey while testing. When finished, click **Done** and save the groups.
+All hunting shortcuts are configurable under **Keybindings**, making shader hunting practical on laptops and compact keyboards. Compute-shader hunting is also configurable but deliberately has no default shortcut. Shortcut matching uses the exact configured Ctrl/Shift/Alt modifiers, so a plain key does not also fire when a modified version is pressed.
+
+Use the group's **Active** checkbox or assigned hotkey while testing. Group hotkeys are ignored while a text-input field is active. When finished, click **Done** and **Save changes**.
 
 ## Automatic scene-colour performance note
 
@@ -122,14 +141,14 @@ A normal pull request to `main` runs the full build. Tagged releases use the for
 
 For example:
 
-`v1.4.3.633`
+`v1.5.0.633`
 
 See [Release Process](docs/RELEASING.md) for the release checklist and packaging details.
 
 ## Credits
 
 - [alex / 4lex4nder](https://github.com/4lex4nder) - ReshadeEffectShaderToggler development.
-- **DeViLhoOD** - Automatic Scene Colour, DLSS/upscaled rendering support, release hardening, documentation and testing.
+- **DeViLhoOD** - Automatic Scene Colour, DLSS/upscaled rendering support, x86/x64 hardening, QoL workflow improvements, documentation and testing.
 - [Frans Bouma](https://github.com/FransBouma) - original ShaderToggler.
 - [Sinom](https://github.com/sinomsinom) - contributor.
 - [crosire](https://github.com/crosire) - ReShade and effect-rendering examples.
