@@ -154,9 +154,9 @@ const ResourceViewData RenderingManager::GetCurrentResourceView(command_list* cm
         bindingRTindex = 0;
     }
 
-    // Automatic scene colour now targets the live render target bound at the
-    // matched draw. The SRV candidates discovered in BG3 are history/copy surfaces and
-    // are not causally consumed by the visible frame, while the bound RTV demonstrably is.
+    // Automatic scene colour targets the primary live render target bound at the
+    // matched draw. This keeps the effect on the scene that subsequent game passes
+    // actually consume instead of relying on descriptor/SRV discovery.
     if (action & (MATCH_EFFECT | MATCH_PREVIEW) && group->getAutoRenderSRV() && !rtvs.empty() && rtvs[0] != 0) {
         // Automatic mode always targets the primary live colour RTV. Do not inherit
         // a stale manual render-target index from the group configuration.
