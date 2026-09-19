@@ -10,7 +10,7 @@ Release tags must use:
 
 Example:
 
-`v1.4.4.633`
+`v1.5.0.633`
 
 The final component preserves the upstream convention used for the ReShade baseline.
 
@@ -81,7 +81,7 @@ Legacy game-specific hooks may be architecture-specific. The FFXIV constant-copy
 
 Create and push a tag from the desired `main` commit:
 
-`v1.4.4.633`
+`v1.5.0.633`
 
 The **Release** workflow will then:
 
