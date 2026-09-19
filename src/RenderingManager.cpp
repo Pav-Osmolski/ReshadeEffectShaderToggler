@@ -214,7 +214,8 @@ const ResourceViewData RenderingManager::GetCurrentResourceView(command_list* cm
 
         active_data.resource = rs;
         active_data.format = v_desc.format;
-    } else if (action & (MATCH_EFFECT | MATCH_PREVIEW) && !group->getRenderToResourceViews() && rtvs.size() > 0 && rtvs[index] != 0) {
+    } else if (action & (MATCH_EFFECT | MATCH_PREVIEW) && !group->getAutoRenderSRV() &&
+               !group->getRenderToResourceViews() && rtvs.size() > 0 && rtvs[index] != 0) {
         resource rs = device->get_resource_from_view(rtvs[index]);
 
         if (rs == 0) {
@@ -232,7 +233,8 @@ const ResourceViewData RenderingManager::GetCurrentResourceView(command_list* cm
 
         active_data.resource = rs;
         active_data.format = v_desc.format;
-    } else if (action & (MATCH_EFFECT | MATCH_PREVIEW) && group->getRenderToResourceViews()) {
+    } else if (action & (MATCH_EFFECT | MATCH_PREVIEW) && !group->getAutoRenderSRV() &&
+               group->getRenderToResourceViews()) {
         uint32_t stageIndex = std::min(static_cast<uint32_t>(2), group->getRenderSRVShaderStage());
 
         int32_t slot_size = static_cast<int32_t>(state.get_root_table_size_at(stageIndex));
