@@ -61,6 +61,11 @@ AddonUIData::AddonUIData(ShaderManager* pixelShaderManager, ShaderManager* verte
     _keyBindings[Keybind::VERTEX_SHADER_MARK] = VK_NUMPAD6;
     _keyBindings[Keybind::VERTEX_SHADER_MARKED_DOWN] = VK_NUMPAD4 | (VK_CONTROL << 8);
     _keyBindings[Keybind::VERTEX_SHADER_MARKED_UP] = VK_NUMPAD5 | (VK_CONTROL << 8);
+    _keyBindings[Keybind::COMPUTE_SHADER_DOWN] = 0;
+    _keyBindings[Keybind::COMPUTE_SHADER_UP] = 0;
+    _keyBindings[Keybind::COMPUTE_SHADER_MARK] = 0;
+    _keyBindings[Keybind::COMPUTE_SHADER_MARKED_DOWN] = 0;
+    _keyBindings[Keybind::COMPUTE_SHADER_MARKED_UP] = 0;
     _keyBindings[Keybind::INVOCATION_DOWN] = VK_NUMPAD7;
     _keyBindings[Keybind::INVOCATION_UP] = VK_NUMPAD8;
     _keyBindings[Keybind::DESCRIPTOR_DOWN] = VK_SUBTRACT;
