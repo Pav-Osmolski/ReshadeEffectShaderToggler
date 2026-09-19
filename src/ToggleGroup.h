@@ -52,7 +52,7 @@ enum SwapChainMatchMode : uint32_t {
     SWAPCHAIN_MATCH_MODE_NONE = 3
 };
 
-enum class GroupResourceType : uint32_t { RESOURCE_ALPHA = 0, RESOURCE_BINDING = 1, RESOURCE_CONSTANTS_COPY = 2 };
+enum class GroupResourceType : uint32_t { RESOURCE_ALPHA = 0, RESOURCE_BINDING = 1, RESOURCE_CONSTANTS_COPY = 2, RESOURCE_NATIVE_STAGING = 3 };
 
 enum class GroupResourceState : uint32_t {
     RESOURCE_VALID = 1,
@@ -62,7 +62,7 @@ enum class GroupResourceState : uint32_t {
     RESOURCE_CLEARED = 8,
 };
 
-constexpr uint32_t GroupResourceTypeCount = 3;
+constexpr uint32_t GroupResourceTypeCount = 4;
 
 struct __declspec(novtable) GroupResource final {
     reshade::api::resource res;
@@ -150,6 +150,36 @@ class ToggleGroup {
     void setExtractResourceViews(bool extract) { _extractResourceViews = extract; }
     bool getRenderToResourceViews() const { return _renderToResourceViews; }
     void setRenderToResourceViews(bool render) { _renderToResourceViews = render; }
+    bool getAutoRenderSRV() const { return _autoRenderSRV; }
+    void setAutoRenderSRV(bool autoRender) { _autoRenderSRV = autoRender; }
+
+    uint64_t getDebugEffectRenderCalls() const { return _debugEffectRenderCalls; }
+    uint32_t getDebugLastRenderedTechniqueCount() const { return _debugLastRenderedTechniqueCount; }
+    uint64_t getDebugLastRenderTarget() const { return _debugLastRenderTarget; }
+    uint32_t getDebugSceneWidth() const { return _debugSceneWidth; }
+    uint32_t getDebugSceneHeight() const { return _debugSceneHeight; }
+    uint32_t getDebugEffectWidth() const { return _debugEffectWidth; }
+    uint32_t getDebugEffectHeight() const { return _debugEffectHeight; }
+    bool getDebugNativeStaging() const { return _debugNativeStaging; }
+    const std::string& getDebugLastTechniqueOrder() const { return _debugLastTechniqueOrder; }
+    void recordDebugEffectRender(uint32_t techniqueCount,
+                                 uint64_t targetHandle,
+                                 const std::string& techniqueOrder,
+                                 uint32_t sceneWidth,
+                                 uint32_t sceneHeight,
+                                 uint32_t effectWidth,
+                                 uint32_t effectHeight,
+                                 bool nativeStaging) {
+        ++_debugEffectRenderCalls;
+        _debugLastRenderedTechniqueCount = techniqueCount;
+        _debugLastRenderTarget = targetHandle;
+        _debugLastTechniqueOrder = techniqueOrder;
+        _debugSceneWidth = sceneWidth;
+        _debugSceneHeight = sceneHeight;
+        _debugEffectWidth = effectWidth;
+        _debugEffectHeight = effectHeight;
+        _debugNativeStaging = nativeStaging;
+    }
     void setBindingSRVSlotIndex(uint32_t index) { _bindingSrvSlotIndex = index; }
     uint32_t getBindingSRVSlotIndex() const { return _bindingSrvSlotIndex; }
     void setRenderSRVSlotIndex(uint32_t index) { _renderSrvSlotIndex = index; }
@@ -243,6 +273,16 @@ class ToggleGroup {
     volatile bool _isProvidingTextureBinding;
     volatile bool _copyTextureBinding;
     bool _renderToResourceViews;
+    bool _autoRenderSRV = false;
+    uint64_t _debugEffectRenderCalls = 0;
+    uint32_t _debugLastRenderedTechniqueCount = 0;
+    uint64_t _debugLastRenderTarget = 0;
+    uint32_t _debugSceneWidth = 0;
+    uint32_t _debugSceneHeight = 0;
+    uint32_t _debugEffectWidth = 0;
+    uint32_t _debugEffectHeight = 0;
+    bool _debugNativeStaging = false;
+    std::string _debugLastTechniqueOrder;
     bool _extractConstants;
     bool _extractResourceViews;
     volatile bool _clearBindings;
@@ -264,6 +304,6 @@ class ToggleGroup {
     DescriptorCycle _srvCycle;
     DescriptorCycle _rtCycle;
 
-    std::array<GroupResource, 3> _group_buffers;
+    std::array<GroupResource, 4> _group_buffers;
 };
 }

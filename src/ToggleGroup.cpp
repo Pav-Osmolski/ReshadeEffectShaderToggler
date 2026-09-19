@@ -54,6 +54,7 @@ ToggleGroup::ToggleGroup(string name, int id) {
     _tonemapHDRtoSDRtoHDR = false;
     _preserveAlpha = false;
     _renderToResourceViews = false;
+    _autoRenderSRV = false;
     _cbCycle = CYCLE_NONE;
     _srvCycle = CYCLE_NONE;
     _rtCycle = CYCLE_NONE;
@@ -74,6 +75,22 @@ ToggleGroup::ToggleGroup(string name, int id) {
                                                                                    true };
     _group_buffers[static_cast<uint32_t>(GroupResourceType::RESOURCE_CONSTANTS_COPY)] = {
         {}, {}, {}, {}, {}, {}, {}, [&]() { return _extractConstants; }, [&]() { return false; }, GroupResourceState::RESOURCE_INVALID, true
+    };
+    _group_buffers[static_cast<uint32_t>(GroupResourceType::RESOURCE_NATIVE_STAGING)] = {
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        [this]() {
+            const GroupResource& staging = _group_buffers[static_cast<uint32_t>(GroupResourceType::RESOURCE_NATIVE_STAGING)];
+            return _autoRenderSRV && staging.target_description.texture.width > 0 && staging.target_description.texture.height > 0;
+        },
+        [this]() { return false; },
+        GroupResourceState::RESOURCE_INVALID,
+        true
     };
 }
 
@@ -124,6 +141,7 @@ ToggleGroup::ToggleGroup(const ToggleGroup& other)
     _srvCycle = other._srvCycle;
     _rtCycle = other._rtCycle;
     _renderToResourceViews = other._renderToResourceViews;
+    _autoRenderSRV = other._autoRenderSRV;
     _renderSrvDescIndex = other._renderSrvDescIndex;
     _renderSrvShaderStage = other._renderSrvShaderStage;
     _renderSrvSlotIndex = other._renderSrvSlotIndex;
@@ -264,6 +282,7 @@ void ToggleGroup::saveState(CDataFile& iniFile, int groupCounter) const {
         firstElement = false;
     }
     iniFile.SetBool("RenderToSRVs", _renderToResourceViews, "", sectionRoot);
+    iniFile.SetBool("AutoRenderSRV", _autoRenderSRV, "", sectionRoot);
     iniFile.SetUInt("RenderSRVPipelineSlot", _renderSrvSlotIndex, "", sectionRoot);
     iniFile.SetUInt("RenderSRVDescriptorIndex", _renderSrvDescIndex, "", sectionRoot);
     iniFile.SetUInt("RenderSRVShaderStage", _renderSrvShaderStage, "", sectionRoot);
@@ -479,6 +498,7 @@ void ToggleGroup::loadState(CDataFile& iniFile, int groupCounter) {
     }
 
     _renderToResourceViews = iniFile.GetBoolOrDefault("RenderToSRVs", sectionRoot, false);
+    _autoRenderSRV = iniFile.GetBoolOrDefault("AutoRenderSRV", sectionRoot, false);
 
     uint32_t renderSrvSlotIndex = iniFile.GetUInt("RenderSRVPipelineSlot", sectionRoot);
     if (renderSrvSlotIndex != UINT_MAX) {

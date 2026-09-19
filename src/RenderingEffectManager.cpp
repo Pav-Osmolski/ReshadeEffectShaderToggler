@@ -101,7 +101,90 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
             continue;
         }
 
-        if (group->getPreserveAlpha()) {
+        uint32_t runtimeWidth = 0, runtimeHeight = 0;
+        runtime->get_screenshot_width_and_height(&runtimeWidth, &runtimeHeight);
+
+        const bool autoSceneColour =
+          group->getAutoRenderSRV() &&
+          cmd_list->get_device()->get_api() == device_api::d3d12;
+        const bool preserveTargetAlpha = group->getPreserveAlpha() && !autoSceneColour;
+        const bool wantsNativeStaging =
+          autoSceneColour &&
+          runtimeWidth > 0 && runtimeHeight > 0 &&
+          (desc.texture.width != runtimeWidth || desc.texture.height != runtimeHeight);
+
+        bool useNativeStaging = false;
+        resource nativeStageRes = {};
+        resource_view nativeStageRTV = {};
+        resource_view nativeStageRTVSRGB = {};
+        resource_view nativeStageSRV = {};
+
+        if (wantsNativeStaging) {
+            GroupResource& staging = group->GetGroupResource(GroupResourceType::RESOURCE_NATIVE_STAGING);
+
+            resource_desc desired = desc;
+            desired.texture.width = runtimeWidth;
+            desired.texture.height = runtimeHeight;
+            desired.texture.depth_or_layers = 1;
+            desired.texture.levels = 1;
+            desired.texture.samples = 1;
+            desired.texture.format = format_to_typeless(active_resource.format);
+
+            bool stagingCompatible = false;
+            if (staging.res != 0) {
+                const resource_desc current = runtime->get_device()->get_resource_desc(staging.res);
+                stagingCompatible =
+                  current.texture.width == desired.texture.width &&
+                  current.texture.height == desired.texture.height &&
+                  format_to_typeless(current.texture.format) == format_to_typeless(desired.texture.format);
+            }
+
+            if (!stagingCompatible) {
+                staging.target_description = desired;
+                staging.view_format = active_resource.format;
+                staging.state = GroupResourceState::RESOURCE_INVALID;
+                continue;
+            }
+
+            groupResourceManager.SetGroupBufferHandles(group,
+                                                       GroupResourceType::RESOURCE_NATIVE_STAGING,
+                                                       &nativeStageRes,
+                                                       &nativeStageRTV,
+                                                       &nativeStageRTVSRGB,
+                                                       &nativeStageSRV);
+
+            if (nativeStageRes == 0 || nativeStageRTV == 0 || nativeStageSRV == 0 || view->srv == 0) {
+                continue;
+            }
+
+            // The selected resource is the live RTV bound for the matched draw.
+            // Temporarily transition it to shader-resource state so the fullscreen copy
+            // shader can sample it into the native-size staging surface.
+            cmd_list->barrier(active_resource.resource, resource_usage::render_target, resource_usage::shader_resource);
+
+            // Upscale the game's pre-DLSS scene into a native-size scratch surface.
+            // This keeps ReShade's effect-created intermediate textures at their normal
+            // runtime dimensions, avoiding mixed-resolution shared-resource permutations.
+            shaderManager.CopyResource(cmd_list, view->srv, nativeStageRTV, runtimeWidth, runtimeHeight);
+
+            view_non_srgb = nativeStageRTV;
+            view_srgb = nativeStageRTVSRGB != 0 ? nativeStageRTVSRGB : nativeStageRTV;
+            useNativeStaging = true;
+            staging.state = GroupResourceState::RESOURCE_VALID;
+        }
+
+        const bool transitionManualSRV =
+          !group->getAutoRenderSRV() && group->getRenderToResourceViews() &&
+          cmd_list->get_device()->get_api() == device_api::d3d12 &&
+          !useNativeStaging;
+
+        // Manual SRV rendering temporarily turns a shader-resource view into a
+        // render target, then restores its original state before the game resumes.
+        if (transitionManualSRV) {
+            cmd_list->barrier(active_resource.resource, resource_usage::shader_resource, resource_usage::render_target);
+        }
+
+        if (!useNativeStaging && preserveTargetAlpha) {
             if (groupResourceManager.IsCompatibleWithGroupFormat(runtime->get_device(), GroupResourceType::RESOURCE_ALPHA, active_resource.resource, group)) {
                 resource group_res = {};
                 groupResourceManager.SetGroupBufferHandles(group, GroupResourceType::RESOURCE_ALPHA, &group_res, &view_non_srgb, &view_srgb, &group_view);
@@ -115,7 +198,7 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
                 groupResource.target_description = desc;
                 groupResource.view_format = active_resource.format;
             }
-        } else {
+        } else if (!useNativeStaging) {
             view_non_srgb = view->rtv;
             view_srgb = view->rtv_srgb;
         }
@@ -132,14 +215,38 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
             runtime->render_technique(runtimeData.specialEffects[REST_TONEMAP_TO_SDR].technique, cmd_list, view_non_srgb, view_srgb);
         }
 
+        uint32_t renderedTechniqueCount = 0;
+        std::string renderedTechniqueOrder;
         for (const auto& effectTech : effectList) {
+            char techniqueName[256] = {};
+            size_t techniqueNameSize = sizeof(techniqueName);
+            runtime->get_technique_name(effectTech->technique, techniqueName, &techniqueNameSize);
+
+            if (!renderedTechniqueOrder.empty())
+                renderedTechniqueOrder += " -> ";
+            renderedTechniqueOrder += techniqueName;
+
             runtime->render_technique(effectTech->technique, cmd_list, view_non_srgb, view_srgb);
 
             effectTech->rendered = true;
+            ++renderedTechniqueCount;
 
             removalList.push_back(effectTech);
 
             rendered = true;
+        }
+
+        if (renderedTechniqueCount > 0) {
+            const uint32_t effectWidth = useNativeStaging ? runtimeWidth : desc.texture.width;
+            const uint32_t effectHeight = useNativeStaging ? runtimeHeight : desc.texture.height;
+            group->recordDebugEffectRender(renderedTechniqueCount,
+                                           active_resource.resource.handle,
+                                           renderedTechniqueOrder,
+                                           desc.texture.width,
+                                           desc.texture.height,
+                                           effectWidth,
+                                           effectHeight,
+                                           useNativeStaging);
         }
 
         if (group->getToneMap() && runtimeData.specialEffects[REST_TONEMAP_TO_HDR].technique != 0) {
@@ -156,6 +263,22 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
 
             if (target_view_non_srgb != 0)
                 shaderManager.CopyResourceMaskAlpha(cmd_list, group_view, target_view_non_srgb, desc.texture.width, desc.texture.height);
+        }
+
+        if (useNativeStaging) {
+            // Downscale the completed native-size effect result back into the live
+            // scene target. Leave the game resource in render-target state so the
+            // matched draw can execute normally after REST returns.
+            cmd_list->barrier(nativeStageRes, resource_usage::render_target, resource_usage::shader_resource);
+            cmd_list->barrier(active_resource.resource, resource_usage::shader_resource, resource_usage::render_target);
+
+            if (view->rtv != 0) {
+                shaderManager.CopyResource(cmd_list, nativeStageSRV, view->rtv, desc.texture.width, desc.texture.height);
+            }
+
+            cmd_list->barrier(nativeStageRes, resource_usage::shader_resource, resource_usage::render_target);
+        } else if (transitionManualSRV) {
+            cmd_list->barrier(active_resource.resource, resource_usage::render_target, resource_usage::shader_resource);
         }
     }
 

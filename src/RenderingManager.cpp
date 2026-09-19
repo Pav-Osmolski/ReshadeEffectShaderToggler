@@ -145,10 +145,36 @@ const ResourceViewData RenderingManager::GetCurrentResourceView(command_list* cm
     const vector<resource_view>& rtvs = state.render_targets;
 
     size_t index = group->getRenderTargetIndex();
-    index = std::min(index, rtvs.size() - 1);
-
     size_t bindingRTindex = group->getBindingRenderTargetIndex();
-    bindingRTindex = std::min(bindingRTindex, rtvs.size() - 1);
+    if (!rtvs.empty()) {
+        index = std::min(index, rtvs.size() - 1);
+        bindingRTindex = std::min(bindingRTindex, rtvs.size() - 1);
+    } else {
+        index = 0;
+        bindingRTindex = 0;
+    }
+
+    // Automatic scene colour targets the primary live render target bound at the
+    // matched draw. This keeps the effect on the scene that subsequent game passes
+    // actually consume instead of relying on descriptor/SRV discovery.
+    if (action & (MATCH_EFFECT | MATCH_PREVIEW) &&
+        group->getAutoRenderSRV() &&
+        device->get_api() == device_api::d3d12 &&
+        !rtvs.empty() && rtvs[0] != 0) {
+        // Automatic mode always targets the primary live colour RTV. Do not inherit
+        // a stale manual render-target index from the group configuration.
+        resource rs = device->get_resource_from_view(rtvs[0]);
+        if (rs != 0) {
+            resource_desc desc = device->get_resource_desc(rs);
+            resource_view_desc v_desc = device->get_resource_view_desc(rtvs[0]);
+
+            if (ValidFormat(deviceData.current_runtime, desc, ShaderToggler::SWAPCHAIN_MATCH_MODE_ASPECT_RATIO)) {
+                active_data.resource = rs;
+                active_data.format = v_desc.format;
+                return active_data;
+            }
+        }
+    }
 
     // Only return SRVs in case of bindings
     if (action & MATCH_BINDING && group->getExtractResourceViews()) {
@@ -191,7 +217,8 @@ const ResourceViewData RenderingManager::GetCurrentResourceView(command_list* cm
 
         active_data.resource = rs;
         active_data.format = v_desc.format;
-    } else if (action & (MATCH_EFFECT | MATCH_PREVIEW) && !group->getRenderToResourceViews() && rtvs.size() > 0 && rtvs[index] != 0) {
+    } else if (action & (MATCH_EFFECT | MATCH_PREVIEW) && !group->getAutoRenderSRV() &&
+               !group->getRenderToResourceViews() && rtvs.size() > 0 && rtvs[index] != 0) {
         resource rs = device->get_resource_from_view(rtvs[index]);
 
         if (rs == 0) {
@@ -209,7 +236,8 @@ const ResourceViewData RenderingManager::GetCurrentResourceView(command_list* cm
 
         active_data.resource = rs;
         active_data.format = v_desc.format;
-    } else if (action & (MATCH_EFFECT | MATCH_PREVIEW) && group->getRenderToResourceViews()) {
+    } else if (action & (MATCH_EFFECT | MATCH_PREVIEW) && !group->getAutoRenderSRV() &&
+               group->getRenderToResourceViews()) {
         uint32_t stageIndex = std::min(static_cast<uint32_t>(2), group->getRenderSRVShaderStage());
 
         int32_t slot_size = static_cast<int32_t>(state.get_root_table_size_at(stageIndex));

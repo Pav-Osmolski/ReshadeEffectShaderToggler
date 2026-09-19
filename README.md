@@ -1,89 +1,140 @@
-# ReshadeEffectShaderToggler [![MSBuild](https://github.com/4lex4nder/ReshadeEffectShaderToggler/actions/workflows/msbuild.yml/badge.svg)](https://github.com/4lex4nder/ReshadeEffectShaderToggler/actions/workflows/msbuild.yml) [![Release](https://github.com/4lex4nder/ReshadeEffectShaderToggler/actions/workflows/release.yml/badge.svg)](https://github.com/4lex4nder/ReshadeEffectShaderToggler/actions/workflows/release.yml)
-Reshade 5.8+ addon to apply Reshade effects to render targets bound before specific, user-configurable, groups of shaders are 
-encountered within a game's rendering pipeline.
+# ReshadeEffectShaderToggler
 
-It's mainly for 64bit reshade. There's a 32bit version in the releases, but it's not actively maintained/tested.
+[![MSBuild](https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler/actions/workflows/msbuild.yml/badge.svg)](https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler/actions/workflows/msbuild.yml)
+[![Release](https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler/actions/workflows/release.yml/badge.svg)](https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler/actions/workflows/release.yml)
 
-DX12 and Vulkan support is mostly untested and probably pretty bad.
+A ReShade 5.8+ add-on for applying ReShade effects at specific points inside a game's rendering pipeline. REST groups user-selected shaders and can inject selected ReShade techniques immediately before those shaders are encountered.
 
-## How to use
-Place the `ReshadeEffectShaderToggler.addon` in the same folder as where the game exe is located. This is in most cases the same folder as where the Reshade 5.8+ dll
-is located. For Unreal Engine powered games there might be two
-game exe's: one in the game's installation folder, and one in a folder deeper into that folder, e.g. 
-`GameName\Binaries\Win64\GameName-Win64-Shipping.exe`; the shader toggler addon has to be in that second folder, in our example:
-`GameName\Binaries\Win64`. Reshade has to be placed in that folder as well.
+The primary build target is 64-bit. A 32-bit build is also produced, but it is not actively tested.
 
-Be sure to use the Reshade version which supports Addons (so the unsigned version). When you start your game, the `Addons` tab in 
-the Reshade gui should show the ReshadeEffectShaderToggler information and controls.
+## Highlights
 
-To create a toggle for a set of shaders, open the reshade gui and go to the addon's tab -> Reshade Effect Shader Toggler area. Then click 
-the `New` button to create a new *Toggle group*. By default the new toggle group has as name `Default` and no toggle key. 
-To change these, click the `Edit` button of the Toggle Group. You can then change the name of the toggle group
-and also add a keyboard shortcut. The keyboard shortcut nor the name have to be unique. The keyboard shortcut can be 
-any key on your keyboard, optionally in combination of using `Alt`, `Control`, and `Shift`. 
+- Create shader groups and toggle them on or off from the ReShade overlay.
+- Apply all globally enabled ReShade techniques, a selected subset, or all except selected techniques to a group.
+- Render effects at configurable render-target boundaries.
+- Preview and inspect render targets while hunting shaders.
+- Extract and reuse constant-buffer or texture-binding data where supported.
+- **Automatic scene-colour injection for D3D12 games using DLSS or other dynamic-resolution/upscaling paths.**
+- Preserve technique selections reliably across ReShade effect reloads and ordering changes.
 
-A toggle group needs shaders assigned to it, that's done with marking shaders below.
+## Compatibility
 
-## Configuring Effects
-Each shader group can be assigned a subset of all Reshade effects. These are rendered in the order the shader groups are encountered while 
-rendering the frame, though the order of rendering within a shader groups corresponds to the global order you've set up in Reshade.
-To configure effects, click the `Change Effects` button in the shader group. A window should pop up with a table showing all effects. The naming
-is based on the technique names specified within the effects themselves instead of the actual effect names, in doubt open the 
-effect shader file and double check.
+REST requires a ReShade build with add-on support enabled.
 
-Shader group effect rendering is based on the following principles:
-* A single shader group that has no effects assigned, if active, will render all effects enabled in Reshade that have not yet been rendered by previous shader groups
-* If an effect is assigned to multiple shader groups, it will only be rendered by the first shader group encountered.
-* Only effects enabled in the global Reshade effect list will be rendered, no matter what is assigned to the shader groups.
+The existing render-target, shader-hunting and binding features remain API/game dependent. D3D12 and Vulkan behaviour outside the paths that have been specifically tested may vary by title.
 
-    To finish editing either press the window's `x` button on the top right or press the `Done` button in the
-    shader group.
+The **Auto scene colour** path is currently a D3D12 feature. It has been developed and tested with **Baldur's Gate 3 using DLSS**, where the scene is rendered below the swapchain resolution and later composed with fog and UI.
 
-    Note that this may lead to discrepancies between what is enabled in Reshade and what is actually rendered. If at least one shader group is enabled, 
-    it will render only effects applicable to those shader groups, i.e., potentially not all globally enabled effects will be rendered.
+## Installation
 
-## Marking Shaders
-To successfully be able to mark a set of shaders to toggle, be sure the elements you want to toggle, so the elements
-using the shaders, are visible, e.g. a menu or a hud or a certain effect. If possible, enable something like an ambient occlusion
-shader in it's debug mode to better see what is rendered on top of it. In case you have multiple shader groups with different assigned
-effects, it might make sense to assign this shader to shader group you're editing. After you've made sure the elements to toggle are
-visible, click the `Change Shaders` button of the toggle group. This will start the 'Shader hunting' phase for the particular 
-toggle group. 
+Place the appropriate add-on beside the game executable that ReShade is actually injected into:
 
-You should see the shader overlay in the top left corner with the information you need. By default it waits a certain amount
-of frames (which you can configure in the reshade overlay) to see which shaders are currently active. This is to avoid having
-to walk through potentially thousands of shaders which aren't currently used. 
+- 64-bit: `ReshadeEffectShaderToggler.addon64`
+- 32-bit: `ReshadeEffectShaderToggler.addon32`
 
-After the frames have been collected, it has enough information to allow you to browse the shaders. 
+For Unreal Engine games this is often the executable under a path such as:
 
-To walk the available pixel shaders, use the `Numpad 1` and `Numpad 2` keys. If an element is rendered on top of your test effect, 
-the shader that's currently 'active' is rendering these elements, so if you want to render effects before these elements, 
-press `Numpad 3`. The shader is then marked, and part of the toggle group. Press `Numpad 3` again to remove it from the group.
+`GameName\Binaries\Win64\GameName-Win64-Shipping.exe`
 
-To walk all shaders you already marked in the current group, you can hold down `Ctrl` and press `Numpad 1` and `Numpad 2` to quickly
-move back/forth through the shaders in a group, e.g. when you made a mistake and you want to unmark a shader. 
+ReShade must be installed against that executable as well.
 
-To walk the available vertex shaders, instead use the `Numpad 4` and `Numpad 5` keys. To mark a vertex shader to be 
-part of the toggle group, press `Numpad 6`.
+Start the game and open the ReShade overlay. The **Add-ons** tab should list **Reshade Effect Shader Toggler**.
 
-Same for vertex shaders: to walk all shaders you already marked in the current group, you can hold down `Ctrl` and press `Numpad 4` and `Numpad 5` 
-to quickly move back/forth through the shaders in a group. 
+## Basic workflow
 
-To test your current group, press the toggle key you assigned to the group or toggle the `Active` checkbox. When you're done, click the 'Done' button in the 
-reshade overlay for the particular toggle group. 
+1. Open the ReShade overlay and expand **Reshade Effect Shader Toggler**.
+2. Click **New** to create a toggle group.
+3. Click **Edit** to give the group a useful name and optional hotkey.
+4. Use **Change Shaders** to hunt and mark the shader(s) that define where the group should run.
+5. Use **Change Effects** to select which ReShade techniques the group should apply.
+6. Test the group, then click **Save all Toggle Groups**.
 
-To re-use this information the next time you run the game, click the Save toggle group button. This will write an ini file 
-(`ReshadeEffectShaderToggler.ini`) with the information to create the set of shaders to toggle next time you start the game. This file is
-located in the same folder as `ReshadeEffectShaderToggler.addon`.
+The saved configuration is written to `ReshadeEffectShaderToggler.ini` beside the add-on.
+
+## Configuring effects
+
+Each group can control a subset of the techniques currently known to ReShade. Techniques are executed in their global ReShade order.
+
+REST supports three modes:
+
+- **All globally enabled techniques are applied**: no technique filter is used.
+- **Only ticked enabled techniques are applied**: only selected techniques that are globally enabled in ReShade are run.
+- **Ticked techniques are EXCLUDED**: all globally enabled techniques except the selected entries are run.
+
+Important behaviour:
+
+- A technique enabled in the group but disabled globally in ReShade will not run.
+- If the same technique is assigned to multiple active groups, it is normally rendered by the first applicable group encountered in the frame.
+- Multi-pass effects must keep their required techniques enabled and in the correct ReShade order.
+- Technique selections are stored by name and preserved when ReShade reloads or reorders its effect list.
+
+## Automatic scene colour for D3D12 upscalers
+
+For games that render the scene below output resolution and upscale later, rendering a ReShade effect directly into the lower-resolution scene target can break multi-pass effects or produce incorrectly scaled output.
+
+Enable **Auto scene colour** in the group's render-target settings to use REST's automatic path.
+
+In this mode REST:
+
+1. Uses the **primary live colour render target** bound at the matched draw.
+2. Matches the target by **aspect ratio**, so DLSS/dynamic-resolution changes do not require manual width/height configuration.
+3. If the live scene is below the ReShade runtime/output resolution, copies it into a native-resolution staging target.
+4. Runs the selected ReShade techniques at the native ReShade resolution.
+5. Copies the completed result back into the live scene target.
+6. Returns control to the game so later fog, post-processing and UI passes are composed normally.
+
+This is why effects such as AO can remain **under the UI** while still using their normal full-resolution intermediate textures.
+
+Auto mode intentionally ignores stale manual render-target index, SRV slot/binding, swapchain-match and alpha-preservation settings. You do not need to choose a shader stage, SRV slot or descriptor binding.
+
+The group editor reports the live **scene resolution**, **effect resolution**, technique order and render status to make validation easier.
+
+For setup details, limitations and troubleshooting, see [Automatic Scene Colour](docs/automatic-scene-colour.md).
+
+## Marking shaders
+
+Make the element that defines your desired injection boundary visible before starting shader hunting. A debug-heavy effect such as AO can make it easier to see whether a UI, fog or other game pass is being drawn before or after the current shader.
+
+Click **Change Shaders**. REST first collects active shaders for the configured number of frames, then lets you browse them.
+
+Default controls:
+
+- `Numpad 1` / `Numpad 2`: previous/next pixel shader.
+- `Numpad 3`: add/remove the current pixel shader from the group.
+- `Ctrl + Numpad 1` / `Ctrl + Numpad 2`: browse shaders already marked in the current group.
+- `Numpad 4` / `Numpad 5`: previous/next vertex shader.
+- `Numpad 6`: add/remove the current vertex shader from the group.
+- `Ctrl + Numpad 4` / `Ctrl + Numpad 5`: browse marked vertex shaders.
+
+Use the group's **Active** checkbox or assigned hotkey while testing. When finished, click **Done** and save the groups.
+
+## Automatic scene-colour performance note
+
+When native staging is required, REST performs an additional scene copy to native resolution and another copy back to the live scene target, and the selected ReShade techniques run at native resolution. This is intentional for correctness but can cost more GPU time than rendering directly at the game's internal resolution.
+
+## Building
+
+The repository builds x64 and x86 Release configurations through GitHub Actions and Visual Studio/MSBuild.
+
+A normal pull request to `main` runs the full build. Tagged releases use the format:
+
+`vMAJOR.MINOR.PATCH.RESHADE`
+
+For example:
+
+`v1.4.0.633`
+
+See [Release Process](docs/RELEASING.md) for the release checklist and packaging details.
 
 ## Credits
-* [Sinom](https://github.com/sinomsinom)<br/>
-    Contributor
-* [Frans Bouma](https://github.com/FransBouma)<br/>
-    Original ShaderToggler
-* [crosire](https://github.com/crosire)<br/>
-    Reshade and example code of effect rendering
-* [Marty McFly](https://github.com/martymcmodding)<br/>
-    Constant buffer extraction idea
-* [darkarchan](https://github.com/darkarchan)<br/>
-    Testing, contribution
+
+- [alex / 4lex4nder](https://github.com/4lex4nder) - ReshadeEffectShaderToggler development.
+- [Frans Bouma](https://github.com/FransBouma) - original ShaderToggler.
+- [Sinom](https://github.com/sinomsinom) - contributor.
+- [crosire](https://github.com/crosire) - ReShade and effect-rendering examples.
+- [Marty McFly](https://github.com/martymcmodding) - constant-buffer extraction idea.
+- [darkarchan](https://github.com/darkarchan) - testing and contributions.
+
+## Licence
+
+This project retains the licence and notices from the upstream project. See [LICENSE](LICENSE).

@@ -100,8 +100,24 @@ static void DisplayTechniqueSelection(reshade::api::effect_runtime* runtime,
     RuntimeDataContainer& runtimeData = runtime->get_private_data<RuntimeDataContainer>();
 
     std::unordered_set<std::string> curTechniques = group->preferredTechniques();
-    std::unordered_set<std::string> newTechniques;
     static char searchBuf[256] = "\0";
+
+    // Take a stable snapshot of technique names. ReShade can rebuild allTechniques during
+    // effect reload/reorder events; iterating that unordered_map directly while also
+    // reconstructing the group's selection can otherwise silently drop selected entries.
+    std::vector<std::pair<std::string, bool>> availableTechniques;
+    {
+        std::shared_lock<std::shared_mutex> techLock(runtimeData.technique_mutex);
+        availableTechniques.reserve(runtimeData.allTechniques.size());
+        for (const auto& [name, effectData] : runtimeData.allTechniques) {
+            availableTechniques.emplace_back(name, effectData.enabled);
+        }
+    }
+
+    // unordered_map iteration order changes whenever ReShade rebuilds its technique list.
+    // Keep the UI deterministic so selections do not appear to jump around between reloads.
+    std::sort(availableTechniques.begin(), availableTechniques.end(),
+              [](const auto& lhs, const auto& rhs) { return lhs.first < rhs.first; });
 
     bool allowAll = group->getAllowAllTechniques();
     bool exceptions = group->getHasTechniqueExceptions();
@@ -126,6 +142,19 @@ static void DisplayTechniqueSelection(reshade::api::effect_runtime* runtime,
         }
 
         ImGui::TableNextColumn();
+        ImGui::Text("Mode");
+        ImGui::TableNextColumn();
+        if (!allowAll) {
+            ImGui::TextUnformatted("Only ticked enabled techniques are applied");
+        } else if (exceptions) {
+            ImGui::TextUnformatted("Ticked techniques are EXCLUDED");
+        } else {
+            ImGui::TextUnformatted("All globally enabled techniques are applied");
+        }
+
+        ImGui::TableNextRow();
+
+        ImGui::TableNextColumn();
         ImGui::Text("Search");
         ImGui::TableNextColumn();
         ImGui::InputText("##techniqueSearch", searchBuf, 256, ImGuiInputTextFlags_None);
@@ -137,33 +166,49 @@ static void DisplayTechniqueSelection(reshade::api::effect_runtime* runtime,
             curTechniques.clear();
         }
         ImGui::TableNextColumn();
+        ImGui::Text("%zu selected / %zu available", curTechniques.size(), availableTechniques.size());
 
         ImGui::EndTable();
     }
 
     ImGui::Separator();
 
+    // Start from the group's existing selection rather than rebuilding from an empty set.
+    // This preserves selected names that are temporarily absent while ReShade reloads effects.
+    std::unordered_set<std::string> newTechniques = curTechniques;
+
     if (allowAll && !exceptions) {
         ImGui::BeginDisabled();
     }
+
     if (ImGui::BeginTable("Technique selection##table", 3, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_ScrollY | ImGuiTableFlags_NoBordersInBody)) {
         ImGui::TableSetupColumn("##columnsetupSelection", ImGuiTableColumnFlags_WidthFixed, tblWidth);
 
         std::string searchString(searchBuf);
 
-        if (runtimeData.allTechniques.size() > 0) {
-            for (const auto& [name, effData] : runtimeData.allTechniques) {
-                bool enabled = curTechniques.contains(name);
+        for (const auto& [name, globallyEnabled] : availableTechniques) {
+            bool enabled = newTechniques.contains(name);
 
-                if (std::ranges::search(
-                      name, searchString, [](const wchar_t lhs, const wchar_t rhs) { return lhs == rhs; }, std::towupper, std::towupper)
-                      .begin() != name.end()) {
-                    ImGui::TableNextColumn();
-                    ImGui::Checkbox(name.c_str(), &enabled);
+            const bool visible =
+              std::ranges::search(name,
+                                  searchString,
+                                  [](const wchar_t lhs, const wchar_t rhs) { return lhs == rhs; },
+                                  std::towupper,
+                                  std::towupper)
+                .begin() != name.end();
+
+            if (visible) {
+                ImGui::TableNextColumn();
+                if (ImGui::Checkbox(name.c_str(), &enabled)) {
+                    if (enabled) {
+                        newTechniques.insert(name);
+                    } else {
+                        newTechniques.erase(name);
+                    }
                 }
-
-                if (enabled) {
-                    newTechniques.insert(name);
+                if (!globallyEnabled) {
+                    ImGui::SameLine();
+                    ImGui::TextDisabled("(disabled in ReShade)");
                 }
             }
         }
@@ -177,12 +222,11 @@ static void DisplayTechniqueSelection(reshade::api::effect_runtime* runtime,
 
     group->setHasTechniqueExceptions(exceptions);
     group->setAllowAllTechniques(allowAll);
+    group->setPreferredTechniques(newTechniques);
 
+    // Rebind saved names to the current EffectData instances using a stable map.
     std::shared_lock<std::shared_mutex> techLock(runtimeData.technique_mutex);
-    if (runtimeData.allTechniques.size() > 0) {
-        group->setPreferredTechniques(newTechniques);
-        instance.AssignPreferredGroupTechniques(runtimeData.allTechniques);
-    }
+    instance.AssignPreferredGroupTechniques(runtimeData.allTechniques);
 }
 
 static void DrawPreview(unsigned long long textureId, uint32_t srcWidth, uint32_t srcHeight) {
@@ -288,7 +332,6 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
                                  reshade::api::effect_runtime* runtime,
                                  ShaderToggler::ToggleGroup* group) {
     static float height = ImGui::GetWindowHeight();
-    static float width = ImGui::GetWindowWidth();
 
     const char* typeSelectedItem = invocationDescription[group->getInvocationLocation()];
     uint32_t selectedIndex = group->getInvocationLocation();
@@ -305,11 +348,15 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
     bool tonemap = group->getToneMap();
     bool preserveAlpha = group->getPreserveAlpha();
     bool flipbuffer = group->getFlipBuffer();
+    bool autoSceneColour = group->getAutoRenderSRV();
+
     static const char* swapchainMatchOptions[] = { "RESOLUTION", "ASPECT RATIO", "EXTENDED ASPECT RATIO", "NONE" };
     uint32_t selectedSwapchainMatchMode = group->getMatchSwapchainResolution();
     const char* typesSelectedSwapchainMatchMode = swapchainMatchOptions[selectedSwapchainMatchMode];
 
-    bool supportsSRVwrite = runtime->get_device()->get_api() < reshade::api::device_api::d3d12;
+    const reshade::api::device_api deviceApi = runtime->get_device()->get_api();
+    const bool autoSceneColourSupported = deviceApi == reshade::api::device_api::d3d12;
+    const bool supportsSRVwrite = deviceApi < reshade::api::device_api::d3d12;
 
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
     if (ImGui::BeginChild("RenderTargets", { 0, height / 1.5f }, true, ImGuiChildFlags_AlwaysAutoResize)) {
@@ -318,174 +365,236 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
         if (ImGui::BeginTable("RenderTargetsSettings", 2, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoBordersInBody)) {
             ImGui::TableSetupColumn("##RTcolumnsetup", ImGuiTableColumnFlags_WidthFixed, ImGui::GetWindowWidth() / 3);
 
-            if (supportsSRVwrite) {
-                ImGui::TableNextColumn();
-                ImGui::Text("Render destination");
-                ImGui::TableNextColumn();
-                if (ImGui::BeginCombo("##Renderdestination", typeSelectedDestItem, ImGuiComboFlags_None)) {
-                    for (int n = 0; n < IM_ARRAYSIZE(typeDestItems); n++) {
-                        bool is_selected = (typeSelectedDestItem == typeDestItems[n]);
-                        if (ImGui::Selectable(typeDestItems[n], is_selected)) {
-                            typeSelectedDestItem = typeDestItems[n];
-                            selectedDestIndex = n;
-                        }
-                        if (is_selected)
-                            ImGui::SetItemDefaultFocus();
-                    }
-                    ImGui::EndCombo();
-                }
-
-                ImGui::Separator();
+            ImGui::TableNextColumn();
+            ImGui::Text("Auto scene colour");
+            ImGui::TableNextColumn();
+            if (!autoSceneColourSupported)
+                ImGui::BeginDisabled();
+            ImGui::Checkbox("##AutoSceneColour", &autoSceneColour);
+            if (!autoSceneColourSupported)
+                ImGui::EndDisabled();
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("D3D12 only. Injects effects into the primary live scene colour at the matched draw and uses native-resolution staging when needed.");
             }
 
-            if (supportsSRVwrite && selectedDestIndex == 1) {
-                if (!instance.GetTrackDescriptors()) {
-                    ImGui::BeginDisabled();
-                    group->setRenderToResourceViews(false);
-                } else {
-                    group->setRenderToResourceViews(true);
-                }
+            if (!autoSceneColourSupported)
+                autoSceneColour = false;
 
-                ImGui::TableNextColumn();
-                ImGui::Text("Shader Stage");
-                ImGui::TableNextColumn();
-                if (ImGui::BeginCombo("##RenderShaderStage", selectedStage, ImGuiComboFlags_None)) {
-                    for (int n = 0; n < IM_ARRAYSIZE(stageItems); n++) {
-                        bool is_selected = (selectedStage == stageItems[n]);
-                        if (ImGui::Selectable(stageItems[n], is_selected)) {
-                            selectedStageIndex = n;
-                            selectedStage = stageItems[n];
-                        }
-                        if (is_selected)
-                            ImGui::SetItemDefaultFocus();
-                    }
-                    ImGui::EndCombo();
-                }
-                group->setRenderSRVShaderStage(selectedStageIndex);
+            if (autoSceneColour) {
+                // Automatic scene colour is intended for dynamic-resolution/upscaled
+                // render targets (DLSS/FSR/XeSS), so match by aspect ratio rather than
+                // requiring the live scene to equal the swapchain resolution.
+                selectedSwapchainMatchMode = ShaderToggler::SWAPCHAIN_MATCH_MODE_ASPECT_RATIO;
+                typesSelectedSwapchainMatchMode = swapchainMatchOptions[selectedSwapchainMatchMode];
+                preserveAlpha = false;
+            }
 
-                ImGui::TableNextRow();
+            ImGui::TableNextRow();
 
-                ImGui::TableNextColumn();
-                ImGui::Text("Slot");
-                ImGui::TableNextColumn();
-                ImGui::Text("%u", group->getRenderSRVSlotIndex());
-                ImGui::SameLine();
-                ImGui::PushID(0);
-                if (ImGui::SmallButton("+")) {
-                    group->setRenderSRVSlotIndex(group->getRenderSRVSlotIndex() + 1);
-                }
-                ImGui::PopID();
-
-                if (group->getRenderSRVSlotIndex() != 0) {
-                    ImGui::SameLine();
-
-                    if (ImGui::SmallButton("-")) {
-                        group->setRenderSRVSlotIndex(group->getRenderSRVSlotIndex() - 1);
-                    }
-                }
-
-                ImGui::TableNextRow();
-
-                ImGui::TableNextColumn();
-                ImGui::Text("Binding");
-                ImGui::TableNextColumn();
-                ImGui::Text("%u", group->getRenderSRVDescriptorIndex());
-                ImGui::SameLine();
-                ImGui::PushID(2);
-                if (ImGui::SmallButton("+")) {
-                    group->setRenderSRVDescriptorIndex(group->getRenderSRVDescriptorIndex() + 1);
-                }
-                ImGui::PopID();
-
-                if (group->getRenderSRVDescriptorIndex() != 0) {
-                    ImGui::SameLine();
-
-                    ImGui::PushID(1);
-                    if (ImGui::SmallButton("-")) {
-                        group->setRenderSRVDescriptorIndex(group->getRenderSRVDescriptorIndex() - 1);
-                    }
-                    ImGui::PopID();
-                }
-
-                if (!instance.GetTrackDescriptors()) {
-                    ImGui::EndDisabled();
-                }
-            } else {
+            if (autoSceneColour) {
+                // Automatic mode injects into the live RTV at the matched draw. It does
+                // not use descriptor/SRV selection, so keep manual SRV state disabled.
                 group->setRenderToResourceViews(false);
 
                 ImGui::TableNextColumn();
-                ImGui::Text("Render target index");
+                ImGui::Text("Target");
                 ImGui::TableNextColumn();
-                ImGui::Text("%u", group->getRenderTargetIndex());
-                ImGui::SameLine();
+                ImGui::TextUnformatted("Live render target (matched draw)");
 
-                if (ImGui::SmallButton("+")) {
-                    group->setRenderTargetIndex(group->getRenderTargetIndex() + 1);
-                }
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::Text("Scene resolution");
+                ImGui::TableNextColumn();
+                if (group->getDebugSceneWidth() > 0 && group->getDebugSceneHeight() > 0)
+                    ImGui::Text("%ux%u", group->getDebugSceneWidth(), group->getDebugSceneHeight());
+                else
+                    ImGui::TextUnformatted("Waiting for matching render target...");
 
-                if (group->getRenderTargetIndex() != 0) {
-                    ImGui::SameLine();
-
-                    if (ImGui::SmallButton("-")) {
-                        group->setRenderTargetIndex(group->getRenderTargetIndex() - 1);
-                    }
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::Text("Effect resolution");
+                ImGui::TableNextColumn();
+                if (group->getDebugEffectWidth() > 0 && group->getDebugEffectHeight() > 0) {
+                    ImGui::Text("%ux%u%s",
+                                group->getDebugEffectWidth(),
+                                group->getDebugEffectHeight(),
+                                group->getDebugNativeStaging() ? " (native staging)" : "");
+                } else {
+                    ImGui::TextUnformatted("Waiting for effect dispatch...");
                 }
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
-
-                ImGui::Text("Invocation location");
+                ImGui::Text("Technique order");
                 ImGui::TableNextColumn();
-                if (ImGui::BeginCombo("##Invocationlocation", typeSelectedItem, ImGuiComboFlags_None)) {
-                    for (int n = 0; n < IM_ARRAYSIZE(invocationDescription); n++) {
-                        bool is_selected = (typeSelectedItem == invocationDescription[n]);
-                        if (ImGui::Selectable(invocationDescription[n], is_selected)) {
-                            typeSelectedItem = invocationDescription[n];
-                            selectedIndex = n;
+                ImGui::TextUnformatted(group->getDebugLastTechniqueOrder().empty() ? "(none)" : group->getDebugLastTechniqueOrder().c_str());
+
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::Text("Status");
+                ImGui::TableNextColumn();
+                ImGui::Text("Render calls: %llu  Last techniques: %u  Target: 0x%llx",
+                            static_cast<unsigned long long>(group->getDebugEffectRenderCalls()),
+                            group->getDebugLastRenderedTechniqueCount(),
+                            static_cast<unsigned long long>(group->getDebugLastRenderTarget()));
+            } else {
+                if (supportsSRVwrite) {
+                    ImGui::TableNextColumn();
+                    ImGui::Text("Render destination");
+                    ImGui::TableNextColumn();
+                    if (ImGui::BeginCombo("##Renderdestination", typeSelectedDestItem, ImGuiComboFlags_None)) {
+                        for (int n = 0; n < IM_ARRAYSIZE(typeDestItems); n++) {
+                            const bool is_selected = (typeSelectedDestItem == typeDestItems[n]);
+                            if (ImGui::Selectable(typeDestItems[n], is_selected)) {
+                                typeSelectedDestItem = typeDestItems[n];
+                                selectedDestIndex = n;
+                            }
+                            if (is_selected)
+                                ImGui::SetItemDefaultFocus();
                         }
-                        if (is_selected)
-                            ImGui::SetItemDefaultFocus();
+                        ImGui::EndCombo();
                     }
-                    ImGui::EndCombo();
+                    ImGui::TableNextRow();
+                } else {
+                    selectedDestIndex = 0;
+                }
+
+                if (supportsSRVwrite && selectedDestIndex == 1) {
+                    if (!instance.GetTrackDescriptors()) {
+                        ImGui::BeginDisabled();
+                        group->setRenderToResourceViews(false);
+                    } else {
+                        group->setRenderToResourceViews(true);
+                    }
+
+                    ImGui::TableNextColumn();
+                    ImGui::Text("Shader Stage");
+                    ImGui::TableNextColumn();
+                    if (ImGui::BeginCombo("##RenderShaderStage", selectedStage, ImGuiComboFlags_None)) {
+                        for (int n = 0; n < IM_ARRAYSIZE(stageItems); n++) {
+                            const bool is_selected = (selectedStage == stageItems[n]);
+                            if (ImGui::Selectable(stageItems[n], is_selected)) {
+                                selectedStageIndex = n;
+                                selectedStage = stageItems[n];
+                            }
+                            if (is_selected)
+                                ImGui::SetItemDefaultFocus();
+                        }
+                        ImGui::EndCombo();
+                    }
+                    group->setRenderSRVShaderStage(selectedStageIndex);
+
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::Text("Slot");
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", group->getRenderSRVSlotIndex());
+                    ImGui::SameLine();
+                    ImGui::PushID(0);
+                    if (ImGui::SmallButton("+"))
+                        group->setRenderSRVSlotIndex(group->getRenderSRVSlotIndex() + 1);
+                    ImGui::PopID();
+                    if (group->getRenderSRVSlotIndex() != 0) {
+                        ImGui::SameLine();
+                        if (ImGui::SmallButton("-"))
+                            group->setRenderSRVSlotIndex(group->getRenderSRVSlotIndex() - 1);
+                    }
+
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::Text("Binding");
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", group->getRenderSRVDescriptorIndex());
+                    ImGui::SameLine();
+                    ImGui::PushID(2);
+                    if (ImGui::SmallButton("+"))
+                        group->setRenderSRVDescriptorIndex(group->getRenderSRVDescriptorIndex() + 1);
+                    ImGui::PopID();
+                    if (group->getRenderSRVDescriptorIndex() != 0) {
+                        ImGui::SameLine();
+                        ImGui::PushID(1);
+                        if (ImGui::SmallButton("-"))
+                            group->setRenderSRVDescriptorIndex(group->getRenderSRVDescriptorIndex() - 1);
+                        ImGui::PopID();
+                    }
+
+                    if (!instance.GetTrackDescriptors())
+                        ImGui::EndDisabled();
+                } else {
+                    group->setRenderToResourceViews(false);
+
+                    ImGui::TableNextColumn();
+                    ImGui::Text("Render target index");
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", group->getRenderTargetIndex());
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton("+"))
+                        group->setRenderTargetIndex(group->getRenderTargetIndex() + 1);
+                    if (group->getRenderTargetIndex() != 0) {
+                        ImGui::SameLine();
+                        if (ImGui::SmallButton("-"))
+                            group->setRenderTargetIndex(group->getRenderTargetIndex() - 1);
+                    }
+
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::Text("Invocation location");
+                    ImGui::TableNextColumn();
+                    if (ImGui::BeginCombo("##Invocationlocation", typeSelectedItem, ImGuiComboFlags_None)) {
+                        for (int n = 0; n < IM_ARRAYSIZE(invocationDescription); n++) {
+                            const bool is_selected = (typeSelectedItem == invocationDescription[n]);
+                            if (ImGui::Selectable(invocationDescription[n], is_selected)) {
+                                typeSelectedItem = invocationDescription[n];
+                                selectedIndex = n;
+                            }
+                            if (is_selected)
+                                ImGui::SetItemDefaultFocus();
+                        }
+                        ImGui::EndCombo();
+                    }
                 }
             }
 
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
-
             ImGui::Text("Retry RT assignment");
             ImGui::TableNextColumn();
             ImGui::Checkbox("##RetryRTassignment", &retry);
 
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
-
             ImGui::Text("Apply tone map clamping");
             ImGui::TableNextColumn();
             ImGui::Checkbox("##tonemap", &tonemap);
 
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
-
             ImGui::Text("Flip render target");
             ImGui::TableNextColumn();
             ImGui::Checkbox("##flipbuffer", &flipbuffer);
 
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
-
             ImGui::Text("Preserve target alpha channel");
             ImGui::TableNextColumn();
+            if (autoSceneColour)
+                ImGui::BeginDisabled();
             ImGui::Checkbox("##preserveAlpha", &preserveAlpha);
+            if (autoSceneColour) {
+                ImGui::EndDisabled();
+                ImGui::SameLine();
+                ImGui::TextDisabled("disabled in Auto scene colour");
+            }
 
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
-
             ImGui::Text("Match swapchain");
             ImGui::TableNextColumn();
-            if (ImGui::BeginCombo("##effSwapChainMatchMode", typesSelectedSwapchainMatchMode, ImGuiComboFlags_None)) {
+            if (autoSceneColour) {
+                ImGui::TextUnformatted("ASPECT RATIO (automatic)");
+            } else if (ImGui::BeginCombo("##effSwapChainMatchMode", typesSelectedSwapchainMatchMode, ImGuiComboFlags_None)) {
                 for (int n = 0; n < IM_ARRAYSIZE(swapchainMatchOptions); n++) {
-                    bool is_selected = (typesSelectedSwapchainMatchMode == swapchainMatchOptions[n]);
+                    const bool is_selected = (typesSelectedSwapchainMatchMode == swapchainMatchOptions[n]);
                     if (ImGui::Selectable(swapchainMatchOptions[n], is_selected)) {
                         typesSelectedSwapchainMatchMode = swapchainMatchOptions[n];
                         selectedSwapchainMatchMode = n;
@@ -501,13 +610,13 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
 
         group->setRequeueAfterRTMatchingFailure(retry);
         group->setMatchSwapchainResolution(selectedSwapchainMatchMode);
+        group->setAutoRenderSRV(autoSceneColour);
         group->setInvocationLocation(selectedIndex);
         group->setToneMap(tonemap);
         group->setPreserveAlpha(preserveAlpha);
         group->setFlipBuffer(flipbuffer);
 
         ImGui::Separator();
-
         DisplayTechniqueSelection(runtime, instance, group, ImGui::GetWindowWidth() / 3);
 
         ImGui::PopStyleVar();

@@ -28,6 +28,10 @@ void RenderingQueueManager::_CheckCallForCommandList(ShaderData& sData,
     if (sData.blockedShaderGroups != nullptr) {
         for (auto group : *sData.blockedShaderGroups) {
             if (group->isActive()) {
+                const bool autoSceneColour =
+                  group->getAutoRenderSRV() &&
+                  deviceData.current_runtime != nullptr &&
+                  deviceData.current_runtime->get_device()->get_api() == device_api::d3d12;
                 if (group->getExtractConstants() && !deviceData.constantsUpdated.contains(group)) {
                     if (!sData.constantBuffersToUpdate.contains(group)) {
                         sData.constantBuffersToUpdate.emplace(group);
@@ -37,7 +41,7 @@ void RenderingQueueManager::_CheckCallForCommandList(ShaderData& sData,
 
                 if (group->getId() == uiData.GetToggleGroupIdShaderEditing() && !deviceData.huntPreview.matched) {
                     if (uiData.GetCurrentTabType() == AddonImGui::TAB_RENDER_TARGET) {
-                        if (group->getRenderToResourceViews()) {
+                        if (group->getRenderToResourceViews() || autoSceneColour) {
                             queue_mask |= match_preview << (CALL_DRAW * MATCH_DELIMITER);
                             deviceData.huntPreview.target_invocation_location = CALL_DRAW;
                         } else {
@@ -72,7 +76,7 @@ void RenderingQueueManager::_CheckCallForCommandList(ShaderData& sData,
 
                         if (!techData->rendered) {
                             if (!sData.techniquesToRender.contains(techData)) {
-                                if (group->getRenderToResourceViews()) {
+                                if (group->getRenderToResourceViews() || autoSceneColour) {
                                     sData.techniquesToRender.emplace(techData, ResourceRenderData{ group, CALL_DRAW, resource{ 0 }, format::unknown });
                                     queue_mask |= (match_effect << CALL_DRAW * MATCH_DELIMITER);
                                 } else {
@@ -89,7 +93,7 @@ void RenderingQueueManager::_CheckCallForCommandList(ShaderData& sData,
 
                     for (auto& eff : preferred) {
                         if (!eff->rendered && !sData.techniquesToRender.contains(eff)) {
-                            if (group->getRenderToResourceViews()) {
+                            if (group->getRenderToResourceViews() || autoSceneColour) {
                                 sData.techniquesToRender.emplace(eff, ResourceRenderData{ group, CALL_DRAW, resource{ 0 }, format::unknown });
                                 queue_mask |= (match_effect << CALL_DRAW * MATCH_DELIMITER);
                             } else {
