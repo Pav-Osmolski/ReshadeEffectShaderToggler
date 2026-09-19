@@ -157,7 +157,6 @@ ToggleGroup ToggleGroup::cloneForNewId(int newId) const {
     clone._keybind = 0;
     clone._isActive = false;
     clone._isEditing = false;
-    clone._preferredTechniqueData.clear();
     return clone;
 }
 
@@ -180,7 +179,7 @@ std::string ToggleGroup::configurationSignature() const {
         ss << ';';
     };
 
-    ss << _name.size() << ':' << _name << ';' << _keybind << ';' << _isActive << ';';
+    ss << _name.size() << ':' << _name << ';' << _keybind << ';';
     appendUIntSet(_vertexShaderHashes);
     appendUIntSet(_pixelShaderHashes);
     appendUIntSet(_computeShaderHashes);
