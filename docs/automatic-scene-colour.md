@@ -1,6 +1,6 @@
 # Automatic Scene Colour
 
-Automatic Scene Colour is a rendering mode for REST groups that need to apply ReShade effects to the live scene before later game passes such as fog or UI, while still allowing those effects to execute at the normal ReShade runtime resolution. D3D11 is the primary validated implementation; a D3D12 path is available but remains experimental.
+Automatic Scene Colour is a rendering mode for REST groups that need to apply ReShade effects to the live scene before later game passes such as fog or UI, while still allowing those effects to execute at the normal ReShade runtime resolution. D3D11 is the primary validated implementation; D3D10 and D3D12 paths are available but remain experimental.
 
 It was developed and validated against **Baldur's Gate 3 in DX11 mode with DLSS enabled**.
 
@@ -139,7 +139,8 @@ The selected ReShade techniques also execute at the native runtime resolution ra
 ## Current scope
 
 - **D3D11 is the validated path.** Baldur's Gate 3 DX11 + DLSS is the primary runtime-tested configuration.
-- A D3D12 path is available but is currently experimental and should not be treated as equivalent to the validated BG3 DX11 path.
+- **D3D10 is available as an experimental path.** It shares the same live-RTV/native-staging architecture but still requires runtime validation in a representative D3D10 title.
+- A D3D12 path is also available but is currently experimental and should not be treated as equivalent to the validated BG3 DX11 path.
 - Vulkan is not currently supported by Auto Scene Colour. If an INI contains Auto enabled on an unsupported API, REST falls back to the saved manual render-target configuration without deleting the Auto preference.
 - The implementation targets the **primary colour RTV (slot 0)**.
 - It is intended for scene-colour injection around a user-selected shader boundary, not as a general replacement for ReShade's depth-buffer detection.
