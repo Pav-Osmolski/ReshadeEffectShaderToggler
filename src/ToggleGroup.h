@@ -131,8 +131,8 @@ class ToggleGroup {
     void toggleActive() { _isActive = !_isActive; }
     void setEditing(bool isEditing) { _isEditing = isEditing; }
 
-    uint32_t getToggleKey() { return _keybind; }
-    std::string getName() { return _name; }
+    uint32_t getToggleKey() const { return _keybind; }
+    const std::string& getName() const { return _name; }
     bool isActive() const { return _isActive; }
     bool isEditing() { return _isEditing; }
     bool isEmpty() const { return _vertexShaderHashes.size() <= 0 && _pixelShaderHashes.size() <= 0; }
@@ -142,6 +142,9 @@ class ToggleGroup {
     std::unordered_set<uint32_t> getPixelShaderHashes() const { return _pixelShaderHashes; }
     std::unordered_set<uint32_t> getVertexShaderHashes() const { return _vertexShaderHashes; }
     std::unordered_set<uint32_t> getComputeShaderHashes() const { return _computeShaderHashes; }
+    size_t getPixelShaderHashCount() const { return _pixelShaderHashes.size(); }
+    size_t getVertexShaderHashCount() const { return _vertexShaderHashes.size(); }
+    size_t getComputeShaderHashCount() const { return _computeShaderHashes.size(); }
     void setInvocationLocation(uint32_t location) { _invocationLocation = location; }
     uint32_t getInvocationLocation() const { return _invocationLocation; }
     void setBindingInvocationLocation(uint32_t location) { _bindingInvocationLocation = location; }
