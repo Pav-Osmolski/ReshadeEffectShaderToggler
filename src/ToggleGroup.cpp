@@ -160,6 +160,9 @@ ToggleGroup ToggleGroup::cloneForNewId(int newId) const {
     clone._keybind = 0;
     clone._isActive = false;
     clone._isEditing = false;
+    clone._cbCycle = CYCLE_NONE;
+    clone._srvCycle = CYCLE_NONE;
+    clone._rtCycle = CYCLE_NONE;
     return clone;
 }
 
