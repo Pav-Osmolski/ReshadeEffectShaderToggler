@@ -1,6 +1,6 @@
 # Automatic Scene Colour
 
-Automatic Scene Colour is a rendering mode for REST groups that need to apply ReShade effects to the live scene before later game passes such as fog or UI, while still allowing those effects to execute at the normal ReShade runtime resolution. D3D11 is the primary validated implementation; a D3D12 path is available but remains experimental.
+Automatic Scene Colour is a rendering mode for REST groups that need to apply ReShade effects to the live scene before later game passes such as fog or UI, while still allowing those effects to execute at the normal ReShade runtime resolution. It supports D3D10, D3D11 and D3D12 on both x86 and x64 through ReShade's generic graphics API.
 
 It was developed and validated against **Baldur's Gate 3 in DX11 mode with DLSS enabled**.
 
@@ -138,8 +138,9 @@ The selected ReShade techniques also execute at the native runtime resolution ra
 
 ## Current scope
 
-- **D3D11 is the validated path.** Baldur's Gate 3 DX11 + DLSS is the primary runtime-tested configuration.
-- A D3D12 path is available but is currently experimental and should not be treated as equivalent to the validated BG3 DX11 path.
+- **D3D10, D3D11 and D3D12 are supported on x86 and x64.** They share the same live-RTV/native-staging architecture through ReShade's generic API.
+- Baldur's Gate 3 DX11 + DLSS is the primary runtime-tested configuration and remains the regression reference for scene-colour behaviour.
+- D3D10 and D3D12 use the same REST Auto Scene Colour implementation, while the underlying ReShade backend supplies the API-specific resource and barrier handling.
 - Vulkan is not currently supported by Auto Scene Colour. If an INI contains Auto enabled on an unsupported API, REST falls back to the saved manual render-target configuration without deleting the Auto preference.
 - The implementation targets the **primary colour RTV (slot 0)**.
 - It is intended for scene-colour injection around a user-selected shader boundary, not as a general replacement for ReShade's depth-buffer detection.
