@@ -373,6 +373,9 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
             ImGui::Checkbox("##AutoSceneColour", &autoSceneColour);
             if (!autoSceneColourSupported)
                 ImGui::EndDisabled();
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("D3D12 only. Injects effects into the primary live scene colour at the matched draw and uses native-resolution staging when needed.");
+            }
 
             if (!autoSceneColourSupported)
                 autoSceneColour = false;
@@ -580,7 +583,7 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
             if (autoSceneColour) {
                 ImGui::EndDisabled();
                 ImGui::SameLine();
-                ImGui::TextDisabled("disabled with native staging");
+                ImGui::TextDisabled("disabled in Auto scene colour");
             }
 
             ImGui::TableNextRow();
