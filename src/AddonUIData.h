@@ -80,6 +80,7 @@ static const char* KeybindDisplayNames[] = { "Pixel: previous shader", "Pixel: n
                                              "Vertex: next marked", "Compute: previous shader", "Compute: next shader",
                                              "Compute: mark / unmark", "Compute: previous marked", "Compute: next marked",
                                              "Invocation: previous", "Invocation: next", "Descriptor: previous", "Descriptor: next" };
+static_assert(ARRAYSIZE(KeybindNames) == ARRAYSIZE(KeybindDisplayNames));
 
 enum TabType : uint32_t {
     TAB_NONE = 0,
