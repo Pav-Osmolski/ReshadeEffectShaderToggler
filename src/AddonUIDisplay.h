@@ -679,7 +679,7 @@ static void DisplayGroupView(AddonImGui::AddonUIData& instance,
     float height = ImGui::GetWindowHeight();
 
     if (*instance.ActiveCollectorFrameCounter() > 0) {
-        ImGui::Text("Collecting active shaders... %u frames remaining", *instance.ActiveCollectorFrameCounter());
+        ImGui::Text("Collecting active shaders... %u frames remaining", instance.ActiveCollectorFrameCounter()->load());
         ImGui::TextDisabled("Keep the relevant scene visible until collection finishes.");
         return;
     }
@@ -695,7 +695,12 @@ static void DisplayGroupView(AddonImGui::AddonUIData& instance,
     ImGui::Combo("##shaderFilter", &filterMode, filterItems, IM_ARRAYSIZE(filterItems));
     ImGui::SameLine();
     if (ImGui::Button("Recollect")) {
-        shaderManager->startHuntingMode(shaderManager->getMarkedShaderHashes());
+        auto* pixelManager = instance.GetPixelShaderManager();
+        auto* vertexManager = instance.GetVertexShaderManager();
+        auto* computeManager = instance.GetComputeShaderManager();
+        pixelManager->startHuntingMode(pixelManager->getMarkedShaderHashes());
+        vertexManager->startHuntingMode(vertexManager->getMarkedShaderHashes());
+        computeManager->startHuntingMode(computeManager->getMarkedShaderHashes());
         *instance.ActiveCollectorFrameCounter() = *instance.StartValueFramecountCollectionPhase();
         instance.UpdateToggleGroupsForShaderHashes();
         return;
@@ -1451,9 +1456,9 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, reshade::api::eff
             else
                 ImGui::Text("%s", group.getName().c_str());
 
-            const size_t psCount = group.getPixelShaderHashes().size();
-            const size_t vsCount = group.getVertexShaderHashes().size();
-            const size_t csCount = group.getComputeShaderHashes().size();
+            const size_t psCount = group.getPixelShaderHashCount();
+            const size_t vsCount = group.getVertexShaderHashCount();
+            const size_t csCount = group.getComputeShaderHashCount();
             const size_t fxCount = group.preferredTechniques().size();
 
             ImGui::TextDisabled("PS: %zu | VS: %zu | CS: %zu | FX: %zu%s",
