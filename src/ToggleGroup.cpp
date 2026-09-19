@@ -32,7 +32,9 @@
 
 #include "ToggleGroup.h"
 #include "stdafx.h"
+#include <algorithm>
 #include <sstream>
+#include <vector>
 
 using namespace std;
 
@@ -145,6 +147,74 @@ ToggleGroup::ToggleGroup(const ToggleGroup& other)
     _renderSrvDescIndex = other._renderSrvDescIndex;
     _renderSrvShaderStage = other._renderSrvShaderStage;
     _renderSrvSlotIndex = other._renderSrvSlotIndex;
+}
+
+
+ToggleGroup ToggleGroup::cloneForNewId(int newId) const {
+    ToggleGroup clone(*this);
+    clone._id = newId;
+    clone._name = _name + " Copy";
+    clone._keybind = 0;
+    clone._isActive = false;
+    clone._isEditing = false;
+    clone._preferredTechniqueData.clear();
+    return clone;
+}
+
+std::string ToggleGroup::configurationSignature() const {
+    std::ostringstream ss;
+
+    auto appendUIntSet = [&ss](const std::unordered_set<uint32_t>& values) {
+        std::vector<uint32_t> sorted(values.begin(), values.end());
+        std::sort(sorted.begin(), sorted.end());
+        for (const uint32_t value : sorted)
+            ss << value << ',';
+        ss << ';';
+    };
+
+    auto appendStringSet = [&ss](const std::unordered_set<std::string>& values) {
+        std::vector<std::string> sorted(values.begin(), values.end());
+        std::sort(sorted.begin(), sorted.end());
+        for (const auto& value : sorted)
+            ss << value.size() << ':' << value << ',';
+        ss << ';';
+    };
+
+    ss << _name.size() << ':' << _name << ';' << _keybind << ';' << _isActive << ';';
+    appendUIntSet(_vertexShaderHashes);
+    appendUIntSet(_pixelShaderHashes);
+    appendUIntSet(_computeShaderHashes);
+
+    ss << _invocationLocation << ';' << _rtIndex << ';'
+       << _cbSlotIndex << ';' << _cbDescIndex << ';' << _cbShaderStage << ';'
+       << _bindingInvocationLocation << ';' << _bindingRTIndex << ';'
+       << _bindingSrvSlotIndex << ';' << _renderSrvSlotIndex << ';'
+       << _bindingSrvDescIndex << ';' << _renderSrvDescIndex << ';'
+       << _bindingSrvShaderStage << ';' << _renderSrvShaderStage << ';'
+       << _allowAllTechniques << ';' << _isProvidingTextureBinding << ';'
+       << _copyTextureBinding << ';' << _renderToResourceViews << ';'
+       << _autoRenderSRV << ';' << _extractConstants << ';'
+       << _extractResourceViews << ';' << _clearBindings << ';'
+       << _previewClearAlpha << ';' << _hasTechniqueExceptions << ';'
+       << _tonemapHDRtoSDRtoHDR << ';' << _preserveAlpha << ';'
+       << _flipBuffer << ';' << _flipBufferBinding << ';'
+       << _matchSwapchainResolution << ';' << _bindingMatchSwapchainResolution << ';'
+       << _requeueAfterRTMatchingFailure << ';' << _cbModePush << ';'
+       << _textureBindingName.size() << ':' << _textureBindingName << ';';
+
+    appendStringSet(_preferredTechniques);
+
+    std::vector<std::string> variableNames;
+    variableNames.reserve(_varOffsetMapping.size());
+    for (const auto& [name, _] : _varOffsetMapping)
+        variableNames.push_back(name);
+    std::sort(variableNames.begin(), variableNames.end());
+    for (const auto& name : variableNames) {
+        const auto& [offset, usePrevious] = _varOffsetMapping.at(name);
+        ss << name.size() << ':' << name << ':' << offset << ':' << usePrevious << ',';
+    }
+
+    return ss.str();
 }
 
 void ToggleGroup::AssignPreferredTechniqueData(std::unordered_map<std::string, EffectData>& allTechniques) {
