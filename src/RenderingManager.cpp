@@ -157,7 +157,7 @@ const ResourceViewData RenderingManager::GetCurrentResourceView(command_list* cm
     const device_api deviceApi = device->get_api();
     const bool autoSceneColour =
       group->getAutoRenderSRV() &&
-      (deviceApi == device_api::d3d11 || deviceApi == device_api::d3d12);
+      ShaderToggler::IsAutoSceneColourSupported(deviceApi);
 
     // Automatic scene colour targets the primary live render target bound at the
     // matched draw. This keeps the effect on the scene that subsequent game passes
