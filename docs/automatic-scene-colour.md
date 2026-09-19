@@ -1,8 +1,8 @@
 # Automatic Scene Colour
 
-Automatic Scene Colour is a D3D12 rendering mode for REST groups that need to apply ReShade effects to the live scene before later game passes such as fog or UI, while still allowing those effects to execute at the normal ReShade runtime resolution.
+Automatic Scene Colour is a D3D11/D3D12 rendering mode for REST groups that need to apply ReShade effects to the live scene before later game passes such as fog or UI, while still allowing those effects to execute at the normal ReShade runtime resolution.
 
-It was developed and validated against **Baldur's Gate 3 with DLSS enabled**.
+It was developed and validated against **Baldur's Gate 3 in DX11 mode with DLSS enabled**.
 
 ## Why it exists
 
@@ -136,7 +136,7 @@ The selected ReShade techniques also execute at the native runtime resolution ra
 
 ## Current scope
 
-- Auto Scene Colour is currently exposed for **D3D12**.
+- Auto Scene Colour is currently exposed for **D3D11 and D3D12**.
 - The implementation targets the **primary colour RTV (slot 0)**.
 - It is intended for scene-colour injection around a user-selected shader boundary, not as a general replacement for ReShade's depth-buffer detection.
-- Baldur's Gate 3 + DLSS is the primary validated configuration. Other D3D12 games may use different render-target layouts and should be tested individually.
+- Baldur's Gate 3 DX11 + DLSS is the primary validated configuration. Other D3D11/D3D12 games may use different render-target layouts and should be tested individually.
