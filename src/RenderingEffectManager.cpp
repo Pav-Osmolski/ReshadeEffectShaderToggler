@@ -105,7 +105,7 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
         runtime->get_screenshot_width_and_height(&runtimeWidth, &runtimeHeight);
 
         const bool wantsNativeStaging =
-          group->getAutoRenderSRV() && group->getRenderToResourceViews() &&
+          group->getAutoRenderSRV() &&
           !group->getPreserveAlpha() &&
           runtimeWidth > 0 && runtimeHeight > 0 &&
           (desc.texture.width != runtimeWidth || desc.texture.height != runtimeHeight);
@@ -236,7 +236,16 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
         }
 
         if (renderedTechniqueCount > 0) {
-            group->recordDebugEffectRender(renderedTechniqueCount, active_resource.resource.handle, renderedTechniqueOrder);
+            const uint32_t effectWidth = useNativeStaging ? runtimeWidth : desc.texture.width;
+            const uint32_t effectHeight = useNativeStaging ? runtimeHeight : desc.texture.height;
+            group->recordDebugEffectRender(renderedTechniqueCount,
+                                           active_resource.resource.handle,
+                                           renderedTechniqueOrder,
+                                           desc.texture.width,
+                                           desc.texture.height,
+                                           effectWidth,
+                                           effectHeight,
+                                           useNativeStaging);
         }
 
         if (group->getToneMap() && runtimeData.specialEffects[REST_TONEMAP_TO_HDR].technique != 0) {
