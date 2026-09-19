@@ -42,6 +42,7 @@ namespace ShaderToggler {
 ToggleGroup::ToggleGroup(string name, int id) {
     _name = name.size() > 0 ? name : "Default";
     _id = id;
+    _keybind = 0;
     _isActive = false;
     _isEditing = false;
     _allowAllTechniques = true;
@@ -52,6 +53,8 @@ ToggleGroup::ToggleGroup(string name, int id) {
     _extractResourceViews = false;
     _matchSwapchainResolution = true;
     _copyTextureBinding = false;
+    _clearBindings = false;
+    _requeueAfterRTMatchingFailure = false;
     _previewClearAlpha = true;
     _tonemapHDRtoSDRtoHDR = false;
     _preserveAlpha = false;
