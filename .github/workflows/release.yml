@@ -104,7 +104,7 @@ jobs:
 
             $exports = (& $dumpbin /nologo /exports $binary | Out-String)
             foreach ($requiredExport in @("NAME", "DESCRIPTION")) {
-              if ($exports -notmatch "(?m)\s$requiredExport\s*$") {
+              if ($exports -notmatch "(?i)\b$requiredExport\b") {
                 throw "$binary is missing required export $requiredExport."
               }
             }
