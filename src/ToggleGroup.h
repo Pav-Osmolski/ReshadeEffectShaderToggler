@@ -151,80 +151,34 @@ class ToggleGroup {
     bool getRenderToResourceViews() const { return _renderToResourceViews; }
     void setRenderToResourceViews(bool render) { _renderToResourceViews = render; }
     bool getAutoRenderSRV() const { return _autoRenderSRV; }
-    bool getAutoSceneColourProbe() const { return _autoSceneColourProbe; }
-    void setAutoSceneColourProbe(bool probe) { _autoSceneColourProbe = probe; }
-    void setAutoRenderSRV(bool autoRender) {
-        if (autoRender != _autoRenderSRV) {
-            _autoRenderSRVSelectionPinned = false;
-            _autoRenderSRVManualCandidatePending = false;
-            _autoRenderSRVCandidateIndex = 0;
-        }
-        _autoRenderSRV = autoRender;
-    }
-    bool hasAutoRenderSRVSelection() const { return _autoRenderSRVSelectionValid; }
-    uint32_t getAutoRenderSRVSelectedStage() const { return _autoRenderSRVSelectedStage; }
-    uint32_t getAutoRenderSRVSelectedSlot() const { return _autoRenderSRVSelectedSlot; }
-    uint32_t getAutoRenderSRVSelectedDescriptor() const { return _autoRenderSRVSelectedDescriptor; }
-    uint32_t getAutoRenderSRVSelectedWidth() const { return _autoRenderSRVSelectedWidth; }
-    uint32_t getAutoRenderSRVSelectedHeight() const { return _autoRenderSRVSelectedHeight; }
-    reshade::api::format getAutoRenderSRVSelectedFormat() const { return _autoRenderSRVSelectedFormat; }
-    int32_t getAutoRenderSRVSelectedScore() const { return _autoRenderSRVSelectedScore; }
+    void setAutoRenderSRV(bool autoRender) { _autoRenderSRV = autoRender; }
+
     uint64_t getDebugEffectRenderCalls() const { return _debugEffectRenderCalls; }
     uint32_t getDebugLastRenderedTechniqueCount() const { return _debugLastRenderedTechniqueCount; }
     uint64_t getDebugLastRenderTarget() const { return _debugLastRenderTarget; }
+    uint32_t getDebugSceneWidth() const { return _debugSceneWidth; }
+    uint32_t getDebugSceneHeight() const { return _debugSceneHeight; }
+    uint32_t getDebugEffectWidth() const { return _debugEffectWidth; }
+    uint32_t getDebugEffectHeight() const { return _debugEffectHeight; }
+    bool getDebugNativeStaging() const { return _debugNativeStaging; }
     const std::string& getDebugLastTechniqueOrder() const { return _debugLastTechniqueOrder; }
-    void recordDebugEffectRender(uint32_t techniqueCount, uint64_t targetHandle, const std::string& techniqueOrder) {
+    void recordDebugEffectRender(uint32_t techniqueCount,
+                                 uint64_t targetHandle,
+                                 const std::string& techniqueOrder,
+                                 uint32_t sceneWidth,
+                                 uint32_t sceneHeight,
+                                 uint32_t effectWidth,
+                                 uint32_t effectHeight,
+                                 bool nativeStaging) {
         ++_debugEffectRenderCalls;
         _debugLastRenderedTechniqueCount = techniqueCount;
         _debugLastRenderTarget = targetHandle;
         _debugLastTechniqueOrder = techniqueOrder;
-    }
-    uint32_t getAutoRenderSRVCandidateIndex() const { return _autoRenderSRVCandidateIndex; }
-    uint32_t getAutoRenderSRVCandidateCount() const { return _autoRenderSRVCandidateCount; }
-    bool getAutoRenderSRVSelectionPinned() const { return _autoRenderSRVSelectionPinned; }
-    bool consumeAutoRenderSRVManualCandidatePending() {
-        const bool pending = _autoRenderSRVManualCandidatePending;
-        _autoRenderSRVManualCandidatePending = false;
-        return pending;
-    }
-    void requestAutoRenderSRVCandidateIndex(uint32_t index) {
-        _autoRenderSRVCandidateIndex = index;
-        _autoRenderSRVSelectionPinned = false;
-        _autoRenderSRVManualCandidatePending = true;
-    }
-    void setAutoRenderSRVResolvedCandidateIndex(uint32_t index) { _autoRenderSRVCandidateIndex = index; }
-    void pinAutoRenderSRVSelection() { _autoRenderSRVSelectionPinned = true; }
-    void clearAutoRenderSRVPin() { _autoRenderSRVSelectionPinned = false; }
-    void setAutoRenderSRVCandidateCount(uint32_t count) {
-        _autoRenderSRVCandidateCount = count;
-        if (_autoRenderSRVCandidateCount == 0) {
-            _autoRenderSRVCandidateIndex = 0;
-        } else if (_autoRenderSRVCandidateIndex >= _autoRenderSRVCandidateCount) {
-            _autoRenderSRVCandidateIndex = _autoRenderSRVCandidateCount - 1;
-        }
-    }
-    void setAutoRenderSRVSelection(uint32_t stage,
-                                   uint32_t slot,
-                                   uint32_t descriptor,
-                                   uint32_t width,
-                                   uint32_t height,
-                                   reshade::api::format format,
-                                   int32_t score) {
-        _autoRenderSRVSelectionValid = true;
-        _autoRenderSRVSelectedStage = stage;
-        _autoRenderSRVSelectedSlot = slot;
-        _autoRenderSRVSelectedDescriptor = descriptor;
-        _autoRenderSRVSelectedWidth = width;
-        _autoRenderSRVSelectedHeight = height;
-        _autoRenderSRVSelectedFormat = format;
-        _autoRenderSRVSelectedScore = score;
-    }
-    void clearAutoRenderSRVSelection() {
-        _autoRenderSRVSelectionValid = false;
-        _autoRenderSRVSelectedWidth = 0;
-        _autoRenderSRVSelectedHeight = 0;
-        _autoRenderSRVSelectedFormat = reshade::api::format::unknown;
-        _autoRenderSRVSelectedScore = 0;
+        _debugSceneWidth = sceneWidth;
+        _debugSceneHeight = sceneHeight;
+        _debugEffectWidth = effectWidth;
+        _debugEffectHeight = effectHeight;
+        _debugNativeStaging = nativeStaging;
     }
     void setBindingSRVSlotIndex(uint32_t index) { _bindingSrvSlotIndex = index; }
     uint32_t getBindingSRVSlotIndex() const { return _bindingSrvSlotIndex; }
@@ -320,23 +274,15 @@ class ToggleGroup {
     volatile bool _copyTextureBinding;
     bool _renderToResourceViews;
     bool _autoRenderSRV = false;
-    bool _autoSceneColourProbe = false;
-    bool _autoRenderSRVSelectionValid = false;
-    uint32_t _autoRenderSRVSelectedStage = 0;
-    uint32_t _autoRenderSRVSelectedSlot = 0;
-    uint32_t _autoRenderSRVSelectedDescriptor = 0;
-    uint32_t _autoRenderSRVSelectedWidth = 0;
-    uint32_t _autoRenderSRVSelectedHeight = 0;
-    reshade::api::format _autoRenderSRVSelectedFormat = reshade::api::format::unknown;
-    int32_t _autoRenderSRVSelectedScore = 0;
     uint64_t _debugEffectRenderCalls = 0;
     uint32_t _debugLastRenderedTechniqueCount = 0;
     uint64_t _debugLastRenderTarget = 0;
+    uint32_t _debugSceneWidth = 0;
+    uint32_t _debugSceneHeight = 0;
+    uint32_t _debugEffectWidth = 0;
+    uint32_t _debugEffectHeight = 0;
+    bool _debugNativeStaging = false;
     std::string _debugLastTechniqueOrder;
-    uint32_t _autoRenderSRVCandidateIndex = 0;
-    uint32_t _autoRenderSRVCandidateCount = 0;
-    bool _autoRenderSRVSelectionPinned = false;
-    bool _autoRenderSRVManualCandidatePending = false;
     bool _extractConstants;
     bool _extractResourceViews;
     volatile bool _clearBindings;
