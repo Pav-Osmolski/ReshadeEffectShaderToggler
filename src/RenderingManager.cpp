@@ -165,7 +165,7 @@ const ResourceViewData RenderingManager::GetCurrentResourceView(command_list* cm
             resource_desc desc = device->get_resource_desc(rs);
             resource_view_desc v_desc = device->get_resource_view_desc(rtvs[0]);
 
-            if (ValidFormat(deviceData.current_runtime, desc, group->getMatchSwapchainResolution())) {
+            if (ValidFormat(deviceData.current_runtime, desc, ShaderToggler::SWAPCHAIN_MATCH_MODE_ASPECT_RATIO)) {
                 active_data.resource = rs;
                 active_data.format = v_desc.format;
                 return active_data;
