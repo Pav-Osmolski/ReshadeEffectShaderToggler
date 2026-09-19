@@ -104,9 +104,10 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
         uint32_t runtimeWidth = 0, runtimeHeight = 0;
         runtime->get_screenshot_width_and_height(&runtimeWidth, &runtimeHeight);
 
+        const bool autoSceneColour = group->getAutoRenderSRV();
+        const bool preserveTargetAlpha = group->getPreserveAlpha() && !autoSceneColour;
         const bool wantsNativeStaging =
-          group->getAutoRenderSRV() &&
-          !group->getPreserveAlpha() &&
+          autoSceneColour &&
           runtimeWidth > 0 && runtimeHeight > 0 &&
           (desc.texture.width != runtimeWidth || desc.texture.height != runtimeHeight);
 
@@ -181,7 +182,7 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
             cmd_list->barrier(active_resource.resource, resource_usage::shader_resource, resource_usage::render_target);
         }
 
-        if (!useNativeStaging && group->getPreserveAlpha()) {
+        if (!useNativeStaging && preserveTargetAlpha) {
             if (groupResourceManager.IsCompatibleWithGroupFormat(runtime->get_device(), GroupResourceType::RESOURCE_ALPHA, active_resource.resource, group)) {
                 resource group_res = {};
                 groupResourceManager.SetGroupBufferHandles(group, GroupResourceType::RESOURCE_ALPHA, &group_res, &view_non_srgb, &view_srgb, &group_view);
