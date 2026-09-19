@@ -264,8 +264,8 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
         }
 
         if (useNativeStaging) {
-            // Downscale the completed native-size effect result back into BG3's live
-            // render target. Leave the game resource in render-target state so the
+            // Downscale the completed native-size effect result back into the live
+            // scene target. Leave the game resource in render-target state so the
             // matched draw can execute normally after REST returns.
             cmd_list->barrier(nativeStageRes, resource_usage::render_target, resource_usage::shader_resource);
             cmd_list->barrier(active_resource.resource, resource_usage::shader_resource, resource_usage::render_target);
