@@ -5,7 +5,7 @@
 
 A ReShade 5.8+ add-on for applying ReShade effects at specific points inside a game's rendering pipeline. REST groups user-selected shaders and can inject selected ReShade techniques immediately before those shaders are encountered.
 
-The primary build target is 64-bit. A 32-bit build is also produced, but it is not actively tested.
+Both 64-bit and 32-bit are first-class build targets. CI builds and validates both architectures, including PE machine type, version metadata and required add-on exports.
 
 ## Highlights
 
@@ -23,7 +23,7 @@ REST requires a ReShade build with add-on support enabled.
 
 The existing render-target, shader-hunting and binding features remain API/game dependent. D3D10/D3D11/D3D12 and Vulkan behaviour outside the paths that have been specifically tested may vary by title.
 
-The **Auto scene colour** path supports D3D10, D3D11 and D3D12. **D3D11 is the validated path**, developed and runtime-tested with Baldur's Gate 3 in DX11 mode using DLSS. D3D10 and D3D12 are available as experimental paths pending equivalent runtime validation. Auto scene colour does not currently support Vulkan.
+The **Auto scene colour** path supports D3D10, D3D11 and D3D12 on both x86 and x64. The implementation is shared across architectures through ReShade's generic API. Baldur's Gate 3 in DX11 mode using DLSS is the primary runtime-validated configuration. Auto scene colour does not currently support Vulkan.
 
 ## Installation
 
