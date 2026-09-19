@@ -377,12 +377,11 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
                 ImGui::SetTooltip("D3D11/D3D12. Injects effects into the primary live scene colour at the matched draw and uses native-resolution staging when needed.");
             }
 
-            if (!autoSceneColourSupported)
-                autoSceneColour = false;
+            const bool autoSceneColourActive = autoSceneColour && autoSceneColourSupported;
 
             ImGui::TableNextRow();
 
-            if (autoSceneColour) {
+            if (autoSceneColourActive) {
                 // Automatic mode overlays the saved manual target configuration without
                 // modifying it. The core resolver gives Auto mode precedence while active.
 
@@ -567,10 +566,10 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
             ImGui::TableNextColumn();
             ImGui::Text("Preserve target alpha channel");
             ImGui::TableNextColumn();
-            if (autoSceneColour)
+            if (autoSceneColourActive)
                 ImGui::BeginDisabled();
             ImGui::Checkbox("##preserveAlpha", &preserveAlpha);
-            if (autoSceneColour) {
+            if (autoSceneColourActive) {
                 ImGui::EndDisabled();
                 ImGui::SameLine();
                 ImGui::TextDisabled("ignored while Auto scene colour is active");
@@ -580,7 +579,7 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
             ImGui::TableNextColumn();
             ImGui::Text("Match swapchain");
             ImGui::TableNextColumn();
-            if (autoSceneColour) {
+            if (autoSceneColourActive) {
                 ImGui::TextUnformatted("ASPECT RATIO (automatic)");
             } else if (ImGui::BeginCombo("##effSwapChainMatchMode", typesSelectedSwapchainMatchMode, ImGuiComboFlags_None)) {
                 for (int n = 0; n < IM_ARRAYSIZE(swapchainMatchOptions); n++) {
