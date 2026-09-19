@@ -171,7 +171,7 @@ void TechniqueManager::OnReshadePresent(reshade::api::effect_runtime* runtime) {
 
     // Always clear REST's per-frame rendered marker for every known technique.
     // ReShade may rebuild effect permutations when REST renders into a non-swapchain
-    // target (e.g. BG3's 2560x1440 pre-DLSS scene colour), and the enabled-pointer
+    // target such as a pre-upscale scene-colour buffer, and the enabled-pointer
     // set can be transiently rebuilt during that process. Restricting the reset to
     // allEnabledTechniques can therefore leave a stale rendered=true marker behind.
     for (auto& [_, effect] : deviceData.allTechniques) {
