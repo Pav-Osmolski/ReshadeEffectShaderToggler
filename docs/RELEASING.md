@@ -59,9 +59,21 @@ The primary release gate is **Baldur's Gate 3 launched through `bg3_dx11.exe`**.
    - Auto Scene Colour must not activate on Vulkan.
    - A saved Auto preference must not suppress or overwrite the group's manual render-target configuration on an unsupported API.
 
-D3D10 and D3D12 may be smoke-tested separately, but both are currently experimental and are **not** substitutes for the BG3 DX11 release gate.
+D3D10, D3D11 and D3D12 are supported on x86 and x64. BG3 DX11 remains the primary runtime regression reference because it exercises the full dynamic-resolution/native-staging path.
 
-For D3D10 changes, additionally verify in a representative D3D10 title that Auto Scene Colour is clickable, the live scene/effect resolutions are reported correctly, native staging activates only when needed, and the effect remains at the intended shader boundary.
+For API-specific changes, verify in a representative title that Auto Scene Colour is clickable, the live scene/effect resolutions are reported correctly, native staging activates only when needed, and the effect remains at the intended shader boundary.
+
+### Architecture parity
+
+CI must validate both release binaries after every x86/x64 build:
+
+- x86 output is a PE32/i386 DLL with the `.addon32` extension;
+- x64 output is a PE32+/x86-64 DLL with the `.addon64` extension;
+- both carry the committed REST version;
+- both export the required REST add-on metadata;
+- ReShade resource/resource-view handles remain 64-bit in both builds.
+
+The D3D10/D3D11/D3D12 Auto Scene Colour code path itself does not contain architecture-specific branches; API behaviour is supplied by the corresponding ReShade backend.
 
 ## Creating a release
 
