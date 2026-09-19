@@ -107,7 +107,7 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
         const device_api deviceApi = cmd_list->get_device()->get_api();
         const bool autoSceneColour =
           group->getAutoRenderSRV() &&
-          (deviceApi == device_api::d3d11 || deviceApi == device_api::d3d12);
+          ShaderToggler::IsAutoSceneColourSupported(deviceApi);
         const bool preserveTargetAlpha = group->getPreserveAlpha() && !autoSceneColour;
         const bool wantsNativeStaging =
           autoSceneColour &&
