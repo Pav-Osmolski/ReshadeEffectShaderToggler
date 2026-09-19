@@ -380,21 +380,11 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
             if (!autoSceneColourSupported)
                 autoSceneColour = false;
 
-            if (autoSceneColour) {
-                // Automatic scene colour is intended for dynamic-resolution/upscaled
-                // render targets (DLSS/FSR/XeSS), so match by aspect ratio rather than
-                // requiring the live scene to equal the swapchain resolution.
-                selectedSwapchainMatchMode = ShaderToggler::SWAPCHAIN_MATCH_MODE_ASPECT_RATIO;
-                typesSelectedSwapchainMatchMode = swapchainMatchOptions[selectedSwapchainMatchMode];
-                preserveAlpha = false;
-            }
-
             ImGui::TableNextRow();
 
             if (autoSceneColour) {
-                // Automatic mode injects into the live RTV at the matched draw. It does
-                // not use descriptor/SRV selection, so keep manual SRV state disabled.
-                group->setRenderToResourceViews(false);
+                // Automatic mode overlays the saved manual target configuration without
+                // modifying it. The core resolver gives Auto mode precedence while active.
 
                 ImGui::TableNextColumn();
                 ImGui::Text("Target");
@@ -583,7 +573,7 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
             if (autoSceneColour) {
                 ImGui::EndDisabled();
                 ImGui::SameLine();
-                ImGui::TextDisabled("disabled in Auto scene colour");
+                ImGui::TextDisabled("ignored while Auto scene colour is active");
             }
 
             ImGui::TableNextRow();
