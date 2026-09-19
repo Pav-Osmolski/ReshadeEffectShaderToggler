@@ -64,6 +64,12 @@ static_assert(IsAutoSceneColourSupported(reshade::api::device_api::d3d12));
 static_assert(!IsAutoSceneColourSupported(reshade::api::device_api::d3d9));
 static_assert(!IsAutoSceneColourSupported(reshade::api::device_api::vulkan));
 
+// ReShade resource handles are explicitly 64-bit on both Win32 and x64.
+// Keep this invariant visible so 32-bit builds cannot silently narrow them.
+static_assert(sizeof(reshade::api::resource) == sizeof(uint64_t));
+static_assert(sizeof(reshade::api::resource_view) == sizeof(uint64_t));
+static_assert(sizeof(uintptr_t) == sizeof(void*));
+
 enum class GroupResourceType : uint32_t { RESOURCE_ALPHA = 0, RESOURCE_BINDING = 1, RESOURCE_CONSTANTS_COPY = 2, RESOURCE_NATIVE_STAGING = 3 };
 
 enum class GroupResourceState : uint32_t {
