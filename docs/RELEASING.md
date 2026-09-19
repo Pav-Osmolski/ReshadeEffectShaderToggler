@@ -10,7 +10,7 @@ Release tags must use:
 
 Example:
 
-`v1.4.0.633`
+`v1.4.1.633`
 
 The final component preserves the upstream convention used for the ReShade baseline.
 
@@ -37,7 +37,7 @@ Before tagging a release:
 
 Create and push a tag from the desired `main` commit:
 
-`v1.4.0.633`
+`v1.4.1.633`
 
 The **Release** workflow will then:
 
