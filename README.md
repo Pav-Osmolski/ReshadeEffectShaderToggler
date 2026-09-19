@@ -129,6 +129,7 @@ See [Release Process](docs/RELEASING.md) for the release checklist and packaging
 ## Credits
 
 - [alex / 4lex4nder](https://github.com/4lex4nder) - ReshadeEffectShaderToggler development.
+- **DeViLhoOD** - Automatic Scene Colour, DLSS/upscaled rendering support, release hardening, documentation and testing.
 - [Frans Bouma](https://github.com/FransBouma) - original ShaderToggler.
 - [Sinom](https://github.com/sinomsinom) - contributor.
 - [crosire](https://github.com/crosire) - ReShade and effect-rendering examples.
