@@ -32,7 +32,7 @@ void RenderingQueueManager::_CheckCallForCommandList(ShaderData& sData,
                   deviceData.current_runtime != nullptr ? deviceData.current_runtime->get_device()->get_api() : device_api::d3d9;
                 const bool autoSceneColour =
                   group->getAutoRenderSRV() &&
-                  (runtimeApi == device_api::d3d11 || runtimeApi == device_api::d3d12);
+                  ShaderToggler::IsAutoSceneColourSupported(runtimeApi);
                 if (group->getExtractConstants() && !deviceData.constantsUpdated.contains(group)) {
                     if (!sData.constantBuffersToUpdate.contains(group)) {
                         sData.constantBuffersToUpdate.emplace(group);
