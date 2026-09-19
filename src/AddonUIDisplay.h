@@ -1464,10 +1464,21 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, reshade::api::eff
                                 group.getAutoRenderSRV() ? " | Auto Scene Colour" : "");
 
             if (group.getToggleKey() != 0) {
+                bool conflictShown = false;
                 for (const auto& [otherId, otherGroup] : instance.GetToggleGroups()) {
                     if (otherId != group.getId() && otherGroup.getToggleKey() == group.getToggleKey()) {
                         ImGui::TextDisabled("Warning: group shortcut conflicts with '%s'.", otherGroup.getName().c_str());
+                        conflictShown = true;
                         break;
+                    }
+                }
+
+                if (!conflictShown) {
+                    for (uint32_t i = 0; i < IM_ARRAYSIZE(AddonImGui::KeybindNames); ++i) {
+                        if (instance.GetKeybinding(static_cast<AddonImGui::Keybind>(i)) == group.getToggleKey()) {
+                            ImGui::TextDisabled("Warning: shortcut conflicts with REST action '%s'.", AddonImGui::KeybindDisplayNames[i]);
+                            break;
+                        }
                     }
                 }
             }
