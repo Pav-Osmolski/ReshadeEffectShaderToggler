@@ -29,6 +29,21 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Validate version tooling
+        shell: pwsh
+        run: |
+          $match = Select-String -Path "./src/version.h" -Pattern 'REST_VERSION_STRING "([^"]+)"'
+          if (-not $match.Matches.Success) {
+            throw "Could not read REST_VERSION_STRING from src/version.h."
+          }
+          $version = $match.Matches[0].Groups[1].Value
+          ./src/set_release_version.ps1 "v$version"
+          $stamped = Get-Content "./src/version.h" -Raw
+          $expected = '#define REST_VERSION_STRING "' + $version + '"'
+          if (-not $stamped.Contains($expected)) {
+            throw "Version stamping validation failed."
+          }
+
       - name: Add MSBuild to PATH
         uses: microsoft/setup-msbuild@v2
 
