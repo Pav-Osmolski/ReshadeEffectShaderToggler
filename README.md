@@ -125,7 +125,7 @@ The traditional defaults remain available for pixel and vertex shader hunting:
 
 All hunting shortcuts are configurable under **Shader hunting keybindings**, making shader hunting practical on laptops and compact keyboards. Compute-shader hunting is also configurable but deliberately has no default shortcut. Shortcut matching uses the exact configured Ctrl/Shift/Alt modifiers, so a plain key does not also fire when a modified version is pressed.
 
-Use the group's **Active** checkbox or assigned hotkey while testing. Group hotkeys are ignored while a text-input field is active. When finished, click **Done** and **Save changes**.
+Use the group's **Active** checkbox or assigned hotkey while testing. When finished, click **Done** and **Save changes**.
 
 ## Automatic scene-colour performance note
 
