@@ -91,6 +91,11 @@ void RenderingQueueManager::_CheckCallForCommandList(ShaderData& sData,
                     auto& preferred = group->GetPreferredTechniqueData();
 
                     for (auto& eff : preferred) {
+                        // Selected techniques still obey ReShade's global enabled state.
+                        if (!eff->enabled) {
+                            continue;
+                        }
+
                         if (!eff->rendered && !sData.techniquesToRender.contains(eff)) {
                             if (group->getRenderToResourceViews() || autoSceneColour) {
                                 sData.techniquesToRender.emplace(eff, ResourceRenderData{ group, CALL_DRAW, resource{ 0 }, format::unknown });
