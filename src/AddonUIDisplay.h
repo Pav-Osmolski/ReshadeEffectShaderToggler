@@ -373,8 +373,12 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
             ImGui::Checkbox("##AutoSceneColour", &autoSceneColour);
             if (!autoSceneColourSupported)
                 ImGui::EndDisabled();
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("D3D11/D3D12. Injects effects into the primary live scene colour at the matched draw and uses native-resolution staging when needed.");
+            if (!autoSceneColourSupported) {
+                ImGui::SameLine();
+                ImGui::TextDisabled("(D3D11/D3D12 only)");
+            }
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+                ImGui::SetTooltip("D3D11 is validated with Baldur's Gate 3. D3D12 is available but experimental. Vulkan is not supported by Auto Scene Colour.");
             }
 
             const bool autoSceneColourActive = autoSceneColour && autoSceneColourSupported;
@@ -389,6 +393,15 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
                 ImGui::Text("Target");
                 ImGui::TableNextColumn();
                 ImGui::TextUnformatted("Live render target (matched draw)");
+
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::Text("Graphics API");
+                ImGui::TableNextColumn();
+                if (deviceApi == reshade::api::device_api::d3d11)
+                    ImGui::TextUnformatted("D3D11 (BG3 validated)");
+                else
+                    ImGui::TextUnformatted("D3D12 (experimental)");
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
