@@ -101,20 +101,6 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
             continue;
         }
 
-        if (group->getAutoRenderSRV() && group->getAutoSceneColourProbe()) {
-            // Diagnostic only: prove whether the selected SRV is causally consumed by
-            // the matched BG3 draw. Clear it immediately before the draw and restore it
-            // to shader-resource state. If the visible frame turns magenta, this is a
-            // live scene-colour input rather than a history/copy buffer.
-            if (view->rtv != 0) {
-                static const float probeColor[4] = { 1.0f, 0.0f, 1.0f, 1.0f };
-                cmd_list->barrier(active_resource.resource, resource_usage::shader_resource, resource_usage::render_target);
-                cmd_list->clear_render_target_view(view->rtv, probeColor);
-                cmd_list->barrier(active_resource.resource, resource_usage::render_target, resource_usage::shader_resource);
-            }
-            continue;
-        }
-
         uint32_t runtimeWidth = 0, runtimeHeight = 0;
         runtime->get_screenshot_width_and_height(&runtimeWidth, &runtimeHeight);
 
@@ -168,6 +154,11 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
                 continue;
             }
 
+            // The selected resource is the live RTV bound for the matched draw.
+            // Temporarily transition it to shader-resource state so the fullscreen copy
+            // shader can sample it into the native-size staging surface.
+            cmd_list->barrier(active_resource.resource, resource_usage::render_target, resource_usage::shader_resource);
+
             // Upscale the game's pre-DLSS scene into a native-size scratch surface.
             // This keeps ReShade's effect-created intermediate textures at their normal
             // runtime dimensions, avoiding mixed-resolution shared-resource permutations.
@@ -180,7 +171,7 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
         }
 
         const bool transitionAutoSRV =
-          group->getAutoRenderSRV() && group->getRenderToResourceViews() &&
+          !group->getAutoRenderSRV() && group->getRenderToResourceViews() &&
           cmd_list->get_device()->get_api() == device_api::d3d12 &&
           !useNativeStaging;
 
@@ -265,9 +256,9 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
         }
 
         if (useNativeStaging) {
-            // Downscale the completed native-size effect result back into BG3's
-            // pre-DLSS scene colour, then return both resources to the states expected
-            // by the game and the next staging pass.
+            // Downscale the completed native-size effect result back into BG3's live
+            // render target. Leave the game resource in render-target state so the
+            // matched draw can execute normally after REST returns.
             cmd_list->barrier(nativeStageRes, resource_usage::render_target, resource_usage::shader_resource);
             cmd_list->barrier(active_resource.resource, resource_usage::shader_resource, resource_usage::render_target);
 
@@ -275,7 +266,6 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
                 shaderManager.CopyResource(cmd_list, nativeStageSRV, view->rtv, desc.texture.width, desc.texture.height);
             }
 
-            cmd_list->barrier(active_resource.resource, resource_usage::render_target, resource_usage::shader_resource);
             cmd_list->barrier(nativeStageRes, resource_usage::shader_resource, resource_usage::render_target);
         } else if (transitionAutoSRV) {
             cmd_list->barrier(active_resource.resource, resource_usage::render_target, resource_usage::shader_resource);
