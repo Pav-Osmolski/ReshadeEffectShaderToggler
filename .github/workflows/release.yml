@@ -87,13 +87,22 @@ jobs:
           $match = Select-String -Path "./src/version.h" -Pattern 'REST_VERSION_STRING "([^"]+)"'
           $version = $match.Matches[0].Groups[1].Value
 
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vsPath = (& $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath)
+          $dumpbin = Get-ChildItem "$vsPath\VC\Tools\MSVC\*\bin\Hostx64\x64\dumpbin.exe" |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1 -ExpandProperty FullName
+          if (-not $dumpbin) {
+            throw "Could not locate dumpbin.exe in the Visual Studio toolchain."
+          }
+
           foreach ($binary in @($x86, $x64)) {
             $fileVersion = (Get-Item $binary).VersionInfo.FileVersion
             if ($fileVersion -ne $version) {
               throw "$binary reports version $fileVersion; expected $version."
             }
 
-            $exports = (& dumpbin /nologo /exports $binary | Out-String)
+            $exports = (& $dumpbin /nologo /exports $binary | Out-String)
             foreach ($requiredExport in @("NAME", "DESCRIPTION")) {
               if ($exports -notmatch "(?m)\s$requiredExport\s*$") {
                 throw "$binary is missing required export $requiredExport."
