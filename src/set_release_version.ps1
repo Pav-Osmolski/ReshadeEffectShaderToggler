@@ -1,17 +1,35 @@
 param (
-    [string]$arg1
+    [Parameter(Mandatory = $true)]
+    [string]$Version
 )
 
-$arg1 = $arg1 -replace "[^0-9.]" , ''
-$splitVersion = $arg1.split(".")
-$major = If (!$splitVersion[0]) { 99 } Else { $splitVersion[0] }
-$minor = If (!$splitVersion[1]) { 0 } Else { $splitVersion[1] }
-$maintenance = If (!$splitVersion[2]) { 0 } Else { $splitVersion[2] }
-$reshade = If (!$splitVersion[3]) { 0 } Else { $splitVersion[3] }
+$normalizedVersion = $Version.Trim()
 
-$guard = "#pragma once"
-$restVersion = "#define REST_VERSION ${major},${minor},${maintenance},${reshade}"
-$restVersionString = "#define REST_VERSION_STRING `"${major}.${minor}.${maintenance}.${reshade}`""
-$versionFile = "${guard}`r`n${restVersion}`r`n${restVersionString}"
+if ($normalizedVersion.StartsWith("v", [System.StringComparison]::OrdinalIgnoreCase)) {
+    $normalizedVersion = $normalizedVersion.Substring(1)
+}
 
-"${versionFile}" | Out-File -FilePath $PSScriptRoot\version.h
+if ($normalizedVersion -notmatch '^\d+\.\d+\.\d+\.\d+$') {
+    throw "Version must use MAJOR.MINOR.PATCH.RESHADE format, for example 1.4.0.633."
+}
+
+$parts = $normalizedVersion.Split(".")
+$numbers = @()
+
+foreach ($part in $parts) {
+    $value = [int]$part
+    if ($value -lt 0 -or $value -gt 65535) {
+        throw "Each version component must be between 0 and 65535."
+    }
+    $numbers += $value
+}
+
+$major, $minor, $patch, $reshade = $numbers
+
+$versionFile = @"
+#pragma once
+#define REST_VERSION $major,$minor,$patch,$reshade
+#define REST_VERSION_STRING "$major.$minor.$patch.$reshade"
+"@
+
+Set-Content -Path (Join-Path $PSScriptRoot "version.h") -Value $versionFile -Encoding UTF8
