@@ -26,12 +26,40 @@ Before tagging a release:
 4. Check that `README.md` and files under `docs/` describe any user-visible changes.
 5. Confirm the default version in `src/version.h` matches the release you intend to tag.
 6. Test the x64 add-on in at least one representative configuration for the release's main feature.
-7. For Automatic Scene Colour changes, verify:
-   - the effect updates every frame;
-   - scene and effect resolutions are reported correctly;
-   - multi-pass techniques run in the expected order;
-   - the effect stays below later UI/fog passes;
-   - enabling/disabling DLSS or changing resolution does not require manual SRV selection.
+7. For Automatic Scene Colour changes, run the BG3 DX11 regression matrix below before tagging a release.
+
+### Automatic Scene Colour regression matrix
+
+The primary release gate is **Baldur's Gate 3 launched through `bg3_dx11.exe`**. Do not substitute Vulkan or assume D3D12 represents the BG3 path.
+
+1. **DX11 + DLSS enabled**
+   - Auto scene colour is clickable.
+   - The editor reports `D3D11 (BG3 validated)`.
+   - The matched scene resolution follows the DLSS internal resolution.
+   - The effect resolution follows the ReShade/output resolution and reports native staging when the dimensions differ.
+   - A multi-pass chain such as `Lumenite_Kernel -> Lumenite_LSAO` updates every frame while the camera moves.
+   - AO/effects remain beneath later BG3 UI and fog composition.
+2. **DX11 without an internal-resolution mismatch**
+   - Auto remains functional.
+   - Scene and effect resolutions can match without native staging.
+   - The effect still updates every frame and remains at the selected shader boundary.
+3. **Configuration preservation**
+   - Record manual render destination, render-target index, swapchain-match mode and Preserve Alpha settings.
+   - Toggle Auto on, close/reopen the editor, then toggle Auto off.
+   - Confirm all manual settings are unchanged.
+4. **Persistence and ReShade rebuilds**
+   - Save the toggle groups and restart the game.
+   - Confirm the Auto flag and selected techniques persist.
+   - Reload effects and reorder techniques in ReShade.
+   - Confirm selected technique names remain selected and the required multi-pass order still renders.
+5. **Resolution changes**
+   - Change DLSS/output resolution while Auto is active.
+   - One matching frame may be skipped while native staging is recreated; subsequent frames must update normally.
+6. **Unsupported API safety**
+   - Auto Scene Colour must not activate on Vulkan.
+   - A saved Auto preference must not suppress or overwrite the group's manual render-target configuration on an unsupported API.
+
+D3D12 may be smoke-tested separately, but it is currently experimental and is **not** a substitute for the BG3 DX11 release gate.
 
 ## Creating a release
 
