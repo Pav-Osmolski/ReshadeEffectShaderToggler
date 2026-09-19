@@ -1275,9 +1275,6 @@ static void CheckHotkeys(AddonImGui::AddonUIData& instance, reshade::api::effect
         return;
     }
 
-    if (ImGui::GetCurrentContext() != nullptr && (ImGui::GetIO().WantTextInput || ImGui::IsAnyItemActive()))
-        return;
-
     for (auto& [_, group] : instance.GetToggleGroups()) {
         const uint32_t toggleKey = group.getToggleKey();
         if (!pressedKeys(toggleKey))
