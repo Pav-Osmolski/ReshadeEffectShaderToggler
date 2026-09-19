@@ -154,12 +154,16 @@ const ResourceViewData RenderingManager::GetCurrentResourceView(command_list* cm
         bindingRTindex = 0;
     }
 
+    const device_api deviceApi = device->get_api();
+    const bool autoSceneColour =
+      group->getAutoRenderSRV() &&
+      (deviceApi == device_api::d3d11 || deviceApi == device_api::d3d12);
+
     // Automatic scene colour targets the primary live render target bound at the
     // matched draw. This keeps the effect on the scene that subsequent game passes
     // actually consume instead of relying on descriptor/SRV discovery.
     if (action & (MATCH_EFFECT | MATCH_PREVIEW) &&
-        group->getAutoRenderSRV() &&
-        (device->get_api() == device_api::d3d11 || device->get_api() == device_api::d3d12) &&
+        autoSceneColour &&
         !rtvs.empty() && rtvs[0] != 0) {
         // Automatic mode always targets the primary live colour RTV. Do not inherit
         // a stale manual render-target index from the group configuration.
@@ -217,7 +221,7 @@ const ResourceViewData RenderingManager::GetCurrentResourceView(command_list* cm
 
         active_data.resource = rs;
         active_data.format = v_desc.format;
-    } else if (action & (MATCH_EFFECT | MATCH_PREVIEW) && !group->getAutoRenderSRV() &&
+    } else if (action & (MATCH_EFFECT | MATCH_PREVIEW) && !autoSceneColour &&
                !group->getRenderToResourceViews() && rtvs.size() > 0 && rtvs[index] != 0) {
         resource rs = device->get_resource_from_view(rtvs[index]);
 
@@ -236,7 +240,7 @@ const ResourceViewData RenderingManager::GetCurrentResourceView(command_list* cm
 
         active_data.resource = rs;
         active_data.format = v_desc.format;
-    } else if (action & (MATCH_EFFECT | MATCH_PREVIEW) && !group->getAutoRenderSRV() &&
+    } else if (action & (MATCH_EFFECT | MATCH_PREVIEW) && !autoSceneColour &&
                group->getRenderToResourceViews()) {
         uint32_t stageIndex = std::min(static_cast<uint32_t>(2), group->getRenderSRVShaderStage());
 
