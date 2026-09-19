@@ -2,9 +2,10 @@ name: Publish v1.4.0.633
 
 on:
   push:
-    branches: [ "main" ]
+    branches:
+      - main
     paths:
-      - ".github/workflows/publish-v1.4.0.633.yml"
+      - .github/workflows/publish-v1.4.0.633.yml
 
 permissions:
   contents: write
@@ -13,17 +14,11 @@ jobs:
   publish:
     runs-on: windows-latest
     timeout-minutes: 25
-    env:
-      TARGET_SHA: e57ac84512a30a4bec4c651aa6ddfdb4726b0e18
-      RELEASE_TAG: v1.4.0.633
-      SOLUTION_FILE_PATH: src/ReshadeEffectShaderToggler.sln
-      BUILD_CONFIGURATION: Release
-
     steps:
       - name: Checkout release source
         uses: actions/checkout@v7
         with:
-          ref: ${{ env.TARGET_SHA }}
+          ref: e57ac84512a30a4bec4c651aa6ddfdb4726b0e18
           submodules: recursive
           fetch-depth: 0
 
@@ -32,33 +27,24 @@ jobs:
         run: |
           $match = Select-String -Path "./src/version.h" -Pattern 'REST_VERSION_STRING "([^"]+)"'
           if (-not $match.Matches.Success) { throw "Could not read REST_VERSION_STRING." }
-          $version = $match.Matches[0].Groups[1].Value
-          if ($version -ne "1.4.0.633") { throw "Expected version 1.4.0.633, found $version." }
-          if (-not (Select-String -Path "./README.md" -Pattern 'DeViLhoOD' -Quiet)) { throw "README credit for DeViLhoOD is missing." }
+          if ($match.Matches[0].Groups[1].Value -ne "1.4.0.633") { throw "Unexpected release version." }
+          if (-not (Select-String -Path "./README.md" -Pattern "DeViLhoOD" -Quiet)) { throw "README credit for DeViLhoOD is missing." }
 
-      - name: Ensure release does not already exist
+      - name: Create tag
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view "$env:RELEASE_TAG" --repo "${{ github.repository }}" *> $null
-          if ($LASTEXITCODE -eq 0) { throw "Release $env:RELEASE_TAG already exists." }
-          $global:LASTEXITCODE = 0
-
-      - name: Create release tag
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh api --method POST -H "Accept: application/vnd.github+json" "repos/${{ github.repository }}/git/refs" -f ref="refs/tags/$env:RELEASE_TAG" -f sha="$env:TARGET_SHA"
+          gh api --method POST "repos/${{ github.repository }}/git/refs" -f ref="refs/tags/v1.4.0.633" -f sha="e57ac84512a30a4bec4c651aa6ddfdb4726b0e18"
 
       - name: Add MSBuild to PATH
         uses: microsoft/setup-msbuild@v3
 
       - name: Build x64
-        run: msbuild /m /property:Platform=x64 /p:Configuration=${{ env.BUILD_CONFIGURATION }} ${{ env.SOLUTION_FILE_PATH }}
+        run: msbuild /m /property:Platform=x64 /p:Configuration=Release src/ReshadeEffectShaderToggler.sln
 
       - name: Build x86
-        run: msbuild /m /property:Platform=x86 /p:Configuration=${{ env.BUILD_CONFIGURATION }} ${{ env.SOLUTION_FILE_PATH }}
+        run: msbuild /m /property:Platform=x86 /p:Configuration=Release src/ReshadeEffectShaderToggler.sln
 
       - name: Package release
         shell: pwsh
@@ -74,36 +60,10 @@ jobs:
           Compress-Archive -Path $paths -DestinationPath "release.zip" -Force
           $hash = (Get-FileHash "release.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  release.zip" | Out-File -FilePath "SHA256SUMS.txt" -Encoding ascii
-          @'
-          ## Automatic Scene Colour for upscaled D3D12 rendering
 
-          This release adds REST's new **Automatic Scene Colour** path, developed and tested for games that render below output resolution before an upscaler such as DLSS.
-
-          ### Highlights
-
-          - Targets the primary live colour RTV at the matched draw instead of relying on manual SRV slot/binding discovery.
-          - Uses aspect-ratio matching so DLSS and dynamic-resolution changes do not require manual width/height configuration.
-          - Adds native-resolution staging when the live scene is below the ReShade runtime/output resolution.
-          - Runs multi-pass ReShade effects at their expected native resolution, then copies the completed result back into the live scene.
-          - Keeps effects beneath later game passes such as fog and UI.
-          - Adds scene/effect resolution, technique-order and render-status diagnostics to the group editor.
-          - Hardens saved technique state and isolates Auto mode from stale manual RT/SRV/alpha configuration.
-          - Includes updated README documentation plus dedicated Automatic Scene Colour and release-process guides.
-          - Modernises and hardens x64/x86 CI and release packaging.
-
-          ### Validation
-
-          Validated in **Baldur's Gate 3 with D3D12 + DLSS**, including the multi-pass Lumenite_Kernel -> Lumenite_LSAO chain rendering correctly beneath the game UI.
-
-          ### Credits
-
-          **DeViLhoOD** - Automatic Scene Colour, DLSS/upscaled rendering support, release hardening, documentation and testing.
-
-          Built from commit e57ac84512a30a4bec4c651aa6ddfdb4726b0e18.
-          '@ | Out-File -FilePath "RELEASE_NOTES.md" -Encoding utf8
-
-      - name: Publish GitHub release
+      - name: Publish release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$env:RELEASE_TAG" "release.zip" "SHA256SUMS.txt" --repo "${{ github.repository }}" --target "$env:TARGET_SHA" --title "$env:RELEASE_TAG" --notes-file "RELEASE_NOTES.md" --verify-tag
+        run: |
+          gh release create "v1.4.0.633" "release.zip" "SHA256SUMS.txt" --repo "${{ github.repository }}" --target "e57ac84512a30a4bec4c651aa6ddfdb4726b0e18" --title "v1.4.0.633" --verify-tag --notes "Automatic Scene Colour for D3D12 upscaled rendering, including DLSS/native-staging support, multi-pass technique fixes, diagnostics, documentation and release hardening. Improvements by DeViLhoOD. Validated in Baldur's Gate 3 with D3D12 + DLSS, including Lumenite_Kernel -> Lumenite_LSAO rendering beneath the UI."
