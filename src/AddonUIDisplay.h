@@ -1275,7 +1275,7 @@ static void CheckHotkeys(AddonImGui::AddonUIData& instance, reshade::api::effect
         return;
     }
 
-    if (ImGui::GetCurrentContext() != nullptr && ImGui::GetIO().WantTextInput)
+    if (ImGui::GetCurrentContext() != nullptr && (ImGui::GetIO().WantTextInput || ImGui::IsAnyItemActive()))
         return;
 
     for (auto& [_, group] : instance.GetToggleGroups()) {
@@ -1310,7 +1310,7 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, reshade::api::eff
           "like Shift, Alt and Control) to each group, including a handy name. Each group can have one or more vertex or pixel shaders assigned to it. When "
           "you press the assigned keyboard shortcut, any draw calls using these shaders will be disabled, effectively hiding the elements in the 3D scene.");
         ImGui::TextUnformatted(
-          "\nShader hunting can be controlled with the buttons in Group settings or with the shortcuts under Keybindings. Pixel and vertex hunting keep the "
+          "\nShader hunting can be controlled with the buttons in Group settings or with the shortcuts under Shader hunting keybindings. Pixel and vertex hunting keep the "
           "traditional numpad defaults; compute hunting is unassigned by default so it does not steal an existing shortcut. All hunting shortcuts can be changed "
           "for laptops, compact keyboards or personal preference.");
         ImGui::TextUnformatted(
@@ -1376,9 +1376,10 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, reshade::api::eff
         instance.SetPreventRuntimeReload(runtimeReload);
     }
 
-    if (ImGui::CollapsingHeader("Keybindings", ImGuiTreeNodeFlags_None)) {
+    if (ImGui::CollapsingHeader("Shader hunting keybindings", ImGuiTreeNodeFlags_None)) {
+        constexpr uint32_t activeKeybindCount = static_cast<uint32_t>(AddonImGui::INVOCATION_DOWN);
         bool duplicateBinding = false;
-        for (uint32_t i = 0; i < IM_ARRAYSIZE(AddonImGui::KeybindNames); i++) {
+        for (uint32_t i = 0; i < activeKeybindCount; i++) {
             uint32_t keys = instance.GetKeybinding(static_cast<AddonImGui::Keybind>(i));
             ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.35f);
             if (key_input_box(AddonImGui::KeybindDisplayNames[i], &keys, runtime))
@@ -1494,7 +1495,8 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, reshade::api::eff
                 }
 
                 if (!conflictShown) {
-                    for (uint32_t i = 0; i < IM_ARRAYSIZE(AddonImGui::KeybindNames); ++i) {
+                    constexpr uint32_t activeKeybindCount = static_cast<uint32_t>(AddonImGui::INVOCATION_DOWN);
+                    for (uint32_t i = 0; i < activeKeybindCount; ++i) {
                         if (instance.GetKeybinding(static_cast<AddonImGui::Keybind>(i)) == group.getToggleKey()) {
                             ImGui::TextDisabled("Warning: shortcut conflicts with REST action '%s'.", AddonImGui::KeybindDisplayNames[i]);
                             break;
