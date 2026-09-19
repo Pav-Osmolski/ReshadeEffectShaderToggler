@@ -36,6 +36,9 @@
 #include "ConstantManager.h"
 #include "KeyData.h"
 #include "ResourceManager.h"
+#include "version.h"
+#include <algorithm>
+#include <cctype>
 #include <cwctype>
 #include <format>
 #include <imgui.h>
@@ -435,12 +438,42 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
-                ImGui::Text("Status");
+                ImGui::Text("Injection");
                 ImGui::TableNextColumn();
-                ImGui::Text("Render calls: %llu  Last techniques: %u  Target: 0x%llx",
-                            static_cast<unsigned long long>(group->getDebugEffectRenderCalls()),
-                            group->getDebugLastRenderedTechniqueCount(),
-                            static_cast<unsigned long long>(group->getDebugLastRenderTarget()));
+                if (group->getDebugEffectRenderCalls() > 0)
+                    ImGui::Text("Successful (%u technique%s)", group->getDebugLastRenderedTechniqueCount(), group->getDebugLastRenderedTechniqueCount() == 1 ? "" : "s");
+                else
+                    ImGui::TextUnformatted("Waiting for effect dispatch...");
+
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::Text("Native staging");
+                ImGui::TableNextColumn();
+                ImGui::TextUnformatted(group->getDebugNativeStaging() ? "Active" : "Not required");
+
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::Text("Diagnostics");
+                ImGui::TableNextColumn();
+                if (ImGui::Button("Copy diagnostics")) {
+                    const char* apiName = deviceApi == reshade::api::device_api::d3d10 ? "D3D10" :
+                                          deviceApi == reshade::api::device_api::d3d11 ? "D3D11" : "D3D12";
+                    const std::string diagnostics = std::format(
+                      "REST {}\nGroup: {}\nAPI: {}\nAuto Scene Colour: active\nScene: {}x{}\nEffect: {}x{}\nNative staging: {}\nLast techniques: {}\nTechnique order: {}\nRender calls: {}\nLast target: 0x{:x}",
+                      REST_VERSION_STRING,
+                      group->getName(),
+                      apiName,
+                      group->getDebugSceneWidth(),
+                      group->getDebugSceneHeight(),
+                      group->getDebugEffectWidth(),
+                      group->getDebugEffectHeight(),
+                      group->getDebugNativeStaging() ? "active" : "not required",
+                      group->getDebugLastRenderedTechniqueCount(),
+                      group->getDebugLastTechniqueOrder().empty() ? "(none)" : group->getDebugLastTechniqueOrder(),
+                      static_cast<unsigned long long>(group->getDebugEffectRenderCalls()),
+                      static_cast<unsigned long long>(group->getDebugLastRenderTarget()));
+                    ImGui::SetClipboardText(diagnostics.c_str());
+                }
             } else {
                 if (supportsSRVwrite) {
                     ImGui::TableNextColumn();
@@ -644,47 +677,107 @@ static void DisplayGroupView(AddonImGui::AddonUIData& instance,
                              ShaderToggler::ToggleGroup* group,
                              ShaderToggler::ShaderManager* shaderManager) {
     float height = ImGui::GetWindowHeight();
-    float width = ImGui::GetWindowWidth();
 
     if (*instance.ActiveCollectorFrameCounter() > 0) {
+        ImGui::Text("Collecting active shaders... %u frames remaining", *instance.ActiveCollectorFrameCounter());
+        ImGui::TextDisabled("Keep the relevant scene visible until collection finishes.");
         return;
     }
 
+    static char shaderSearch[64] = "";
+    static int filterMode = 0;
+    const char* filterItems[] = { "All", "Marked", "Unmarked" };
+
+    ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.45f);
+    ImGui::InputTextWithHint("##shaderSearch", "Search shader hash...", shaderSearch, IM_ARRAYSIZE(shaderSearch));
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(120.0f);
+    ImGui::Combo("##shaderFilter", &filterMode, filterItems, IM_ARRAYSIZE(filterItems));
+    ImGui::SameLine();
+    if (ImGui::Button("Recollect")) {
+        shaderManager->startHuntingMode(shaderManager->getMarkedShaderHashes());
+        *instance.ActiveCollectorFrameCounter() = *instance.StartValueFramecountCollectionPhase();
+        instance.UpdateToggleGroupsForShaderHashes();
+        return;
+    }
+
+    bool navigationChanged = false;
+    if (ImGui::Button("Prev")) {
+        shaderManager->huntPreviousShader(false);
+        navigationChanged = true;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Next")) {
+        shaderManager->huntNextShader(false);
+        navigationChanged = true;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Prev marked")) {
+        shaderManager->huntPreviousShader(true);
+        navigationChanged = true;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Mark / unmark")) {
+        shaderManager->toggleMarkOnHuntedShader();
+        navigationChanged = true;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Next marked")) {
+        shaderManager->huntNextShader(true);
+        navigationChanged = true;
+    }
+
+    if (navigationChanged)
+        instance.UpdateToggleGroupsForShaderHashes();
+
+    ImGui::TextDisabled("%zu collected | %zu marked", shaderManager->getAmountShaderHashesCollected(), shaderManager->getMarkedShaderCount());
+    ImGui::Separator();
+
     const std::unordered_set<uint32_t>& hashes = shaderManager->getCollectedShaderHashes();
-    static int32_t selected = -1;
+    const int32_t selected = shaderManager->getActiveHuntedShaderIndex();
     uint32_t index = 0;
-    ImGuiStyle style = ImGui::GetStyle();
+
+    std::string needle(shaderSearch);
+    std::transform(needle.begin(), needle.end(), needle.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
 
     if (ImGui::BeginTable("ShaderHashView",
                           1,
                           ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_ScrollY | ImGuiTableFlags_NoBordersInBody |
                             ImGuiTableColumnFlags_NoHeaderLabel,
-                          ImVec2(0, height - 47))) {
-        for (auto h : hashes) {
+                          ImVec2(0, height - 115))) {
+        for (const uint32_t hash : hashes) {
+            const bool marked = shaderManager->isHuntedShaderMarked(hash);
+            const std::string hashText = std::format("{:#08x}", hash);
+
+            bool visible = filterMode == 0 || (filterMode == 1 && marked) || (filterMode == 2 && !marked);
+            if (visible && !needle.empty()) {
+                std::string haystack = hashText;
+                std::transform(haystack.begin(), haystack.end(), haystack.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+                visible = haystack.find(needle) != std::string::npos;
+            }
+
+            if (!visible) {
+                ++index;
+                continue;
+            }
+
             ImGui::TableNextColumn();
 
-            bool marked = false;
-            if (shaderManager->isHuntedShaderMarked(shaderManager->getCollectedShaderHash(index))) {
-                marked = true;
+            if (marked)
                 ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 0.0f, 1.0f));
-            }
 
-            if (ImGui::Selectable(std::format("{:#08x}", h).c_str(), selected == index, ImGuiSelectableFlags_AllowDoubleClick) &&
-                (ImGui::IsMouseDoubleClicked(0) || ImGui::IsKeyPressed(ImGuiKey_Enter, false))) {
-                shaderManager->toggleMarkOnHuntedShader();
-            }
-
-            if (marked) {
-                ImGui::PopStyleColor();
-            }
-
-            if (ImGui::IsItemFocused()) {
+            const bool clicked = ImGui::Selectable(hashText.c_str(), selected == static_cast<int32_t>(index), ImGuiSelectableFlags_AllowDoubleClick);
+            if (clicked) {
                 shaderManager->setActivedHuntedShaderIndex(index);
+                if (ImGui::IsMouseDoubleClicked(0))
+                    shaderManager->toggleMarkOnHuntedShader();
                 instance.UpdateToggleGroupsForShaderHashes();
-                selected = index;
-            };
+            }
 
-            index++;
+            if (marked)
+                ImGui::PopStyleColor();
+
+            ++index;
         }
 
         ImGui::EndTable();
@@ -1100,8 +1193,79 @@ static void DisplayOverlay(AddonImGui::AddonUIData& instance, Rendering::Resourc
 }
 
 static void CheckHotkeys(AddonImGui::AddonUIData& instance, reshade::api::effect_runtime* runtime) {
-    if (*instance.ActiveCollectorFrameCounter() > 0) {
+    if (*instance.ActiveCollectorFrameCounter() > 0)
         --(*instance.ActiveCollectorFrameCounter());
+
+    auto pressed = [&](AddonImGui::Keybind binding) {
+        const uint32_t keys = instance.GetKeybinding(binding);
+        return keys != 0 && ShaderToggler::areKeysPressed(keys, runtime);
+    };
+
+    auto handleHunting = [&](ShaderToggler::ShaderManager* manager,
+                             AddonImGui::Keybind previous,
+                             AddonImGui::Keybind next,
+                             AddonImGui::Keybind mark,
+                             AddonImGui::Keybind previousMarked,
+                             AddonImGui::Keybind nextMarked) {
+        bool changed = false;
+
+        if (pressed(previousMarked)) {
+            manager->huntPreviousShader(true);
+            changed = true;
+        } else if (pressed(nextMarked)) {
+            manager->huntNextShader(true);
+            changed = true;
+        } else if (pressed(previous)) {
+            manager->huntPreviousShader(false);
+            changed = true;
+        } else if (pressed(next)) {
+            manager->huntNextShader(false);
+            changed = true;
+        }
+
+        if (pressed(mark)) {
+            manager->toggleMarkOnHuntedShader();
+            changed = true;
+        }
+
+        return changed;
+    };
+
+    if (instance.GetToggleGroupIdShaderEditing() >= 0) {
+        bool changed = false;
+        changed |= handleHunting(instance.GetPixelShaderManager(),
+                                 AddonImGui::PIXEL_SHADER_DOWN,
+                                 AddonImGui::PIXEL_SHADER_UP,
+                                 AddonImGui::PIXEL_SHADER_MARK,
+                                 AddonImGui::PIXEL_SHADER_MARKED_DOWN,
+                                 AddonImGui::PIXEL_SHADER_MARKED_UP);
+        changed |= handleHunting(instance.GetVertexShaderManager(),
+                                 AddonImGui::VERTEX_SHADER_DOWN,
+                                 AddonImGui::VERTEX_SHADER_UP,
+                                 AddonImGui::VERTEX_SHADER_MARK,
+                                 AddonImGui::VERTEX_SHADER_MARKED_DOWN,
+                                 AddonImGui::VERTEX_SHADER_MARKED_UP);
+        changed |= handleHunting(instance.GetComputeShaderManager(),
+                                 AddonImGui::COMPUTE_SHADER_DOWN,
+                                 AddonImGui::COMPUTE_SHADER_UP,
+                                 AddonImGui::COMPUTE_SHADER_MARK,
+                                 AddonImGui::COMPUTE_SHADER_MARKED_DOWN,
+                                 AddonImGui::COMPUTE_SHADER_MARKED_UP);
+
+        if (changed)
+            instance.UpdateToggleGroupsForShaderHashes();
+
+        return;
+    }
+
+    for (auto& [_, group] : instance.GetToggleGroups()) {
+        const uint32_t toggleKey = group.getToggleKey();
+        if (toggleKey == 0 || !ShaderToggler::areKeysPressed(toggleKey, runtime))
+            continue;
+
+        group.toggleActive();
+        if (!group.isActive() && instance.GetConstantHandler() != nullptr)
+            instance.GetConstantHandler()->RemoveGroup(&group, runtime->get_device());
     }
 }
 
@@ -1125,17 +1289,15 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, reshade::api::eff
           "The Shader Toggler allows you to create one or more groups with shaders to toggle on/off. You can assign a keyboard shortcut (including using keys "
           "like Shift, Alt and Control) to each group, including a handy name. Each group can have one or more vertex or pixel shaders assigned to it. When "
           "you press the assigned keyboard shortcut, any draw calls using these shaders will be disabled, effectively hiding the elements in the 3D scene.");
-        ImGui::TextUnformatted("\nThe following (hardcoded) keyboard shortcuts are used when you click a group's 'Change Shaders' button:");
-        ImGui::TextUnformatted("* Numpad 1 and Numpad 2: previous/next pixel shader");
-        ImGui::TextUnformatted("* Ctrl + Numpad 1 and Ctrl + Numpad 2: previous/next marked pixel shader in the group");
-        ImGui::TextUnformatted("* Numpad 3: mark/unmark the current pixel shader as being part of the group");
-        ImGui::TextUnformatted("* Numpad 4 and Numpad 5: previous/next vertex shader");
-        ImGui::TextUnformatted("* Ctrl + Numpad 4 and Ctrl + Numpad 5: previous/next marked vertex shader in the group");
-        ImGui::TextUnformatted("* Numpad 6: mark/unmark the current vertex shader as being part of the group");
         ImGui::TextUnformatted(
-          "\nWhen you step through the shaders, the current shader is disabled in the 3D scene so you can see if that's the shader you were looking for.");
-        ImGui::TextUnformatted("When you're done, make sure you click 'Save all toggle groups' to preserve the groups you defined so next time you start your "
-                               "game they're loaded in and you can use them right away.");
+          "\nShader hunting can be controlled with the buttons in Group settings or with the shortcuts under Keybindings. Pixel and vertex hunting keep the "
+          "traditional numpad defaults; compute hunting is unassigned by default so it does not steal an existing shortcut. All hunting shortcuts can be changed "
+          "for laptops, compact keyboards or personal preference.");
+        ImGui::TextUnformatted(
+          "\nWhen you step through shaders, the currently selected shader is disabled in the scene so you can identify it. Double-click a hash, use Mark / unmark, "
+          "or use the configured shortcut to add or remove it from the group.");
+        ImGui::TextUnformatted(
+          "Configuration changes are tracked automatically. Use Save changes when the Unsaved changes indicator appears.");
         ImGui::PopTextWrapPos();
     }
 
@@ -1195,81 +1357,127 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, reshade::api::eff
     }
 
     if (ImGui::CollapsingHeader("Keybindings", ImGuiTreeNodeFlags_None)) {
+        bool duplicateBinding = false;
         for (uint32_t i = 0; i < IM_ARRAYSIZE(AddonImGui::KeybindNames); i++) {
             uint32_t keys = instance.GetKeybinding(static_cast<AddonImGui::Keybind>(i));
             ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.35f);
-            if (key_input_box(AddonImGui::KeybindNames[i], &keys, runtime)) {
+            if (key_input_box(AddonImGui::KeybindDisplayNames[i], &keys, runtime))
                 instance.SetKeybinding(static_cast<AddonImGui::Keybind>(i), keys);
-            }
             ImGui::PopItemWidth();
+
+            if (keys != 0) {
+                for (uint32_t j = 0; j < i; ++j) {
+                    if (instance.GetKeybinding(static_cast<AddonImGui::Keybind>(j)) == keys) {
+                        duplicateBinding = true;
+                        break;
+                    }
+                }
+            }
         }
+
+        if (duplicateBinding)
+            ImGui::TextDisabled("Warning: two or more REST actions use the same shortcut.");
     }
 
     if (ImGui::CollapsingHeader("List of Toggle Groups", ImGuiTreeNodeFlags_DefaultOpen)) {
-        if (ImGui::Button(" New ")) {
+        if (ImGui::Button("New group"))
             instance.AddDefaultGroup();
-        }
+
+        ImGui::SameLine();
+        if (instance.IsConfigDirty())
+            ImGui::TextDisabled("Unsaved changes");
+        else
+            ImGui::TextDisabled("Saved");
+
         ImGui::Separator();
 
         std::vector<ShaderToggler::ToggleGroup*> toRemove;
-        for (auto& [_, group] : instance.GetToggleGroups()) {
+        std::vector<int> toClone;
 
+        for (auto& [_, group] : instance.GetToggleGroups()) {
             ImGui::PushID(group.getId());
             ImGui::AlignTextToFramePadding();
-            if (ImGui::Button("X")) {
-                toRemove.push_back(&group);
-            }
-            ImGui::SameLine();
-            ImGui::Text(" %d ", group.getId());
 
-            ImGui::SameLine();
             bool groupActive = group.isActive();
             ImGui::Checkbox("Active", &groupActive);
             if (groupActive != group.isActive()) {
                 group.toggleActive();
-
-                if (!groupActive && instance.GetConstantHandler() != nullptr) {
+                if (!groupActive && instance.GetConstantHandler() != nullptr)
                     instance.GetConstantHandler()->RemoveGroup(&group, runtime->get_device());
-                }
             }
 
             ImGui::SameLine();
-            if (ImGui::Button("Edit")) {
+            if (ImGui::Button("Edit"))
                 group.setEditing(true);
-            }
 
             ImGui::SameLine();
             if (instance.GetToggleGroupIdShaderEditing() >= 0) {
                 if (instance.GetToggleGroupIdShaderEditing() == group.getId()) {
-                    if (ImGui::Button(" Done ")) {
+                    if (ImGui::Button("Done"))
                         instance.EndShaderEditing(true, group);
-                    }
                 } else {
                     ImGui::BeginDisabled(true);
-                    ImGui::Button("      ");
+                    ImGui::Button("Settings");
                     ImGui::EndDisabled();
                 }
-            } else {
-                if (ImGui::Button("Settings")) {
-                    ImGui::SameLine();
-                    instance.StartShaderEditing(group);
-                }
+            } else if (ImGui::Button("Settings")) {
+                instance.StartShaderEditing(group);
             }
 
             ImGui::SameLine();
-            if (group.getToggleKey() > 0) {
-                ImGui::Text(" %s (%s)", group.getName().c_str(), ShaderToggler::reshade_key_name(group.getToggleKey()).c_str());
-            } else {
-                ImGui::Text(" %s", group.getName().c_str());
+            if (ImGui::Button("Clone"))
+                toClone.push_back(group.getId());
+
+            ImGui::SameLine();
+            if (ImGui::Button("Delete"))
+                ImGui::OpenPopup("Delete group?");
+
+            if (ImGui::BeginPopupModal("Delete group?", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+                ImGui::Text("Delete '%s'?", group.getName().c_str());
+                ImGui::TextDisabled("This takes effect immediately but is not written to disk until Save changes.");
+                if (ImGui::Button("Delete", ImVec2(120, 0))) {
+                    toRemove.push_back(&group);
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Cancel", ImVec2(120, 0)))
+                    ImGui::CloseCurrentPopup();
+                ImGui::EndPopup();
+            }
+
+            ImGui::SameLine();
+            if (group.getToggleKey() > 0)
+                ImGui::Text("%s (%s)", group.getName().c_str(), ShaderToggler::reshade_key_name(group.getToggleKey()).c_str());
+            else
+                ImGui::Text("%s", group.getName().c_str());
+
+            const size_t psCount = group.getPixelShaderHashes().size();
+            const size_t vsCount = group.getVertexShaderHashes().size();
+            const size_t csCount = group.getComputeShaderHashes().size();
+            const size_t fxCount = group.preferredTechniques().size();
+
+            ImGui::TextDisabled("PS: %zu | VS: %zu | CS: %zu | FX: %zu%s",
+                                psCount,
+                                vsCount,
+                                csCount,
+                                fxCount,
+                                group.getAutoRenderSRV() ? " | Auto Scene Colour" : "");
+
+            if (group.getToggleKey() != 0) {
+                for (const auto& [otherId, otherGroup] : instance.GetToggleGroups()) {
+                    if (otherId != group.getId() && otherGroup.getToggleKey() == group.getToggleKey()) {
+                        ImGui::TextDisabled("Warning: group shortcut conflicts with '%s'.", otherGroup.getName().c_str());
+                        break;
+                    }
+                }
             }
 
             if (group.isEditing()) {
                 ImGui::Separator();
                 ImGui::Text("Edit group %d", group.getId());
 
-                // Name of group
-                char tmpBuffer[150];
-                const std::string& name = group.getName();
+                char tmpBuffer[150] = {};
+                const std::string name = group.getName();
                 strncpy_s(tmpBuffer, 150, name.c_str(), name.size());
                 ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.7f);
                 ImGui::AlignTextToFramePadding();
@@ -1279,48 +1487,54 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, reshade::api::eff
                 group.setName(tmpBuffer);
                 ImGui::PopItemWidth();
 
-                // Key binding of group
                 ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.7f);
                 ImGui::AlignTextToFramePadding();
                 ImGui::Text("Key shortcut");
                 ImGui::SameLine(ImGui::GetWindowWidth() * 0.2f);
 
                 uint32_t keys = group.getToggleKey();
-                if (key_input_box(ShaderToggler::reshade_key_name(keys).c_str(), &keys, runtime)) {
+                if (key_input_box(ShaderToggler::reshade_key_name(keys).c_str(), &keys, runtime))
                     group.setToggleKey(keys);
-                }
                 ImGui::PopItemWidth();
 
-                if (ImGui::Button("OK")) {
+                if (ImGui::Button("OK"))
                     group.setEditing(false);
-                }
                 ImGui::Separator();
             }
 
             ImGui::PopID();
         }
-        if (toRemove.size() > 0) {
-            // switch off keybinding editing or shader editing, if in progress
+
+        for (const int sourceId : toClone)
+            instance.CloneToggleGroup(sourceId);
+
+        if (!toRemove.empty()) {
             instance.GetToggleGroupIdEffectEditing() = -1;
             instance.GetToggleGroupIdShaderEditing() = -1;
             instance.GetToggleGroupIdConstantEditing() = -1;
             instance.StopHuntingMode();
         }
-        for (const auto& group : toRemove) {
-            instance.SignalToggleGroupRemoved(runtime, group);
 
-            std::erase_if(instance.GetToggleGroups(), [&group](const auto& item) { return item.first == group->getId(); });
+        for (const auto* group : toRemove) {
+            instance.SignalToggleGroupRemoved(runtime, const_cast<ShaderToggler::ToggleGroup*>(group));
+            const int id = group->getId();
+            std::erase_if(instance.GetToggleGroups(), [id](const auto& item) { return item.first == id; });
         }
 
-        if (toRemove.size() > 0) {
+        if (!toRemove.empty())
             instance.UpdateToggleGroupsForShaderHashes();
-        }
 
         ImGui::Separator();
-        if (instance.GetToggleGroups().size() > 0) {
-            if (ImGui::Button("Save all Toggle Groups")) {
-                instance.SaveShaderTogglerIniFile();
-            }
-        }
+
+        const bool dirty = instance.IsConfigDirty();
+        if (!dirty)
+            ImGui::BeginDisabled();
+        if (ImGui::Button("Save changes"))
+            instance.SaveShaderTogglerIniFile();
+        if (!dirty)
+            ImGui::EndDisabled();
+
+        ImGui::SameLine();
+        ImGui::TextDisabled(dirty ? "Changes have not been written to ReshadeEffectShaderToggler.ini." : "Configuration is up to date.");
     }
 }
