@@ -230,7 +230,10 @@
     <ClCompile Include="AddonUIData.cpp" />
     <ClCompile Include="CDataFile.cpp" />
     <ClCompile Include="ConstantCopyBase.cpp" />
-    <ClCompile Include="ConstantCopyFFXIV.cpp" />
+    <ClCompile Include="ConstantCopyFFXIV.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="ConstantCopyGPUReadback.cpp" />
     <ClCompile Include="ConstantCopyMemcpyNested.cpp" />
     <ClCompile Include="ConstantCopyMemcpySingular.cpp" />
