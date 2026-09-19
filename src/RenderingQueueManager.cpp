@@ -37,7 +37,7 @@ void RenderingQueueManager::_CheckCallForCommandList(ShaderData& sData,
 
                 if (group->getId() == uiData.GetToggleGroupIdShaderEditing() && !deviceData.huntPreview.matched) {
                     if (uiData.GetCurrentTabType() == AddonImGui::TAB_RENDER_TARGET) {
-                        if (group->getRenderToResourceViews()) {
+                        if (group->getRenderToResourceViews() || group->getAutoRenderSRV()) {
                             queue_mask |= match_preview << (CALL_DRAW * MATCH_DELIMITER);
                             deviceData.huntPreview.target_invocation_location = CALL_DRAW;
                         } else {
@@ -72,7 +72,7 @@ void RenderingQueueManager::_CheckCallForCommandList(ShaderData& sData,
 
                         if (!techData->rendered) {
                             if (!sData.techniquesToRender.contains(techData)) {
-                                if (group->getRenderToResourceViews()) {
+                                if (group->getRenderToResourceViews() || group->getAutoRenderSRV()) {
                                     sData.techniquesToRender.emplace(techData, ResourceRenderData{ group, CALL_DRAW, resource{ 0 }, format::unknown });
                                     queue_mask |= (match_effect << CALL_DRAW * MATCH_DELIMITER);
                                 } else {
@@ -89,7 +89,7 @@ void RenderingQueueManager::_CheckCallForCommandList(ShaderData& sData,
 
                     for (auto& eff : preferred) {
                         if (!eff->rendered && !sData.techniquesToRender.contains(eff)) {
-                            if (group->getRenderToResourceViews()) {
+                            if (group->getRenderToResourceViews() || group->getAutoRenderSRV()) {
                                 sData.techniquesToRender.emplace(eff, ResourceRenderData{ group, CALL_DRAW, resource{ 0 }, format::unknown });
                                 queue_mask |= (match_effect << CALL_DRAW * MATCH_DELIMITER);
                             } else {
