@@ -100,6 +100,9 @@ class AddonUIData {
     bool _preventRuntimeReload = false;
     std::filesystem::path _basePath;
     TabType _currentTab = TabType::TAB_NONE;
+    std::string _savedConfigSignature;
+
+    std::string BuildConfigSignature() const;
 
     std::vector<std::function<void(reshade::api::effect_runtime*, ShaderToggler::ToggleGroup*)>> _removalCallbacks;
 
@@ -115,6 +118,8 @@ class AddonUIData {
     const std::vector<ShaderToggler::ToggleGroup*>* GetToggleGroupsForComputeShaderHash(uint32_t hash);
     void UpdateToggleGroupsForShaderHashes();
     void AddDefaultGroup();
+    ShaderToggler::ToggleGroup* CloneToggleGroup(int sourceGroupId);
+    bool IsConfigDirty() const;
     const std::atomic_int& GetToggleGroupIdShaderEditing() const;
     void EndShaderEditing(bool acceptCollectedShaderHashes, ShaderToggler::ToggleGroup& groupEditing);
     void StartShaderEditing(ShaderToggler::ToggleGroup& groupEditing);
