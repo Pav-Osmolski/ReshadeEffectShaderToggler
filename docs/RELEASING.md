@@ -10,7 +10,7 @@ Release tags must use:
 
 Example:
 
-`v1.4.1.633`
+`v1.4.2.633`
 
 The final component preserves the upstream convention used for the ReShade baseline.
 
@@ -65,7 +65,7 @@ D3D12 may be smoke-tested separately, but it is currently experimental and is **
 
 Create and push a tag from the desired `main` commit:
 
-`v1.4.1.633`
+`v1.4.2.633`
 
 The **Release** workflow will then:
 
