@@ -23,7 +23,7 @@ REST requires a ReShade build with add-on support enabled.
 
 The existing render-target, shader-hunting and binding features remain API/game dependent. D3D11/D3D12 and Vulkan behaviour outside the paths that have been specifically tested may vary by title.
 
-The **Auto scene colour** path currently supports D3D11 and D3D12. It has been developed and tested with **Baldur's Gate 3 in DX11 mode using DLSS**, where the scene is rendered below the swapchain resolution and later composed with fog and UI.
+The **Auto scene colour** path supports D3D11 and has been developed and runtime-validated with **Baldur's Gate 3 in DX11 mode using DLSS**, where the scene is rendered below the swapchain resolution and later composed with fog and UI. A D3D12 path is available but remains experimental and has not received equivalent runtime validation. Auto scene colour does not currently support Vulkan.
 
 ## Installation
 
@@ -85,7 +85,7 @@ In this mode REST:
 
 This is why effects such as AO can remain **under the UI** while still using their normal full-resolution intermediate textures.
 
-Auto mode intentionally ignores stale manual render-target index, SRV slot/binding, swapchain-match and alpha-preservation settings. You do not need to choose a shader stage, SRV slot or descriptor binding.
+Auto mode intentionally ignores manual render-target index, SRV slot/binding, swapchain-match and alpha-preservation settings while it is active. Those manual settings are preserved unchanged underneath Auto mode and become effective again when Auto is disabled. You do not need to choose a shader stage, SRV slot or descriptor binding.
 
 The group editor reports the live **scene resolution**, **effect resolution**, technique order and render status to make validation easier.
 
