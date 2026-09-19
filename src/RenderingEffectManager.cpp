@@ -152,7 +152,7 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
                                                        &nativeStageRTVSRGB,
                                                        &nativeStageSRV);
 
-            if (nativeStageRes == 0 || nativeStageRTV == 0 || nativeStageSRV == 0 || view->srv == 0) {
+            if (nativeStageRes == 0 || nativeStageRTV == 0 || nativeStageSRV == 0 || view->srv == 0 || view->rtv == 0) {
                 continue;
             }
 
