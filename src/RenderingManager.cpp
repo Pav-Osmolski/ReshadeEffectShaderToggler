@@ -163,7 +163,7 @@ const ResourceViewData RenderingManager::GetCurrentResourceView(command_list* cm
         resource rs = device->get_resource_from_view(rtvs[0]);
         if (rs != 0) {
             resource_desc desc = device->get_resource_desc(rs);
-            resource_view_desc v_desc = device->get_resource_view_desc(rtvs[index]);
+            resource_view_desc v_desc = device->get_resource_view_desc(rtvs[0]);
 
             if (ValidFormat(deviceData.current_runtime, desc, group->getMatchSwapchainResolution())) {
                 active_data.resource = rs;
