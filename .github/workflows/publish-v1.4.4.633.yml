@@ -1,0 +1,145 @@
+name: Publish v1.4.4.633
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/publish-v1.4.4.633.yml
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: windows-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout release source
+        uses: actions/checkout@v7
+        with:
+          ref: 18f3ea9857285b630424805597b78c95135b7248
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Validate release source
+        shell: pwsh
+        run: |
+          $match = Select-String -Path "./src/version.h" -Pattern 'REST_VERSION_STRING "([^"]+)"'
+          if (-not $match.Matches.Success) { throw "Could not read REST_VERSION_STRING." }
+          if ($match.Matches[0].Groups[1].Value -ne "1.4.4.633") { throw "Unexpected release version." }
+          if (-not (Select-String -Path "./README.md" -Pattern "DeViLhoOD" -Quiet)) { throw "README credit for DeViLhoOD is missing." }
+
+      - name: Ensure release tag
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $repo = "${{ github.repository }}"
+          $tag = "v1.4.4.633"
+          $sha = "18f3ea9857285b630424805597b78c95135b7248"
+          $existingJson = gh api "repos/$repo/git/ref/tags/$tag" 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            $existing = $existingJson | ConvertFrom-Json
+            if ($existing.object.sha -ne $sha) { throw "Existing tag $tag points to $($existing.object.sha), expected $sha." }
+          } else {
+            gh api --method POST "repos/$repo/git/refs" -f ref="refs/tags/$tag" -f sha="$sha"
+            if ($LASTEXITCODE -ne 0) { throw "Failed to create release tag $tag." }
+          }
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v3
+
+      - name: Build x64
+        run: msbuild /m /property:Platform=x64 /p:Configuration=Release src/ReshadeEffectShaderToggler.sln
+
+      - name: Build x86
+        run: msbuild /m /property:Platform=x86 /p:Configuration=Release src/ReshadeEffectShaderToggler.sln
+
+      - name: Validate x86/x64 binaries
+        shell: pwsh
+        run: |
+          $x86 = "src/Win32/Release/ReshadeEffectShaderToggler.addon32"
+          $x64 = "src/x64/Release/ReshadeEffectShaderToggler.addon64"
+
+          function Get-PeMachine([string]$Path) {
+            $stream = [System.IO.File]::OpenRead($Path)
+            try {
+              $reader = [System.IO.BinaryReader]::new($stream)
+              $stream.Position = 0x3c
+              $peOffset = $reader.ReadInt32()
+              $stream.Position = $peOffset
+              if ($reader.ReadUInt32() -ne 0x00004550) { throw "$Path does not contain a valid PE signature." }
+              return $reader.ReadUInt16()
+            }
+            finally { $stream.Dispose() }
+          }
+
+          if ((Get-PeMachine $x86) -ne 0x014c) { throw "addon32 is not an i386/PE32 binary." }
+          if ((Get-PeMachine $x64) -ne 0x8664) { throw "addon64 is not an AMD64/PE32+ binary." }
+
+          $match = Select-String -Path "./src/version.h" -Pattern 'REST_VERSION_STRING "([^"]+)"'
+          $version = $match.Matches[0].Groups[1].Value
+
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vsPath = (& $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath)
+          $dumpbin = Get-ChildItem "$vsPath\VC\Tools\MSVC\*\bin\Hostx64\x64\dumpbin.exe" |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1 -ExpandProperty FullName
+          if (-not $dumpbin) { throw "Could not locate dumpbin.exe." }
+
+          foreach ($binary in @($x86, $x64)) {
+            $fileVersion = (Get-Item $binary).VersionInfo.FileVersion
+            if ($fileVersion -ne $version) { throw "$binary reports version $fileVersion; expected $version." }
+            $exports = (& $dumpbin /nologo /exports $binary | Out-String)
+            foreach ($requiredExport in @("NAME", "DESCRIPTION")) {
+              if ($exports -notmatch "(?i)\b$requiredExport\b") { throw "$binary is missing required export $requiredExport." }
+            }
+          }
+
+      - name: Package release
+        shell: pwsh
+        run: |
+          $paths = @(
+            "src/x64/Release/ReshadeEffectShaderToggler.addon64",
+            "src/Win32/Release/ReshadeEffectShaderToggler.addon32",
+            "LICENSE",
+            "README.md",
+            "Shaders",
+            "docs"
+          )
+          Compress-Archive -Path $paths -DestinationPath "release.zip" -Force
+          $hash = (Get-FileHash "release.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  release.zip" | Out-File -FilePath "SHA256SUMS.txt" -Encoding ascii
+
+      - name: Write release notes
+        shell: pwsh
+        run: |
+          @'
+          Corrected hardening release following v1.4.3.633.
+
+          ## Fixes and hardening
+
+          - Excludes the legacy FFXIV constant-copy hook from Win32 builds because its signatures target 64-bit game code.
+          - Removes the FFXIV copy option from the x86 configuration resolver/UI.
+          - Treats REST Release compiler warnings as errors on both x86 and x64.
+          - Narrows the third-party sigmatch C4244 suppression to the include boundary.
+          - Retains the same shared D3D10/D3D11/D3D12 Automatic Scene Colour path on x86 and x64.
+          - Preserves the v1.4.3.633 Auto Scene Colour behaviour and BG3 DX11 + DLSS validation baseline.
+
+          This release corrects the architecture-hardening gap identified immediately after v1.4.3.633. The Auto Scene Colour rendering path itself was not affected.
+
+          Improvements by **DeViLhoOD**.
+          '@ | Set-Content -Path "release-notes.md" -Encoding utf8
+
+      - name: Publish release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $repo = "${{ github.repository }}"
+          $tag = "v1.4.4.633"
+          gh release view "$tag" --repo "$repo" *> $null
+          if ($LASTEXITCODE -eq 0) { throw "Release $tag already exists; refusing to overwrite it." }
+          gh release create "$tag" "release.zip" "SHA256SUMS.txt" --repo "$repo" --verify-tag --title "$tag" --notes-file "release-notes.md"
