@@ -28,10 +28,11 @@ void RenderingQueueManager::_CheckCallForCommandList(ShaderData& sData,
     if (sData.blockedShaderGroups != nullptr) {
         for (auto group : *sData.blockedShaderGroups) {
             if (group->isActive()) {
+                const device_api runtimeApi =
+                  deviceData.current_runtime != nullptr ? deviceData.current_runtime->get_device()->get_api() : device_api::d3d9;
                 const bool autoSceneColour =
                   group->getAutoRenderSRV() &&
-                  deviceData.current_runtime != nullptr &&
-                  deviceData.current_runtime->get_device()->get_api() == device_api::d3d12;
+                  (runtimeApi == device_api::d3d11 || runtimeApi == device_api::d3d12);
                 if (group->getExtractConstants() && !deviceData.constantsUpdated.contains(group)) {
                     if (!sData.constantBuffersToUpdate.contains(group)) {
                         sData.constantBuffersToUpdate.emplace(group);
