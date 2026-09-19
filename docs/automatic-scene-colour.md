@@ -1,6 +1,6 @@
 # Automatic Scene Colour
 
-Automatic Scene Colour is a D3D11/D3D12 rendering mode for REST groups that need to apply ReShade effects to the live scene before later game passes such as fog or UI, while still allowing those effects to execute at the normal ReShade runtime resolution.
+Automatic Scene Colour is a rendering mode for REST groups that need to apply ReShade effects to the live scene before later game passes such as fog or UI, while still allowing those effects to execute at the normal ReShade runtime resolution. D3D11 is the primary validated implementation; a D3D12 path is available but remains experimental.
 
 It was developed and validated against **Baldur's Gate 3 in DX11 mode with DLSS enabled**.
 
@@ -41,7 +41,7 @@ The result is part of the scene before the later game passes are composited.
 
 Auto mode deliberately does not use the old manual SRV-selection path.
 
-The following manual settings do not control Auto mode:
+The following manual settings do not control Auto mode while it is active:
 
 - render-target index;
 - SRV shader stage;
@@ -49,6 +49,8 @@ The following manual settings do not control Auto mode:
 - SRV descriptor/binding;
 - manual swapchain matching mode;
 - preserve-target-alpha.
+
+These settings are not overwritten by Auto mode. They remain saved with the group and become active again if Auto scene colour is disabled.
 
 The implementation always uses the primary live colour RTV and aspect-ratio matching.
 
@@ -136,7 +138,8 @@ The selected ReShade techniques also execute at the native runtime resolution ra
 
 ## Current scope
 
-- Auto Scene Colour is currently exposed for **D3D11 and D3D12**.
+- **D3D11 is the validated path.** Baldur's Gate 3 DX11 + DLSS is the primary runtime-tested configuration.
+- A D3D12 path is available but is currently experimental and should not be treated as equivalent to the validated BG3 DX11 path.
+- Vulkan is not currently supported by Auto Scene Colour. If an INI contains Auto enabled on an unsupported API, REST falls back to the saved manual render-target configuration without deleting the Auto preference.
 - The implementation targets the **primary colour RTV (slot 0)**.
 - It is intended for scene-colour injection around a user-selected shader boundary, not as a general replacement for ReShade's depth-buffer detection.
-- Baldur's Gate 3 DX11 + DLSS is the primary validated configuration. Other D3D11/D3D12 games may use different render-target layouts and should be tested individually.
