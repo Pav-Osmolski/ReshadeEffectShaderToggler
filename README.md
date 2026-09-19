@@ -60,7 +60,7 @@ The saved configuration is written to `ReshadeEffectShaderToggler.ini` beside th
 - **Delete** requires confirmation and is not written to disk until **Save changes** is used.
 - Each group shows compact pixel/vertex/compute shader counts, selected-effect count and an **Auto Scene Colour** indicator when enabled.
 - REST warns when group hotkeys conflict with another group or with a configured REST action.
-- The **Saved / Unsaved changes** indicator reflects the configuration that would be written to disk, while ordinary runtime Active toggles do not create false dirty-state warnings.
+- The **Saved / Unsaved changes** indicator reflects the configuration that would be written to disk, including the group's persisted Active state.
 
 ## Configuring effects
 
