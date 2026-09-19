@@ -55,9 +55,6 @@ ToggleGroup::ToggleGroup(string name, int id) {
     _preserveAlpha = false;
     _renderToResourceViews = false;
     _autoRenderSRV = false;
-    _autoRenderSRVSelectionValid = false;
-    _autoRenderSRVCandidateIndex = 0;
-    _autoRenderSRVCandidateCount = 0;
     _cbCycle = CYCLE_NONE;
     _srvCycle = CYCLE_NONE;
     _rtCycle = CYCLE_NONE;
@@ -145,9 +142,6 @@ ToggleGroup::ToggleGroup(const ToggleGroup& other)
     _rtCycle = other._rtCycle;
     _renderToResourceViews = other._renderToResourceViews;
     _autoRenderSRV = other._autoRenderSRV;
-    _autoRenderSRVSelectionValid = false;
-    _autoRenderSRVCandidateIndex = other._autoRenderSRVCandidateIndex;
-    _autoRenderSRVCandidateCount = 0;
     _renderSrvDescIndex = other._renderSrvDescIndex;
     _renderSrvShaderStage = other._renderSrvShaderStage;
     _renderSrvSlotIndex = other._renderSrvSlotIndex;
@@ -505,11 +499,6 @@ void ToggleGroup::loadState(CDataFile& iniFile, int groupCounter) {
 
     _renderToResourceViews = iniFile.GetBoolOrDefault("RenderToSRVs", sectionRoot, false);
     _autoRenderSRV = iniFile.GetBoolOrDefault("AutoRenderSRV", sectionRoot, false);
-    _autoRenderSRVSelectionValid = false;
-    _autoRenderSRVSelectionPinned = false;
-    _autoRenderSRVManualCandidatePending = false;
-    _autoRenderSRVCandidateIndex = 0;
-    _autoRenderSRVCandidateCount = 0;
 
     uint32_t renderSrvSlotIndex = iniFile.GetUInt("RenderSRVPipelineSlot", sectionRoot);
     if (renderSrvSlotIndex != UINT_MAX) {
