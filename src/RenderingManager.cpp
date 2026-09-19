@@ -157,7 +157,10 @@ const ResourceViewData RenderingManager::GetCurrentResourceView(command_list* cm
     // Automatic scene colour targets the primary live render target bound at the
     // matched draw. This keeps the effect on the scene that subsequent game passes
     // actually consume instead of relying on descriptor/SRV discovery.
-    if (action & (MATCH_EFFECT | MATCH_PREVIEW) && group->getAutoRenderSRV() && !rtvs.empty() && rtvs[0] != 0) {
+    if (action & (MATCH_EFFECT | MATCH_PREVIEW) &&
+        group->getAutoRenderSRV() &&
+        device->get_api() == device_api::d3d12 &&
+        !rtvs.empty() && rtvs[0] != 0) {
         // Automatic mode always targets the primary live colour RTV. Do not inherit
         // a stale manual render-target index from the group configuration.
         resource rs = device->get_resource_from_view(rtvs[0]);
