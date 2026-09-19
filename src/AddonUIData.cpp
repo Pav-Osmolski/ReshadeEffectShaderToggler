@@ -335,8 +335,6 @@ void AddonUIData::LoadShaderTogglerIniFile(const string& fileName)
             _computeShaderHashToToggleGroups[h].push_back(&group);
         }
     }
-}
-
 
     _savedConfigSignature = BuildConfigSignature();
 }
