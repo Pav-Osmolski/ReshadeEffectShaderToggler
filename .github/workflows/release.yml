@@ -1,55 +1,65 @@
-# This workflow uses actions that are not certified by GitHub.
-# They are provided by a third-party and are governed by
-# separate terms of service, privacy policy, and support
-# documentation.
-
 name: Release
 
-on: 
+on:
   push:
     tags:
-    - '*'
-    
-env:
-  # Path to the solution file relative to the root of the project.
-  SOLUTION_FILE_PATH: src/ReshadeEffectShaderToggler.sln
+      - "v*.*.*.*"
 
-  # Configuration type to build.
-  # You can convert this to a build matrix if you need coverage of multiple configuration types.
-  # https://docs.github.com/actions/learn-github-actions/managing-complex-workflows#using-a-build-matrix
+env:
+  SOLUTION_FILE_PATH: src/ReshadeEffectShaderToggler.sln
   BUILD_CONFIGURATION: Release
 
 permissions:
   contents: write
 
 jobs:
-  build:
+  release:
     runs-on: windows-latest
+    timeout-minutes: 20
 
     steps:
-    - uses: actions/checkout@v3
-      with:
-        submodules: 'recursive'
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
 
-    - name: Add MSBuild to PATH
-      uses: microsoft/setup-msbuild@v1.0.2
+      - name: Validate tag and stamp version
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if ($tag -notmatch '^v\d+\.\d+\.\d+\.\d+$') {
+            throw "Release tags must use vMAJOR.MINOR.PATCH.RESHADE format, for example v1.4.0.633."
+          }
+          ./src/set_release_version.ps1 $tag
+          Get-Content ./src/version.h
 
-    - name: Build x64
-      working-directory: ${{env.GITHUB_WORKSPACE}}
-      run: msbuild /m /property:Platform=x64 /p:Configuration=${{env.BUILD_CONFIGURATION}} ${{env.SOLUTION_FILE_PATH}}
-    - name: Build x86
-      working-directory: ${{env.GITHUB_WORKSPACE}}
-      run: msbuild /m /property:Platform=x86 /p:Configuration=${{env.BUILD_CONFIGURATION}} ${{env.SOLUTION_FILE_PATH}}
-      
-    - name: Archive Release
-      uses: vimtor/action-zip@v1.1
-      with:
-        files: src/x64/Release/ReshadeEffectShaderToggler.addon64 src/Win32/Release/ReshadeEffectShaderToggler.addon32 LICENSE README.md Shaders/
-        recursive: true
-        dest: release.zip
-        
-    - name: Release
-      uses: ncipollo/release-action@v1.12.0
-      with:
-        artifacts: "release.zip"
-        generateReleaseNotes: 'true'
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build x64
+        run: msbuild /m /property:Platform=x64 /p:Configuration=${{ env.BUILD_CONFIGURATION }} ${{ env.SOLUTION_FILE_PATH }}
+
+      - name: Build x86
+        run: msbuild /m /property:Platform=x86 /p:Configuration=${{ env.BUILD_CONFIGURATION }} ${{ env.SOLUTION_FILE_PATH }}
+
+      - name: Package release
+        shell: pwsh
+        run: |
+          $paths = @(
+            "src/x64/Release/ReshadeEffectShaderToggler.addon64",
+            "src/Win32/Release/ReshadeEffectShaderToggler.addon32",
+            "LICENSE",
+            "README.md",
+            "Shaders",
+            "docs"
+          )
+          Compress-Archive -Path $paths -DestinationPath "release.zip" -Force
+          $hash = (Get-FileHash "release.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  release.zip" | Out-File -FilePath "SHA256SUMS.txt" -Encoding ascii
+
+      - name: Publish GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${{ github.ref_name }}" "release.zip" "SHA256SUMS.txt" --verify-tag --title "${{ github.ref_name }}" --generate-notes
