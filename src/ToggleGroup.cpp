@@ -185,7 +185,7 @@ std::string ToggleGroup::configurationSignature() const {
         ss << ';';
     };
 
-    ss << _name.size() << ':' << _name << ';' << _keybind << ';';
+    ss << _name.size() << ':' << _name << ';' << _keybind << ';' << _isActive << ';';
     appendUIntSet(_vertexShaderHashes);
     appendUIntSet(_pixelShaderHashes);
     appendUIntSet(_computeShaderHashes);
