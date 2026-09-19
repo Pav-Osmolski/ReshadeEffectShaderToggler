@@ -381,7 +381,7 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
                 // Automatic scene colour is intended for dynamic-resolution/upscaled
                 // render targets (DLSS/FSR/XeSS), so match by aspect ratio rather than
                 // requiring the live scene to equal the swapchain resolution.
-                selectedSwapchainMatchMode = SWAPCHAIN_MATCH_MODE_ASPECT_RATIO;
+                selectedSwapchainMatchMode = ShaderToggler::SWAPCHAIN_MATCH_MODE_ASPECT_RATIO;
                 typesSelectedSwapchainMatchMode = swapchainMatchOptions[selectedSwapchainMatchMode];
                 preserveAlpha = false;
             }
