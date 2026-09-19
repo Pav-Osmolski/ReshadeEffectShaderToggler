@@ -1201,9 +1201,21 @@ static void CheckHotkeys(AddonImGui::AddonUIData& instance, reshade::api::effect
     if (*instance.ActiveCollectorFrameCounter() > 0)
         --(*instance.ActiveCollectorFrameCounter());
 
+    auto pressedKeys = [&](uint32_t keys) {
+        if (keys == 0 || !ShaderToggler::areKeysPressed(keys, runtime))
+            return false;
+
+        const bool wantsCtrl = ((keys >> 8) & 0xFF) != 0;
+        const bool wantsShift = ((keys >> 16) & 0xFF) != 0;
+        const bool wantsAlt = ((keys >> 24) & 0xFF) != 0;
+
+        return wantsCtrl == runtime->is_key_down(VK_CONTROL) &&
+               wantsShift == runtime->is_key_down(VK_SHIFT) &&
+               wantsAlt == runtime->is_key_down(VK_MENU);
+    };
+
     auto pressed = [&](AddonImGui::Keybind binding) {
-        const uint32_t keys = instance.GetKeybinding(binding);
-        return keys != 0 && ShaderToggler::areKeysPressed(keys, runtime);
+        return pressedKeys(instance.GetKeybinding(binding));
     };
 
     auto handleHunting = [&](ShaderToggler::ShaderManager* manager,
@@ -1263,9 +1275,12 @@ static void CheckHotkeys(AddonImGui::AddonUIData& instance, reshade::api::effect
         return;
     }
 
+    if (ImGui::GetCurrentContext() != nullptr && ImGui::GetIO().WantTextInput)
+        return;
+
     for (auto& [_, group] : instance.GetToggleGroups()) {
         const uint32_t toggleKey = group.getToggleKey();
-        if (toggleKey == 0 || !ShaderToggler::areKeysPressed(toggleKey, runtime))
+        if (!pressedKeys(toggleKey))
             continue;
 
         group.toggleActive();
