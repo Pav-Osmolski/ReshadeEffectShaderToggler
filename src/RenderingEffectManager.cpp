@@ -105,9 +105,7 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
         runtime->get_screenshot_width_and_height(&runtimeWidth, &runtimeHeight);
 
         const device_api deviceApi = cmd_list->get_device()->get_api();
-        const bool autoSceneColour =
-          group->getAutoRenderSRV() &&
-          ShaderToggler::IsAutoSceneColourSupported(deviceApi);
+        const bool autoSceneColour = group->isAutoSceneColourActive(deviceApi);
         const bool preserveTargetAlpha = group->getPreserveAlpha() && !autoSceneColour;
         const bool wantsNativeStaging =
           autoSceneColour &&
@@ -175,7 +173,7 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
         }
 
         const bool transitionManualSRV =
-          !group->getAutoRenderSRV() && group->getRenderToResourceViews() &&
+          !autoSceneColour && group->getRenderToResourceViews() &&
           cmd_list->get_device()->get_api() == device_api::d3d12 &&
           !useNativeStaging;
 
