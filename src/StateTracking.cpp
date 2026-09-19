@@ -197,10 +197,6 @@ void state_block::clear() {
     current_pipeline.fill(pipeline{ 0 });
     current_pipeline_stage.fill(static_cast<pipeline_stage>(0));
     resource_barrier_track.clear();
-    barrier_serial = 0;
-    barrier_history.clear();
-    render_target_bind_serial = 0;
-    render_target_history.clear();
 }
 
 void state_block::clear_present(effect_runtime* runtime) {
@@ -251,20 +247,6 @@ static void on_bind_render_targets_and_depth_stencil(command_list* cmd_list, uin
     auto& state = cmd_list->get_private_data<state_tracking>();
     state.render_targets.assign(rtvs, rtvs + count);
     state.depth_stencil = dsv;
-
-    ++state.render_target_bind_serial;
-    device* device = cmd_list->get_device();
-    if (device != nullptr) {
-        for (uint32_t i = 0; i < count; ++i) {
-            if (rtvs[i] == 0)
-                continue;
-
-            resource res = device->get_resource_from_view(rtvs[i]);
-            if (res != 0) {
-                state.render_target_history[res.handle] = { state.render_target_bind_serial, i };
-            }
-        }
-    }
 }
 
 static void on_bind_pipeline(command_list* cmd_list, pipeline_stage stages, pipeline pipeline) {
@@ -658,15 +640,14 @@ reshade::api::resource_usage state_block::stop_resource_barrier_tracking(reshade
 }
 
 static void on_barrier(command_list* cmd_list, uint32_t count, const resource* resources, const resource_usage* old_states, const resource_usage* new_states) {
-    auto& state = cmd_list->get_private_data<state_tracking>();
+    auto& barrier_track = cmd_list->get_private_data<state_tracking>().resource_barrier_track;
+    if (barrier_track.size() > 0) {
+        for (uint32_t i = 0; i < count; i++) {
+            const auto& restrack = barrier_track.find(resources[i].handle);
 
-    for (uint32_t i = 0; i < count; i++) {
-        ++state.barrier_serial;
-        state.barrier_history[resources[i].handle] = { state.barrier_serial, old_states[i], new_states[i] };
-
-        const auto restrack = state.resource_barrier_track.find(resources[i].handle);
-        if (restrack != state.resource_barrier_track.end()) {
-            restrack->second.usage = new_states[i];
+            if (restrack != barrier_track.end()) {
+                restrack->second.usage = new_states[i];
+            }
         }
     }
 }
@@ -680,6 +661,10 @@ static void on_destroy_device(device* device) {
 }
 
 void state_tracking::register_events(bool track) {
+    // Descriptor table tracking is not required for automatic live render-target injection.
+    // Keep the original REST behaviour here.
+    track = false;
+
     track_descriptors = track;
     descriptor_tracking::register_events(track);
 
