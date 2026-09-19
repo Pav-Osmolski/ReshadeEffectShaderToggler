@@ -29,7 +29,7 @@ jobs:
         run: |
           $tag = "${{ github.ref_name }}"
           if ($tag -notmatch '^v\d+\.\d+\.\d+\.\d+$') {
-            throw "Release tags must use vMAJOR.MINOR.PATCH.RESHADE format, for example v1.4.2.633."
+            throw "Release tags must use vMAJOR.MINOR.PATCH.RESHADE format, for example v1.4.3.633."
           }
 
           $match = Select-String -Path "./src/version.h" -Pattern 'REST_VERSION_STRING "([^"]+)"'
