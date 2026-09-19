@@ -377,6 +377,15 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
             if (!autoSceneColourSupported)
                 autoSceneColour = false;
 
+            if (autoSceneColour) {
+                // Automatic scene colour is intended for dynamic-resolution/upscaled
+                // render targets (DLSS/FSR/XeSS), so match by aspect ratio rather than
+                // requiring the live scene to equal the swapchain resolution.
+                selectedSwapchainMatchMode = SWAPCHAIN_MATCH_MODE_ASPECT_RATIO;
+                typesSelectedSwapchainMatchMode = swapchainMatchOptions[selectedSwapchainMatchMode];
+                preserveAlpha = false;
+            }
+
             ImGui::TableNextRow();
 
             if (autoSceneColour) {
@@ -565,13 +574,22 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
             ImGui::TableNextColumn();
             ImGui::Text("Preserve target alpha channel");
             ImGui::TableNextColumn();
+            if (autoSceneColour)
+                ImGui::BeginDisabled();
             ImGui::Checkbox("##preserveAlpha", &preserveAlpha);
+            if (autoSceneColour) {
+                ImGui::EndDisabled();
+                ImGui::SameLine();
+                ImGui::TextDisabled("disabled with native staging");
+            }
 
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
             ImGui::Text("Match swapchain");
             ImGui::TableNextColumn();
-            if (ImGui::BeginCombo("##effSwapChainMatchMode", typesSelectedSwapchainMatchMode, ImGuiComboFlags_None)) {
+            if (autoSceneColour) {
+                ImGui::TextUnformatted("ASPECT RATIO (automatic)");
+            } else if (ImGui::BeginCombo("##effSwapChainMatchMode", typesSelectedSwapchainMatchMode, ImGuiComboFlags_None)) {
                 for (int n = 0; n < IM_ARRAYSIZE(swapchainMatchOptions); n++) {
                     const bool is_selected = (typesSelectedSwapchainMatchMode == swapchainMatchOptions[n]);
                     if (ImGui::Selectable(swapchainMatchOptions[n], is_selected)) {
