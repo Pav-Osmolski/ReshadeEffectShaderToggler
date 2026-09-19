@@ -122,7 +122,7 @@ A normal pull request to `main` runs the full build. Tagged releases use the for
 
 For example:
 
-`v1.4.1.633`
+`v1.4.2.633`
 
 See [Release Process](docs/RELEASING.md) for the release checklist and packaging details.
 
