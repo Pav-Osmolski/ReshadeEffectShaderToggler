@@ -52,6 +52,11 @@ enum SwapChainMatchMode : uint32_t {
     SWAPCHAIN_MATCH_MODE_NONE = 3
 };
 
+inline bool IsAutoSceneColourSupported(reshade::api::device_api api) {
+    return api == reshade::api::device_api::d3d11 ||
+           api == reshade::api::device_api::d3d12;
+}
+
 enum class GroupResourceType : uint32_t { RESOURCE_ALPHA = 0, RESOURCE_BINDING = 1, RESOURCE_CONSTANTS_COPY = 2, RESOURCE_NATIVE_STAGING = 3 };
 
 enum class GroupResourceState : uint32_t {
