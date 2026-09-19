@@ -1,4 +1,4 @@
-name: Tag v1.4.1.633
+name: Publish v1.4.1.633
 
 on:
   push:
@@ -11,11 +11,52 @@ permissions:
   contents: write
 
 jobs:
-  tag:
-    runs-on: ubuntu-latest
+  publish:
+    runs-on: windows-latest
+    timeout-minutes: 25
     steps:
-      - name: Create release tag
+      - name: Checkout release source
+        uses: actions/checkout@v7
+        with:
+          ref: 2c2d3fa53a67240057acfcfb7dddfe0891487e24
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Validate release source
+        shell: pwsh
+        run: |
+          $match = Select-String -Path "./src/version.h" -Pattern 'REST_VERSION_STRING "([^"]+)"'
+          if (-not $match.Matches.Success) { throw "Could not read REST_VERSION_STRING." }
+          if ($match.Matches[0].Groups[1].Value -ne "1.4.1.633") { throw "Unexpected release version." }
+          if (-not (Select-String -Path "./README.md" -Pattern "DeViLhoOD" -Quiet)) { throw "README credit for DeViLhoOD is missing." }
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v3
+
+      - name: Build x64
+        run: msbuild /m /property:Platform=x64 /p:Configuration=Release src/ReshadeEffectShaderToggler.sln
+
+      - name: Build x86
+        run: msbuild /m /property:Platform=x86 /p:Configuration=Release src/ReshadeEffectShaderToggler.sln
+
+      - name: Package release
+        shell: pwsh
+        run: |
+          $paths = @(
+            "src/x64/Release/ReshadeEffectShaderToggler.addon64",
+            "src/Win32/Release/ReshadeEffectShaderToggler.addon32",
+            "LICENSE",
+            "README.md",
+            "Shaders",
+            "docs"
+          )
+          Compress-Archive -Path $paths -DestinationPath "release.zip" -Force
+          $hash = (Get-FileHash "release.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  release.zip" | Out-File -FilePath "SHA256SUMS.txt" -Encoding ascii
+
+      - name: Publish release
+        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh api --method POST "repos/${{ github.repository }}/git/refs" -f ref="refs/tags/v1.4.1.633" -f sha="2c2d3fa53a67240057acfcfb7dddfe0891487e24"
+          gh release create "v1.4.1.633" "release.zip" "SHA256SUMS.txt" --repo "${{ github.repository }}" --target "2c2d3fa53a67240057acfcfb7dddfe0891487e24" --title "v1.4.1.633" --verify-tag --notes "Patch release: restores Auto Scene Colour support for DirectX 11, the renderer used by the validated Baldur's Gate 3 + DLSS configuration. v1.4.0.633 accidentally restricted the feature to D3D12 during release hardening, which disabled the checkbox in BG3 DX11. D3D11 and D3D12 are now supported. Documentation has been corrected accordingly. Improvements by DeViLhoOD."
