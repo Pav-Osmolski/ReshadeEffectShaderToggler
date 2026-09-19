@@ -14,16 +14,16 @@ The primary build target is 64-bit. A 32-bit build is also produced, but it is n
 - Render effects at configurable render-target boundaries.
 - Preview and inspect render targets while hunting shaders.
 - Extract and reuse constant-buffer or texture-binding data where supported.
-- **Automatic scene-colour injection for D3D12 games using DLSS or other dynamic-resolution/upscaling paths.**
+- **Automatic scene-colour injection for D3D11/D3D12 games using DLSS or other dynamic-resolution/upscaling paths.**
 - Preserve technique selections reliably across ReShade effect reloads and ordering changes.
 
 ## Compatibility
 
 REST requires a ReShade build with add-on support enabled.
 
-The existing render-target, shader-hunting and binding features remain API/game dependent. D3D12 and Vulkan behaviour outside the paths that have been specifically tested may vary by title.
+The existing render-target, shader-hunting and binding features remain API/game dependent. D3D11/D3D12 and Vulkan behaviour outside the paths that have been specifically tested may vary by title.
 
-The **Auto scene colour** path is currently a D3D12 feature. It has been developed and tested with **Baldur's Gate 3 using DLSS**, where the scene is rendered below the swapchain resolution and later composed with fog and UI.
+The **Auto scene colour** path currently supports D3D11 and D3D12. It has been developed and tested with **Baldur's Gate 3 in DX11 mode using DLSS**, where the scene is rendered below the swapchain resolution and later composed with fog and UI.
 
 ## Installation
 
@@ -68,7 +68,7 @@ Important behaviour:
 - Multi-pass effects must keep their required techniques enabled and in the correct ReShade order.
 - Technique selections are stored by name and preserved when ReShade reloads or reorders its effect list.
 
-## Automatic scene colour for D3D12 upscalers
+## Automatic scene colour for D3D11/D3D12 upscalers
 
 For games that render the scene below output resolution and upscale later, rendering a ReShade effect directly into the lower-resolution scene target can break multi-pass effects or produce incorrectly scaled output.
 
@@ -122,7 +122,7 @@ A normal pull request to `main` runs the full build. Tagged releases use the for
 
 For example:
 
-`v1.4.0.633`
+`v1.4.1.633`
 
 See [Release Process](docs/RELEASING.md) for the release checklist and packaging details.
 
