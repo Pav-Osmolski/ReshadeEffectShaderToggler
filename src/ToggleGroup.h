@@ -101,6 +101,8 @@ class ToggleGroup {
     ToggleGroup(std::string name, int Id);
     ToggleGroup();
     ToggleGroup(const ToggleGroup& other);
+    ToggleGroup cloneForNewId(int newId) const;
+    std::string configurationSignature() const;
 
     static int getNewGroupId();
 
