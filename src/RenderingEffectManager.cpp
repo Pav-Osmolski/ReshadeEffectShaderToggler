@@ -170,16 +170,14 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
             staging.state = GroupResourceState::RESOURCE_VALID;
         }
 
-        const bool transitionAutoSRV =
+        const bool transitionManualSRV =
           !group->getAutoRenderSRV() && group->getRenderToResourceViews() &&
           cmd_list->get_device()->get_api() == device_api::d3d12 &&
           !useNativeStaging;
 
-        // Auto scene-colour targets are discovered as SRVs at the matched game draw.
-        // D3D12 therefore has them in shader-resource state when REST temporarily renders
-        // the selected techniques into the same texture. Restore shader-resource state
-        // before the game's draw resumes so its original descriptor binding remains valid.
-        if (transitionAutoSRV) {
+        // Manual SRV rendering temporarily turns a shader-resource view into a
+        // render target, then restores its original state before the game resumes.
+        if (transitionManualSRV) {
             cmd_list->barrier(active_resource.resource, resource_usage::shader_resource, resource_usage::render_target);
         }
 
@@ -276,7 +274,7 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
             }
 
             cmd_list->barrier(nativeStageRes, resource_usage::shader_resource, resource_usage::render_target);
-        } else if (transitionAutoSRV) {
+        } else if (transitionManualSRV) {
             cmd_list->barrier(active_resource.resource, resource_usage::render_target, resource_usage::shader_resource);
         }
     }
