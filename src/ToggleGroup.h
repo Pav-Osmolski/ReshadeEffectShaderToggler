@@ -162,6 +162,9 @@ class ToggleGroup {
     void setRenderToResourceViews(bool render) { _renderToResourceViews = render; }
     bool getAutoRenderSRV() const { return _autoRenderSRV; }
     void setAutoRenderSRV(bool autoRender) { _autoRenderSRV = autoRender; }
+    bool isAutoSceneColourActive(reshade::api::device_api api) const {
+        return _autoRenderSRV && IsAutoSceneColourSupported(api);
+    }
 
     uint64_t getDebugEffectRenderCalls() const { return _debugEffectRenderCalls; }
     uint32_t getDebugLastRenderedTechniqueCount() const { return _debugLastRenderedTechniqueCount; }
