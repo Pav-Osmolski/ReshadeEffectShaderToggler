@@ -478,6 +478,23 @@ const ResourceViewData RenderingManager::GetCurrentResourceView(command_list* cm
         bindingRTindex = 0;
     }
 
+    // Automatic scene colour now targets the live render target bound at the
+    // matched draw. The SRV candidates discovered in BG3 are history/copy surfaces and
+    // are not causally consumed by the visible frame, while the bound RTV demonstrably is.
+    if (action & (MATCH_EFFECT | MATCH_PREVIEW) && group->getAutoRenderSRV() && rtvs.size() > 0 && rtvs[index] != 0) {
+        resource rs = device->get_resource_from_view(rtvs[index]);
+        if (rs != 0) {
+            resource_desc desc = device->get_resource_desc(rs);
+            resource_view_desc v_desc = device->get_resource_view_desc(rtvs[index]);
+
+            if (ValidFormat(deviceData.current_runtime, desc, group->getMatchSwapchainResolution())) {
+                active_data.resource = rs;
+                active_data.format = v_desc.format;
+                return active_data;
+            }
+        }
+    }
+
     // Only return SRVs in case of bindings
     if (action & MATCH_BINDING && group->getExtractResourceViews()) {
         uint32_t stageIndex = std::min(static_cast<uint32_t>(2), group->getSRVShaderStage());
