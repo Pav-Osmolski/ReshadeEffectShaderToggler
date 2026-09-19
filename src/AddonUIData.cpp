@@ -35,6 +35,7 @@
 #include "AddonUIData.h"
 #include "RenderingManager.h"
 #include <algorithm>
+#include <cfloat>
 #include <sstream>
 #include <vector>
 
@@ -214,7 +215,7 @@ std::string AddonUIData::BuildConfigSignature() const
        << _constHookType.size() << ':' << _constHookType << ';'
        << _constHookCopyType.size() << ':' << _constHookCopyType << ';'
        << _trackDescriptors << ';' << _preventRuntimeReload << ';'
-       << _startValueFramecountCollectionPhase << ';';
+       << _startValueFramecountCollectionPhase << ';' << _overlayOpacity << ';';
 
     for (uint32_t i = 0; i < ARRAYSIZE(KeybindNames); ++i)
         ss << _keyBindings[i] << ',';
@@ -270,6 +271,10 @@ void AddonUIData::LoadShaderTogglerIniFile(const string& fileName)
     }
 
     _trackDescriptors = iniFile.GetBoolOrDefault("TrackDescriptors", "General", true);
+
+    const float overlayOpacity = iniFile.GetFloat("OverlayOpacity", "General");
+    if (overlayOpacity != FLT_MIN)
+        _overlayOpacity = std::clamp(overlayOpacity, 0.0f, 1.0f);
 
     const int collectionFrames = iniFile.GetInt("ShaderCollectionFrames", "General");
     if (collectionFrames != INT_MIN)
@@ -358,6 +363,7 @@ void AddonUIData::SaveShaderTogglerIniFile(const string& fileName)
     iniFile.SetValue("ConstantBufferHookType", _constHookType, "", "General");
     iniFile.SetValue("ConstantBufferHookCopyType", _constHookCopyType, "", "General");
     iniFile.SetBool("TrackDescriptors", _trackDescriptors, "", "General");
+    iniFile.SetFloat("OverlayOpacity", _overlayOpacity, "", "General");
     iniFile.SetInt("ShaderCollectionFrames", _startValueFramecountCollectionPhase, "", "General");
     iniFile.SetBool("PreventRuntimeReload", _preventRuntimeReload, "", "General");
 
