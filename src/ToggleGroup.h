@@ -53,13 +53,15 @@ enum SwapChainMatchMode : uint32_t {
 };
 
 constexpr bool IsAutoSceneColourSupported(reshade::api::device_api api) {
-    return api == reshade::api::device_api::d3d11 ||
+    return api == reshade::api::device_api::d3d10 ||
+           api == reshade::api::device_api::d3d11 ||
            api == reshade::api::device_api::d3d12;
 }
 
+static_assert(IsAutoSceneColourSupported(reshade::api::device_api::d3d10));
 static_assert(IsAutoSceneColourSupported(reshade::api::device_api::d3d11));
 static_assert(IsAutoSceneColourSupported(reshade::api::device_api::d3d12));
-static_assert(!IsAutoSceneColourSupported(reshade::api::device_api::d3d10));
+static_assert(!IsAutoSceneColourSupported(reshade::api::device_api::d3d9));
 static_assert(!IsAutoSceneColourSupported(reshade::api::device_api::vulkan));
 
 enum class GroupResourceType : uint32_t { RESOURCE_ALPHA = 0, RESOURCE_BINDING = 1, RESOURCE_CONSTANTS_COPY = 2, RESOURCE_NATIVE_STAGING = 3 };
