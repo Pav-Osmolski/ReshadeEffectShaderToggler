@@ -73,7 +73,9 @@ CI must validate both release binaries after every x86/x64 build:
 - both export the required REST add-on metadata;
 - ReShade resource/resource-view handles remain 64-bit in both builds.
 
-The D3D10/D3D11/D3D12 Auto Scene Colour code path itself does not contain architecture-specific branches; API behaviour is supplied by the corresponding ReShade backend.
+The D3D10/D3D11/D3D12 Auto Scene Colour code path itself does not contain architecture-specific branches; API behaviour is supplied by the corresponding ReShade backend. REST Release builds treat compiler warnings as errors on both architectures.
+
+Legacy game-specific hooks may be architecture-specific. The FFXIV constant-copy hook is x64-only and is excluded from Win32 builds because its signatures target 64-bit game code.
 
 ## Creating a release
 
