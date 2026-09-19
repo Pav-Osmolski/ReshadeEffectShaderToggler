@@ -104,7 +104,9 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
         uint32_t runtimeWidth = 0, runtimeHeight = 0;
         runtime->get_screenshot_width_and_height(&runtimeWidth, &runtimeHeight);
 
-        const bool autoSceneColour = group->getAutoRenderSRV();
+        const bool autoSceneColour =
+          group->getAutoRenderSRV() &&
+          cmd_list->get_device()->get_api() == device_api::d3d12;
         const bool preserveTargetAlpha = group->getPreserveAlpha() && !autoSceneColour;
         const bool wantsNativeStaging =
           autoSceneColour &&
