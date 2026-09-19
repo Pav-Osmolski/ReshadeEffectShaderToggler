@@ -113,21 +113,6 @@ struct state_block {
 
     std::unordered_map<uint64_t, barrier_track> resource_barrier_track;
 
-    struct barrier_history_entry {
-        uint64_t serial = 0;
-        reshade::api::resource_usage old_usage = reshade::api::resource_usage::undefined;
-        reshade::api::resource_usage new_usage = reshade::api::resource_usage::undefined;
-    };
-    uint64_t barrier_serial = 0;
-    std::unordered_map<uint64_t, barrier_history_entry> barrier_history;
-
-    struct render_target_history_entry {
-        uint64_t bind_serial = 0;
-        uint32_t slot = 0;
-    };
-    uint64_t render_target_bind_serial = 0;
-    std::unordered_map<uint64_t, render_target_history_entry> render_target_history;
-
     IDirect3DStateBlock9* dx_state;
 };
 
