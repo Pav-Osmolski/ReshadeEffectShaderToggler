@@ -378,7 +378,7 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
                 ImGui::TextDisabled("(D3D10/D3D11/D3D12 only)");
             }
             if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-                ImGui::SetTooltip("D3D11 is validated with Baldur's Gate 3. D3D10 and D3D12 are available but experimental. Vulkan is not supported by Auto Scene Colour.");
+                ImGui::SetTooltip("Auto Scene Colour supports D3D10, D3D11 and D3D12. Baldur's Gate 3 DX11 + DLSS is the primary runtime regression reference. Vulkan is not supported.");
             }
 
             const bool autoSceneColourActive = autoSceneColour && autoSceneColourSupported;
@@ -399,11 +399,11 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
                 ImGui::Text("Graphics API");
                 ImGui::TableNextColumn();
                 if (deviceApi == reshade::api::device_api::d3d10)
-                    ImGui::TextUnformatted("D3D10 (experimental)");
+                    ImGui::TextUnformatted("D3D10");
                 else if (deviceApi == reshade::api::device_api::d3d11)
                     ImGui::TextUnformatted("D3D11 (BG3 validated)");
                 else
-                    ImGui::TextUnformatted("D3D12 (experimental)");
+                    ImGui::TextUnformatted("D3D12");
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
