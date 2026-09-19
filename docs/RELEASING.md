@@ -25,7 +25,7 @@ Before tagging a release:
 3. Confirm both **x64** and **x86** Release configurations build successfully.
 4. Check that `README.md` and files under `docs/` describe any user-visible changes.
 5. Confirm the default version in `src/version.h` matches the release you intend to tag.
-6. Test the x64 add-on in at least one representative configuration for the release's main feature.
+6. Runtime-test the add-on in at least one representative configuration for the release's main feature. For architecture/API changes, smoke-test both x64 and x86 in representative titles where available.
 7. For Automatic Scene Colour changes, run the BG3 DX11 regression matrix below before tagging a release.
 
 ### Automatic Scene Colour regression matrix
