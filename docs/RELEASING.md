@@ -10,7 +10,7 @@ Release tags must use:
 
 Example:
 
-`v1.4.2.633`
+`v1.4.3.633`
 
 The final component preserves the upstream convention used for the ReShade baseline.
 
@@ -59,13 +59,15 @@ The primary release gate is **Baldur's Gate 3 launched through `bg3_dx11.exe`**.
    - Auto Scene Colour must not activate on Vulkan.
    - A saved Auto preference must not suppress or overwrite the group's manual render-target configuration on an unsupported API.
 
-D3D12 may be smoke-tested separately, but it is currently experimental and is **not** a substitute for the BG3 DX11 release gate.
+D3D10 and D3D12 may be smoke-tested separately, but both are currently experimental and are **not** substitutes for the BG3 DX11 release gate.
+
+For D3D10 changes, additionally verify in a representative D3D10 title that Auto Scene Colour is clickable, the live scene/effect resolutions are reported correctly, native staging activates only when needed, and the effect remains at the intended shader boundary.
 
 ## Creating a release
 
 Create and push a tag from the desired `main` commit:
 
-`v1.4.2.633`
+`v1.4.3.633`
 
 The **Release** workflow will then:
 
