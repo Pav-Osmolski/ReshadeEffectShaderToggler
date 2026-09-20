@@ -237,7 +237,7 @@ class ToggleGroup {
         _debugCurrentFormat.clear();
         _debugCurrentShaderHash = 0;
         {
-            std::lock_guard lock(_debugHistoryMutex);
+            std::lock_guard lock(*_debugHistoryMutex);
             _debugAutoHistory.clear();
             _debugHistorySequence = 0;
         }
@@ -335,7 +335,7 @@ class ToggleGroup {
     void SetConfigDirtyFlag(std::atomic_bool* flag) { _configDirtyFlag = flag; }
     void setDebugCurrentShaderHash(uint32_t hash) { _debugCurrentShaderHash = hash; }
     std::vector<AutoDiagnosticEntry> getDebugAutoHistory() const {
-        std::lock_guard lock(_debugHistoryMutex);
+        std::lock_guard lock(*_debugHistoryMutex);
         return { _debugAutoHistory.begin(), _debugAutoHistory.end() };
     }
 
@@ -352,7 +352,7 @@ class ToggleGroup {
             _configDirtyFlag->store(true, std::memory_order_release);
     }
     void appendDebugHistory(const std::string& status, const std::string& boundary = {}) {
-        std::lock_guard lock(_debugHistoryMutex);
+        std::lock_guard lock(*_debugHistoryMutex);
         if (!_debugAutoHistory.empty()) {
             auto& last = _debugAutoHistory.back();
             if (last.status == status && last.shaderHash == _debugCurrentShaderHash &&
@@ -421,7 +421,7 @@ class ToggleGroup {
     uint32_t _debugCurrentSceneHeight = 0;
     std::string _debugCurrentFormat;
     uint32_t _debugCurrentShaderHash = 0;
-    mutable std::mutex _debugHistoryMutex;
+    mutable std::shared_ptr<std::mutex> _debugHistoryMutex = std::make_shared<std::mutex>();
     std::deque<AutoDiagnosticEntry> _debugAutoHistory;
     uint64_t _debugHistorySequence = 0;
     bool _extractConstants;
