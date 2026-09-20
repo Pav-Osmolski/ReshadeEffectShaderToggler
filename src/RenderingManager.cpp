@@ -243,6 +243,11 @@ const ResourceViewData RenderingManager::GetCurrentResourceView(command_list* cm
                 resource_view_desc v_desc = device->get_resource_view_desc(rtvs[0]);
                 const std::string formatName = FormatName(desc.texture.format);
 
+                const uint32_t currentShaderHash =
+                  layoutIndex == 0 ? commandListData.ps.activeShaderHash :
+                  layoutIndex == 1 ? commandListData.vs.activeShaderHash :
+                                     commandListData.cs.activeShaderHash;
+                group->setDebugCurrentShaderHash(currentShaderHash);
                 group->recordDebugAutoTarget(rs.handle, desc.texture.width, desc.texture.height, formatName);
 
                 if (!IsColorBuffer(desc.texture.format)) {
