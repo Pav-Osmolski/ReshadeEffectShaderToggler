@@ -232,7 +232,10 @@ static void DisplayTechniqueSelection(reshade::api::effect_runtime* runtime,
     instance.AssignPreferredGroupTechniques(runtimeData.allTechniques);
 }
 
-static void DrawPreview(unsigned long long textureId, uint32_t srcWidth, uint32_t srcHeight) {
+static void DrawPreview(unsigned long long textureId,
+                        uint32_t srcWidth,
+                        uint32_t srcHeight,
+                        ImVec4 tint = ImVec4(1.0f, 1.0f, 1.0f, 1.0f)) {
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
     float height = ImGui::GetWindowHeight();
     float width = ImGui::GetWindowWidth();
@@ -248,7 +251,7 @@ static void DrawPreview(unsigned long long textureId, uint32_t srcWidth, uint32_
     auto centralizedCursorpos = ImVec2((width - new_width) * 0.5f, (height - new_height) * 0.5f);
     ImGui::SetCursorPos(centralizedCursorpos);
 
-    ImGui::Image(textureId, ImVec2(new_width, new_height));
+    ImGui::Image(textureId, ImVec2(new_width, new_height), ImVec2(0, 0), ImVec2(1, 1), tint);
 
     ImGui::PopStyleVar();
 }
@@ -296,9 +299,26 @@ static void DisplayPreview(AddonImGui::AddonUIData& instance,
             ImGui::Separator();
         }
 
+        static int previewChannel = 0;
         if (srv != 0 && deviceData.huntPreview.matched) {
+            ImGui::TextDisabled("View");
+            ImGui::SameLine();
+            ImGui::RadioButton("RGB", &previewChannel, 0);
+            ImGui::SameLine();
+            ImGui::RadioButton("R", &previewChannel, 1);
+            ImGui::SameLine();
+            ImGui::RadioButton("G", &previewChannel, 2);
+            ImGui::SameLine();
+            ImGui::RadioButton("B", &previewChannel, 3);
+
+            const ImVec4 previewTint =
+              previewChannel == 1 ? ImVec4(1.0f, 0.0f, 0.0f, 1.0f) :
+              previewChannel == 2 ? ImVec4(0.0f, 1.0f, 0.0f, 1.0f) :
+              previewChannel == 3 ? ImVec4(0.0f, 0.0f, 1.0f, 1.0f) :
+                                    ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+
             if (ImGui::BeginChild("RTPreview##preview", { 0, 0 }, false, ImGuiWindowFlags_None)) {
-                DrawPreview(srv.handle, deviceData.huntPreview.width, deviceData.huntPreview.height);
+                DrawPreview(srv.handle, deviceData.huntPreview.width, deviceData.huntPreview.height, previewTint);
             }
             ImGui::EndChild();
         } else if (vulkan && ImGui::BeginChild("RTPreview##preview", { 0, 0 }, false, ImGuiWindowFlags_None)) {
