@@ -97,34 +97,21 @@ static void DisplayTechniqueSelection(reshade::api::effect_runtime* runtime,
                                       AddonImGui::AddonUIData& instance,
                                       ShaderToggler::ToggleGroup* group,
                                       float tblWidth = 0) {
-    if (group == nullptr) {
+    if (group == nullptr)
         return;
-    }
 
     RuntimeDataContainer& runtimeData = runtime->get_private_data<RuntimeDataContainer>();
-
-    std::unordered_set<std::string> curTechniques = group->preferredTechniques();
     static char searchBuf[256] = "\0";
-
-    // Take a stable snapshot of technique names. ReShade can rebuild allTechniques during
-    // effect reload/reorder events; iterating that unordered_map directly while also
-    // reconstructing the group's selection can otherwise silently drop selected entries.
-    std::vector<std::pair<std::string, bool>> availableTechniques;
-    {
-        std::shared_lock<std::shared_mutex> techLock(runtimeData.technique_mutex);
-        availableTechniques.reserve(runtimeData.allTechniques.size());
-        for (const auto& [name, effectData] : runtimeData.allTechniques) {
-            availableTechniques.emplace_back(name, effectData.enabled);
-        }
-    }
-
-    // unordered_map iteration order changes whenever ReShade rebuilds its technique list.
-    // Keep the UI deterministic so selections do not appear to jump around between reloads.
-    std::sort(availableTechniques.begin(), availableTechniques.end(),
-              [](const auto& lhs, const auto& rhs) { return lhs.first < rhs.first; });
 
     bool allowAll = group->getAllowAllTechniques();
     bool exceptions = group->getHasTechniqueExceptions();
+    bool selectionChanged = false;
+
+    size_t availableCount = 0;
+    {
+        std::shared_lock<std::shared_mutex> techLock(runtimeData.technique_mutex);
+        availableCount = runtimeData.techniqueUiCache.size();
+    }
 
     if (ImGui::BeginTable("Technique selection##options", 2, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoBordersInBody)) {
         ImGui::TableSetupColumn("##columnsetup", ImGuiTableColumnFlags_WidthFixed, tblWidth);
@@ -135,102 +122,92 @@ static void DisplayTechniqueSelection(reshade::api::effect_runtime* runtime,
         ImGui::Checkbox("##Catchalltechniques", &allowAll);
 
         ImGui::TableNextRow();
-
         if (allowAll) {
             ImGui::TableNextColumn();
             ImGui::Text("Except for selected techniques");
             ImGui::TableNextColumn();
             ImGui::Checkbox("##Exceptfor", &exceptions);
-
             ImGui::TableNextRow();
         }
 
         ImGui::TableNextColumn();
         ImGui::Text("Mode");
         ImGui::TableNextColumn();
-        if (!allowAll) {
+        if (!allowAll)
             ImGui::TextUnformatted("Only ticked enabled techniques are applied");
-        } else if (exceptions) {
+        else if (exceptions)
             ImGui::TextUnformatted("Ticked techniques are EXCLUDED");
-        } else {
+        else
             ImGui::TextUnformatted("All globally enabled techniques are applied");
-        }
 
         ImGui::TableNextRow();
-
         ImGui::TableNextColumn();
         ImGui::Text("Search");
         ImGui::TableNextColumn();
-        ImGui::InputText("##techniqueSearch", searchBuf, 256, ImGuiInputTextFlags_None);
+        ImGui::InputText("##techniqueSearch", searchBuf, IM_ARRAYSIZE(searchBuf));
 
         ImGui::TableNextRow();
-
         ImGui::TableNextColumn();
-        if (ImGui::Button("Untick all")) {
-            curTechniques.clear();
+        if (ImGui::Button("Untick all") && !group->preferredTechniques().empty()) {
+            const std::unordered_set<std::string> empty;
+            group->setPreferredTechniques(empty);
+            selectionChanged = true;
         }
         ImGui::TableNextColumn();
-        ImGui::Text("%zu selected / %zu available", curTechniques.size(), availableTechniques.size());
-
+        ImGui::Text("%zu selected / %zu available", group->preferredTechniques().size(), availableCount);
         ImGui::EndTable();
     }
 
     ImGui::Separator();
 
-    // Start from the group's existing selection rather than rebuilding from an empty set.
-    // This preserves selected names that are temporarily absent while ReShade reloads effects.
-    std::unordered_set<std::string> newTechniques = curTechniques;
-
-    if (allowAll && !exceptions) {
+    if (allowAll && !exceptions)
         ImGui::BeginDisabled();
-    }
 
-    if (ImGui::BeginTable("Technique selection##table", 3, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_ScrollY | ImGuiTableFlags_NoBordersInBody)) {
-        ImGui::TableSetupColumn("##columnsetupSelection", ImGuiTableColumnFlags_WidthFixed, tblWidth);
+    std::string searchUpper(searchBuf);
+    std::transform(searchUpper.begin(), searchUpper.end(), searchUpper.begin(),
+                   [](unsigned char ch) { return static_cast<char>(std::toupper(ch)); });
 
-        std::string searchString(searchBuf);
+    {
+        std::shared_lock<std::shared_mutex> techLock(runtimeData.technique_mutex);
+        if (ImGui::BeginTable("Technique selection##table", 3,
+                              ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_ScrollY | ImGuiTableFlags_NoBordersInBody)) {
+            ImGui::TableSetupColumn("##columnsetupSelection", ImGuiTableColumnFlags_WidthFixed, tblWidth);
 
-        for (const auto& [name, globallyEnabled] : availableTechniques) {
-            bool enabled = newTechniques.contains(name);
+            for (const auto& entry : runtimeData.techniqueUiCache) {
+                if (!searchUpper.empty() && entry.upperName.find(searchUpper) == std::string::npos)
+                    continue;
 
-            const bool visible =
-              std::ranges::search(name,
-                                  searchString,
-                                  [](const wchar_t lhs, const wchar_t rhs) { return lhs == rhs; },
-                                  std::towupper,
-                                  std::towupper)
-                .begin() != name.end();
-
-            if (visible) {
+                bool enabled = group->preferredTechniques().contains(entry.name);
                 ImGui::TableNextColumn();
-                if (ImGui::Checkbox(name.c_str(), &enabled)) {
-                    if (enabled) {
-                        newTechniques.insert(name);
-                    } else {
-                        newTechniques.erase(name);
-                    }
+                if (ImGui::Checkbox(entry.name.c_str(), &enabled)) {
+                    auto updated = group->preferredTechniques();
+                    if (enabled)
+                        updated.insert(entry.name);
+                    else
+                        updated.erase(entry.name);
+                    group->setPreferredTechniques(updated);
+                    selectionChanged = true;
                 }
-                if (!globallyEnabled) {
+
+                if (entry.effect != nullptr && !entry.effect->enabled) {
                     ImGui::SameLine();
                     ImGui::TextDisabled("(disabled in ReShade)");
                 }
             }
+            ImGui::EndTable();
         }
-
-        ImGui::EndTable();
     }
 
-    if (allowAll && !exceptions) {
+    if (allowAll && !exceptions)
         ImGui::EndDisabled();
-    }
 
     group->setHasTechniqueExceptions(exceptions);
     group->setAllowAllTechniques(allowAll);
-    group->setPreferredTechniques(newTechniques);
 
-    // Rebind saved names to the current EffectData instances using a stable map.
-    std::shared_lock<std::shared_mutex> techLock(runtimeData.technique_mutex);
-    instance.AssignPreferredGroupTechniques(runtimeData.allTechniques);
+    if (selectionChanged) {
+        std::shared_lock<std::shared_mutex> techLock(runtimeData.technique_mutex);
+        instance.AssignPreferredGroupTechniques(runtimeData.allTechniques);
+    }
 }
 
 static void DrawPreview(unsigned long long textureId,
