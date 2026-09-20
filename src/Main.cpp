@@ -684,7 +684,7 @@ static bool ShouldSuppressVulkanHuntedCall(command_list* cmd_list, uint64_t matc
         stage.constantBuffersToUpdate.clear();
         stage.techniquesToRender.clear();
         stage.srvToUpdate.clear();
-        stage.blockedShaderGroups = nullptr;
+        stage.blockedShaderGroups.clear();
     };
 
     // The entire draw/dispatch is suppressed, so discard queued REST work for
