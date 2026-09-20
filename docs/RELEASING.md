@@ -10,7 +10,7 @@ Release tags must use:
 
 Example:
 
-`v1.5.0.633`
+`v1.6.0.633`
 
 The final component preserves the upstream convention used for the ReShade baseline.
 
@@ -26,15 +26,16 @@ Before tagging a release:
 4. Check that `README.md` and files under `docs/` describe any user-visible changes.
 5. Confirm the default version in `src/version.h` matches the release you intend to tag.
 6. Runtime-test the add-on in at least one representative configuration for the release's main feature. For architecture/API changes, smoke-test both x64 and x86 in representative titles where available.
-7. For Automatic Scene Colour changes, run the BG3 DX11 regression matrix below before tagging a release.
+7. For Automatic Scene Colour changes, use the BG3 DX11 and Vulkan matrices below and record the actual coverage. Do not describe unrun configurations as passed.
+8. Add the version to `CHANGELOG.md` and write `docs/releases/<tag>.md`; the release workflow publishes that file as the release notes.
 
 ### Automatic Scene Colour regression matrix
 
-The primary release gate is **Baldur's Gate 3 launched through `bg3_dx11.exe`**. Do not substitute Vulkan or assume D3D12 represents the BG3 path.
+The D3D regression reference is **Baldur's Gate 3 launched through `bg3_dx11.exe`**. Vulkan testing is separate and does not establish D3D12 or DX11 runtime coverage.
 
 1. **DX11 + DLSS enabled**
    - Auto scene colour is clickable.
-   - The editor reports `D3D11 (BG3 validated)`.
+   - The editor reports `D3D11`.
    - The matched scene resolution follows the DLSS internal resolution.
    - The effect resolution follows the ReShade/output resolution and reports native staging when the dimensions differ.
    - A multi-pass chain such as `Lumenite_Kernel -> Lumenite_LSAO` updates every frame while the camera moves.
@@ -56,10 +57,50 @@ The primary release gate is **Baldur's Gate 3 launched through `bg3_dx11.exe`**.
    - Change DLSS/output resolution while Auto is active.
    - One matching frame may be skipped while native staging is recreated; subsequent frames must update normally.
 6. **Unsupported API safety**
-   - Auto Scene Colour must not activate on Vulkan.
    - A saved Auto preference must not suppress or overwrite the group's manual render-target configuration on an unsupported API.
 
-D3D10, D3D11 and D3D12 are supported on x86 and x64. BG3 DX11 remains the primary runtime regression reference because it exercises the full dynamic-resolution/native-staging path.
+D3D10, D3D11, D3D12 and Vulkan are supported on x86 and x64. BG3 DX11 remains the primary D3D regression reference because it exercises the full dynamic-resolution/native-staging path.
+
+### Vulkan Auto Scene Colour regression matrix
+
+For Vulkan changes, validate a representative Vulkan title with Auto Scene Colour enabled and record which cases were exercised:
+
+1. **Safe continuation boundary**
+   - Auto Scene Colour is clickable and reports `Vulkan`.
+   - Mark a shader in a pass whose colour target is reused by a later render pass with **LOAD** semantics.
+   - Before a safe boundary is found, the editor may report **Waiting for safe Vulkan continuation or target transition**.
+   - Confirm the effect is injected before the first compatible same-target LOAD pass, not inside the matched game render pass.
+2. **Same-resolution path**
+   - Scene and effect resolutions match.
+   - Confirm **Native staging: Not required**.
+   - Selected effects update every frame once the safe continuation boundary is reached.
+3. **Native-staging/upscaling path**
+   - Use a Vulkan title/configuration where the live scene resolution differs from the ReShade/output resolution.
+   - Confirm **Native staging: Active (Vulkan blit)**.
+   - Copy diagnostics and confirm **Vulkan image blit** staging and the actual successful **Vulkan boundary**: `same-target LOAD pass` or `post-pass RT transition`.
+   - Confirm the image remains live while moving the camera and that the effect is not frozen or one frame behind.
+   - Confirm later game UI/post-processing remains above the injected effect when the compatible continuation pass precedes those passes.
+4. **Same-pass limitation**
+   - Test a boundary where later composition remains inside the same Vulkan render pass, if one is readily identifiable.
+   - REST must not issue the Auto injection inside that pass or destabilise the game; pending work should be skipped/reset safely.
+5. **Resolution changes**
+   - Change the internal/output resolution while Auto is active.
+   - Allow one frame for staging recreation, then confirm continuous updates resume.
+6. **Fallback safety**
+   - Confirm CLEAR/DISCARD continuation passes, missing transfer-source/transfer-destination usage, unsupported transfer formats and multisampled targets do not attempt unsafe Auto staging.
+   - Verify the editor reports the relevant eligibility reason and the globally enabled technique can fall back to ordinary end-of-frame ReShade placement.
+7. **D3D regression**
+   - Re-run the BG3 DX11 + DLSS matrix after Vulkan changes; document any unavailable runtime coverage explicitly.
+8. **Post-pass transition and subpass safety**
+   - Use a candidate without a later same-target LOAD pass, such as `0x782733c1` in the tested BG3 configuration.
+   - Confirm `post-pass RT transition`, increasing successful renders, no flicker and effects below subsequent fog/UI.
+   - End/begin callbacks for subpass transitions must not trigger effects or preview copies. A real later barrier must establish pass completion.
+9. **Rapid hunting navigation**
+   - Alternate Prev/Next rapidly for a sustained period across targets with different dimensions/formats.
+   - Exercise marked navigation, Recollect, Done and reopening Settings.
+   - Confirm no crash/device loss, valid preview status and stable committed Auto injection afterward.
+
+For v1.6.0.633 the user confirmed BG3 Vulkan native staging, the post-pass Before Fog boundary without flicker, and stability after the rapid-navigation fixes. This release task does not claim a fresh DX11, same-resolution Vulkan or x86 in-game test. Automated architecture checks cover both x86 and x64 binaries.
 
 For API-specific changes, verify in a representative title that Auto Scene Colour is clickable, the live scene/effect resolutions are reported correctly, native staging activates only when needed, and the effect remains at the intended shader boundary.
 
@@ -73,7 +114,7 @@ CI must validate both release binaries after every x86/x64 build:
 - both export the required REST add-on metadata;
 - ReShade resource/resource-view handles remain 64-bit in both builds.
 
-The D3D10/D3D11/D3D12 Auto Scene Colour code path itself does not contain architecture-specific branches; API behaviour is supplied by the corresponding ReShade backend. REST Release builds treat compiler warnings as errors on both architectures.
+The D3D10/D3D11/D3D12 Auto Scene Colour path retains the existing shader-based staging copy on both architectures. Vulkan uses ReShade's generic image-blit path for native staging. REST Release builds treat compiler warnings as errors on both architectures.
 
 Legacy game-specific hooks may be architecture-specific. The FFXIV constant-copy hook is x64-only and is excluded from Win32 builds because its signatures target 64-bit game code.
 
@@ -81,7 +122,7 @@ Legacy game-specific hooks may be architecture-specific. The FFXIV constant-copy
 
 Create and push a tag from the desired `main` commit:
 
-`v1.5.0.633`
+`v1.6.0.633`
 
 The **Release** workflow will then:
 
@@ -97,7 +138,7 @@ The **Release** workflow will then:
    - `docs/`;
 5. create `release.zip`;
 6. generate `SHA256SUMS.txt`;
-7. publish a GitHub Release with generated release notes.
+7. publish a GitHub Release using the committed `docs/releases/<tag>.md` notes.
 
 No release is published if either architecture fails to build.
 

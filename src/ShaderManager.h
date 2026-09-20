@@ -34,6 +34,7 @@
 
 #include "CDataFile.h"
 #include "ToggleGroup.h"
+#include <atomic>
 #include <map>
 #include <reshade_api_device.hpp>
 #include <reshade_api_pipeline.hpp>
@@ -86,21 +87,31 @@ class ShaderManager {
     uint32_t getShaderHash(uint64_t handle);
     void addActivePipelineHandle(uint64_t handle);
     void toggleMarkOnHuntedShader();
+    void clearMarkedShaderHashes() {
+        std::unique_lock lock(_markedShaderHashMutex);
+        _markedShaderHashes.clear();
+    }
     void resetActiveHuntedShader();
 
     size_t getPipelineCount() { return _handleToShaderHash.size(); }
     size_t getShaderCount() { return _shaderHashes.size(); }
-    const std::unordered_set<uint32_t>& getCollectedShaderHashes() const { return _collectedActiveShaderHashes; }
+    std::unordered_set<uint32_t> getCollectedShaderHashes() const {
+        std::shared_lock lock(_collectedActiveHandlesMutex);
+        return _collectedActiveShaderHashes;
+    }
     void setActivedHuntedShaderIndex(uint32_t index);
-    size_t getAmountShaderHashesCollected() { return _collectedActiveShaderHashes.size(); }
-    bool isInHuntingMode() const { return _isInHuntingMode; }
-    uint32_t getActiveHuntedShaderHash() const { return _activeHuntedShaderHash; }
+    size_t getAmountShaderHashesCollected() const {
+        std::shared_lock lock(_collectedActiveHandlesMutex);
+        return _collectedActiveShaderHashes.size();
+    }
+    bool isInHuntingMode() const { return _isInHuntingMode.load(std::memory_order_acquire); }
+    uint32_t getActiveHuntedShaderHash() const { return _activeHuntedShaderHash.load(std::memory_order_acquire); }
     int getActiveHuntedShaderIndex() const { return _activeHuntedShaderIndex; }
     void toggleHideMarkedShaders() { _hideMarkedShaders = !_hideMarkedShaders; }
 
     bool isHuntedShaderMarked() {
         std::shared_lock lock(_markedShaderHashMutex);
-        return _markedShaderHashes.contains(_activeHuntedShaderHash);
+        return _markedShaderHashes.contains(_activeHuntedShaderHash.load(std::memory_order_acquire));
     }
 
     bool isHuntedShaderMarked(uint32_t hash) {
@@ -113,12 +124,11 @@ class ShaderManager {
         return _markedShaderHashes;
     }
 
-    uint32_t getCollectedShaderHash(uint32_t index) {
-        if (index < 0 || _collectedActiveShaderHashes.size() <= 0 || index >= _collectedActiveShaderHashes.size()) {
+    uint32_t getCollectedShaderHash(uint32_t index) const {
+        std::shared_lock lock(_collectedActiveHandlesMutex);
+        if (_collectedActiveShaderHashes.empty() || index >= _collectedActiveShaderHashes.size())
             return 0;
-        }
 
-        // no lock needed, collecting phase is over
         auto it = _collectedActiveShaderHashes.begin();
         std::advance(it, index);
         return *it;
@@ -152,10 +162,10 @@ class ShaderManager {
                                                                // hunting was enabled, which are the pipeline handles active during the last X frames
     std::unordered_set<uint32_t> _markedShaderHashes;          // the hashes for shaders which are currently marked.
 
-    bool _isInHuntingMode = false;
+    std::atomic_bool _isInHuntingMode{ false };
     int32_t _activeHuntedShaderIndex = -1;
-    uint32_t _activeHuntedShaderHash;
-    std::shared_mutex _collectedActiveHandlesMutex;
+    std::atomic_uint32_t _activeHuntedShaderHash{ 0 };
+    mutable std::shared_mutex _collectedActiveHandlesMutex;
     std::shared_mutex _hashHandlesMutex;
     std::shared_mutex _markedShaderHashMutex;
     bool _hideMarkedShaders = false;

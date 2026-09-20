@@ -1,8 +1,8 @@
 # Automatic Scene Colour
 
-Automatic Scene Colour is a rendering mode for REST groups that need to apply ReShade effects to the live scene before later game passes such as fog or UI, while still allowing those effects to execute at the normal ReShade runtime resolution. It supports D3D10, D3D11 and D3D12 on both x86 and x64 through ReShade's generic graphics API.
+Automatic Scene Colour is a rendering mode for REST groups that need to apply ReShade effects to the live scene before later game passes such as fog or UI, while still allowing those effects to execute at the normal ReShade runtime resolution. It supports D3D10, D3D11, D3D12 and Vulkan on both x86 and x64 through ReShade's generic graphics API.
 
-It was developed and validated against **Baldur's Gate 3 in DX11 mode with DLSS enabled**.
+It was developed against **Baldur's Gate 3 in DX11 mode with DLSS enabled**. The Vulkan implementation was subsequently validated in BG3 with native-resolution staging, Before Fog injection and rapid shader-hunting navigation.
 
 ## Why it exists
 
@@ -33,9 +33,28 @@ When **Auto scene colour** is enabled for a group, REST:
    - runs the selected ReShade techniques against that staging target;
    - transitions the resources back;
    - copies/downscales the completed result into the original live scene target.
-6. Lets the game's matched draw and all subsequent passes continue normally.
+6. Returns control to the game. D3D injection occurs at the matched boundary; Vulkan waits for a safe boundary after the matched pass as described below.
 
 The result is part of the scene before the later game passes are composited.
+
+### Vulkan render-pass boundary and native staging
+
+Vulkan does not permit image-transfer barriers, blits or a nested ReShade effect render while the game's render pass is active. ReShade's draw callback occurs inside that pass, so REST records the matched live target and defers the Auto injection.
+
+REST processes deferred work at either of two proven safe boundaries:
+
+- A new render pass that references the **same colour target with LOAD semantics**, when pass tracking establishes that the command list is outside the previous pass. CLEAR/DISCARD continuations are not eligible.
+- A **post-pass RT transition** where the exact pending target changes from render-target usage to non-render-target usage. This supports final scene targets that have no later same-target LOAD pass. After injection, REST restores the usage requested by the game.
+
+ReShade also emits end/begin callbacks at Vulkan subpass transitions. An end callback alone therefore does not prove the pass has finished. REST waits for a subsequent barrier to establish that the pass ended and rejects ambiguous subpass boundaries for both effects and preview copies. A recursion guard prevents REST's own transitions from triggering another Auto injection. Pending effects are cleared at present and effect reload so stale work does not carry into a later frame.
+
+ReShade's Vulkan `render_technique` path first copies the supplied colour target into its internal effect-colour texture, so the live game image must already have transfer-source usage even when scene and effect resolutions match. REST deliberately does not retrofit transfer flags onto arbitrary Vulkan game images because the generic ReShade resource descriptor does not expose every native image-creation constraint (for example transient attachments).
+
+When the deferred Vulkan injection needs native-resolution staging, the live target must additionally have transfer-destination usage. REST then uses ReShade's generic `copy_texture_region` blit path rather than its embedded Direct3D fullscreen-copy shaders, with explicit `render target -> copy source/copy destination -> render target` transitions around the up/downscale blits. The staging path also requires a single-sample colour target and Vulkan blit support.
+
+REST does not split an existing game render pass. It cannot insert effects between draws within the same pass: choose a candidate with an eligible boundary before the desired later fog/UI composition. If no safe boundary is found, pending Auto work is skipped for that frame.
+
+In the validated BG3 Vulkan configuration, `0x782733c1` provided the Before Fog boundary using **post-pass RT transition**, with `2560×1440 → 3840×2160` Vulkan image-blit staging. The user confirmed that flicker was resolved and rapid Prev/Next hunting was stable after the concurrency fixes. This hash is an example from that game configuration, not a universal preset; game versions and graphics settings can change shader hashes.
 
 ## What is automatic
 
@@ -84,17 +103,27 @@ The exact technique names and requirements depend on the shader package being us
 
 ## Diagnostics
 
-The group editor displays:
+The group editor separates **the current candidate/latest target attempt** from **the last successful injection** so a rejected draw cannot make an earlier successful render look contradictory.
 
-- **Target** - confirms that Auto mode is using the live render target.
-- **Scene resolution** - resolution of the matched live game target.
-- **Effect resolution** - resolution at which the ReShade techniques are running.
-- **Technique order** - the techniques REST rendered on the last successful injection.
-- **Injection** - reports whether an effect dispatch has completed successfully and how many techniques were rendered.
-- **Native staging** - reports whether the native-resolution staging path is active or not required.
-- **Copy diagnostics** - copies a support-ready block containing the REST version, graphics API, group name, scene/effect resolutions, staging state, technique count/order, render-call count and last target handle.
+Current-attempt diagnostics include:
 
-When DLSS is active and the game renders below output resolution, a healthy configuration should normally show a lower scene resolution, the native effect resolution and **Native staging: Active**.
+- **Current attempt** - the latest target-match/injection status, including Vulkan rejection reasons.
+- **Current target** - dimensions, a human-readable ReShade format name and the resource handle for the latest candidate.
+
+Last-success diagnostics include:
+
+- **Last successful injection** - scene resolution -> effect resolution from the most recent successful render.
+- **Last successful staging** - Direct, Vulkan image blit or fullscreen shader copy.
+- **Vulkan boundary** - the actual successful boundary: `same-target LOAD pass` or `post-pass RT transition`.
+- **Last successful techniques** - technique count and execution order.
+- **Successful renders** - successful effect-render count for the currently committed shader set.
+- **Copy diagnostics** - copies both sections in a support-ready block.
+
+Committing a new shader set resets the diagnostic history, so values from a previous candidate are not carried into the next test.
+
+Vulkan target-rejection messages use format names such as **R16_FLOAT**, **R16G16_FLOAT** and **R8_UNORM** rather than raw enum values. Aspect-ratio failures and scale-range failures are reported separately.
+
+When DLSS is active and the game renders below output resolution, a healthy Vulkan native-staging configuration should show a lower current/last-success scene resolution, the native effect resolution and **Vulkan image blit** as the last successful staging path.
 
 ## Troubleshooting
 
@@ -125,6 +154,10 @@ Check that:
 
 When native staging needs to be created or resized, REST may defer the effect until the staging resource has been created by its resource manager. Subsequent matching frames should render normally.
 
+### Vulkan keeps waiting for a safe boundary
+
+Finding the shader and its target does not guarantee that the target has an eligible later boundary. Check **Successful renders** and **Vulkan boundary** after clicking Done. If no successful render is recorded, select a different candidate with a same-target LOAD continuation or a post-pass transition out of render-target usage. Preview availability alone does not prove that Auto injection will be possible.
+
 ### The scene and effect resolutions are identical
 
 That is valid. Native staging is only needed when the live scene resolution differs from the ReShade runtime/output resolution.
@@ -140,9 +173,10 @@ The selected ReShade techniques also execute at the native runtime resolution ra
 
 ## Current scope
 
-- **D3D10, D3D11 and D3D12 are supported on x86 and x64.** They share the same live-RTV/native-staging architecture through ReShade's generic API.
-- Baldur's Gate 3 DX11 + DLSS is the primary runtime-tested configuration and remains the regression reference for scene-colour behaviour.
-- D3D10 and D3D12 use the same REST Auto Scene Colour implementation, while the underlying ReShade backend supplies the API-specific resource and barrier handling.
-- Vulkan is not currently supported by Auto Scene Colour. If an INI contains Auto enabled on an unsupported API, REST falls back to the saved manual render-target configuration without deleting the Auto preference.
+- **D3D10, D3D11, D3D12 and Vulkan are supported on x86 and x64.** They share the same live-target selection and effect-dispatch architecture through ReShade's generic API.
+- Baldur's Gate 3 DX11 + DLSS remains the primary runtime-tested D3D configuration and regression reference for scene-colour behaviour.
+- D3D10/11/12 use REST's existing fullscreen shader-copy path when native staging is required.
+- Vulkan requires the live colour target to have existing transfer-source usage. Native staging additionally requires existing transfer-destination usage, a single-sample target and Vulkan blit support.
+- BG3 Vulkan native-staging and rapid-navigation runtime validation was confirmed for v1.6.0.633. Other titles, direct-resolution configurations and x86 runtime behaviour still need representative testing; x86/x64 build validation is not a substitute for those runtime checks.
 - The implementation targets the **primary colour RTV (slot 0)**.
 - It is intended for scene-colour injection around a user-selected shader boundary, not as a general replacement for ReShade's depth-buffer detection.

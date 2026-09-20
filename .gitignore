@@ -18,6 +18,7 @@ Deployment/
 [Dd]ebugPublic/
 [Rr]elease/
 [Rr]eleases/
+!docs/releases/
 x64/
 x86/
 bld/

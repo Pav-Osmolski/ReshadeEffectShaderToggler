@@ -5,7 +5,7 @@
 
 A ReShade 5.8+ add-on for applying ReShade effects at specific points inside a game's rendering pipeline. REST groups user-selected shaders and can inject selected ReShade techniques immediately before those shaders are encountered.
 
-Both 64-bit and 32-bit are first-class build targets. CI builds and validates both architectures, including PE machine type, version metadata and required add-on exports. Auto Scene Colour uses the same D3D10/D3D11/D3D12 path on x86 and x64. Legacy game-specific hooks may remain architecture-specific; the FFXIV constant-copy hook is x64-only because its signatures target 64-bit game code.
+Both 64-bit and 32-bit are first-class build targets. CI builds and validates both architectures, including PE machine type, version metadata and required add-on exports. Auto Scene Colour supports D3D10/D3D11/D3D12 and Vulkan through ReShade's generic API, with a Vulkan-specific native-staging blit path. Legacy game-specific hooks may remain architecture-specific; the FFXIV constant-copy hook is x64-only because its signatures target 64-bit game code.
 
 ## Highlights
 
@@ -14,7 +14,7 @@ Both 64-bit and 32-bit are first-class build targets. CI builds and validates bo
 - Render effects at configurable render-target boundaries.
 - Preview and inspect render targets while hunting shaders.
 - Extract and reuse constant-buffer or texture-binding data where supported.
-- **Automatic scene-colour injection for D3D10/D3D11/D3D12 games using DLSS or other dynamic-resolution/upscaling paths.**
+- **Automatic scene-colour injection for D3D10/D3D11/D3D12 and Vulkan games using DLSS or other dynamic-resolution/upscaling paths.**
 - Preserve technique selections reliably across ReShade effect reloads and ordering changes.
 - Search, filter and recollect shaders with mouse controls or configurable keyboard shortcuts.
 - Track unsaved configuration changes, clone groups safely, confirm deletions and flag shortcut conflicts.
@@ -25,7 +25,11 @@ REST requires a ReShade build with add-on support enabled.
 
 The existing render-target, shader-hunting and binding features remain API/game dependent. D3D10/D3D11/D3D12 and Vulkan behaviour outside the paths that have been specifically tested may vary by title.
 
-The **Auto scene colour** path supports D3D10, D3D11 and D3D12 on both x86 and x64. The implementation is shared across architectures through ReShade's generic API. Baldur's Gate 3 in DX11 mode using DLSS is the primary runtime-validated configuration. Auto scene colour does not currently support Vulkan.
+The **Auto scene colour** path supports D3D10, D3D11, D3D12 and Vulkan on both x86 and x64. D3D10/11/12 retain the existing shader-based native-staging copy path. Vulkan defers injection to a proven safe boundary: a new pass that **LOADs the same colour target**, or a **post-pass transition of that exact target out of render-target usage**. Subpass transitions are not treated as completed render passes. REST restores the game's requested resource state and guards against recursive injection.
+
+The live Vulkan image must already have transfer-source usage; native staging additionally requires transfer-destination usage and uses image blits. REST does not add transfer flags to arbitrary game images or split active game passes. Unsupported targets or boundaries are skipped safely. Baldur's Gate 3 Vulkan testing confirmed stable Before Fog injection with `2560×1440 → 3840×2160` staging and rapid shader navigation after the hunting fixes. BG3 DX11 + DLSS remains the D3D regression reference; this does not imply every title or architecture has been runtime-tested.
+
+See the [changelog](CHANGELOG.md) for the changes in **v1.6.0.633**.
 
 ## Installation
 
@@ -79,7 +83,7 @@ Important behaviour:
 - Multi-pass effects must keep their required techniques enabled and in the correct ReShade order.
 - Technique selections are stored by name and preserved when ReShade reloads or reorders its effect list.
 
-## Automatic scene colour for D3D10/D3D11/D3D12 upscalers
+## Automatic scene colour for D3D10/D3D11/D3D12 and Vulkan upscalers
 
 For games that render the scene below output resolution and upscale later, rendering a ReShade effect directly into the lower-resolution scene target can break multi-pass effects or produce incorrectly scaled output.
 
@@ -106,13 +110,14 @@ For setup details, limitations and troubleshooting, see [Automatic Scene Colour]
 
 Make the element that defines your desired injection boundary visible before starting shader hunting. A debug-heavy effect such as AO can make it easier to see whether a UI, fog or other game pass is being drawn before or after the current shader.
 
-Click **Settings** on the group. REST first collects active shaders for the configured number of frames, then lets you browse them. The shader pane provides:
+Click **Settings** on the group, then **Start shader hunting**. REST first collects active shaders for the configured number of frames, then lets you browse them. The shader pane provides:
 
 - case-insensitive hash search;
 - **All / Marked / Unmarked** filtering;
 - **Prev**, **Next**, **Prev marked**, **Mark / unmark** and **Next marked** mouse controls;
-- collected and marked shader counts;
-- **Recollect**, which starts a fresh collection for pixel, vertex and compute shaders while preserving the current marked hashes.
+- collected and marked shader counts plus **Clear marked** for the current shader stage;
+- **Recollect**, which starts a fresh collection for pixel, vertex and compute shaders while preserving the current marked hashes;
+- a render-target preview below the settings pane. On Vulkan the hunted draw is still suppressed safely, while the preview copy is deferred to a legal render-pass boundary rather than copied from inside the active draw pass. The preview reports the selected hash, shader stage, target dimensions/format and an explicit reason when the image cannot be copied safely.
 
 The traditional defaults remain available for pixel and vertex shader hunting:
 
@@ -126,6 +131,8 @@ The traditional defaults remain available for pixel and vertex shader hunting:
 All hunting shortcuts are configurable under **Shader hunting keybindings**, making shader hunting practical on laptops and compact keyboards. Compute-shader hunting is also configurable but deliberately has no default shortcut. Shortcut matching uses the exact configured Ctrl/Shift/Alt modifiers, so a plain key does not also fire when a modified version is pressed.
 
 Use the group's **Active** checkbox or assigned hotkey while testing. When finished, click **Done** and **Save changes**.
+
+Rapid **Prev / Next** navigation uses owned shader-group snapshots, synchronised shader maps and collected lists, and atomic render-visible hunting state. Vulkan snapshots the selected shader for each draw. These fixes address the rapid-navigation crash without adding a button delay. Preview **RGB / R / G / B** controls help inspect individual channels; Vulkan previews wait for a safe copy boundary and do not support Clear alpha processing.
 
 ## Automatic scene-colour performance note
 
@@ -141,14 +148,14 @@ A normal pull request to `main` runs the full build. Tagged releases use the for
 
 For example:
 
-`v1.5.0.633`
+`v1.6.0.633`
 
 See [Release Process](docs/RELEASING.md) for the release checklist and packaging details.
 
 ## Credits
 
 - [alex / 4lex4nder](https://github.com/4lex4nder) - ReshadeEffectShaderToggler development.
-- **DeViLhoOD** - Automatic Scene Colour, DLSS/upscaled rendering support, x86/x64 hardening, QoL workflow improvements, documentation and testing.
+- **DeViLhoOD** - Automatic Scene Colour, Vulkan safe-boundary injection and previews, shader-hunting stability improvements, DLSS/upscaled rendering support, x86/x64 hardening, QoL workflow improvements, documentation and testing.
 - [Frans Bouma](https://github.com/FransBouma) - original ShaderToggler.
 - [Sinom](https://github.com/sinomsinom) - contributor.
 - [crosire](https://github.com/crosire) - ReShade and effect-rendering examples.

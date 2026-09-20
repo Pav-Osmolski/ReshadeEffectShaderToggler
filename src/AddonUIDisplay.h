@@ -36,6 +36,7 @@
 #include "ConstantManager.h"
 #include "KeyData.h"
 #include "ResourceManager.h"
+#include "RenderingManager.h"
 #include "version.h"
 #include <algorithm>
 #include <cctype>
@@ -232,7 +233,10 @@ static void DisplayTechniqueSelection(reshade::api::effect_runtime* runtime,
     instance.AssignPreferredGroupTechniques(runtimeData.allTechniques);
 }
 
-static void DrawPreview(unsigned long long textureId, uint32_t srcWidth, uint32_t srcHeight) {
+static void DrawPreview(unsigned long long textureId,
+                        uint32_t srcWidth,
+                        uint32_t srcHeight,
+                        ImVec4 tint = ImVec4(1.0f, 1.0f, 1.0f, 1.0f)) {
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
     float height = ImGui::GetWindowHeight();
     float width = ImGui::GetWindowWidth();
@@ -248,7 +252,7 @@ static void DrawPreview(unsigned long long textureId, uint32_t srcWidth, uint32_
     auto centralizedCursorpos = ImVec2((width - new_width) * 0.5f, (height - new_height) * 0.5f);
     ImGui::SetCursorPos(centralizedCursorpos);
 
-    ImGui::Image(textureId, ImVec2(new_width, new_height));
+    ImGui::Image(textureId, ImVec2(new_width, new_height), ImVec2(0, 0), ImVec2(1, 1), tint);
 
     ImGui::PopStyleVar();
 }
@@ -265,25 +269,64 @@ static void DisplayPreview(AddonImGui::AddonUIData& instance,
         reshade::api::resource_view srv = reshade::api::resource_view{ 0 };
         resManager.SetPongPreviewHandles(runtime->get_device(), nullptr, nullptr, &srv);
         bool clearAlpha = group->getClearPreviewAlpha();
+        const bool vulkan = runtime->get_device()->get_api() == reshade::api::device_api::vulkan;
 
         ImGui::Text("Clear alpha channel");
         ImGui::SameLine();
+        if (vulkan)
+            ImGui::BeginDisabled();
         ImGui::Checkbox("##Clearalpha", &clearAlpha);
+        if (vulkan) {
+            ImGui::EndDisabled();
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Vulkan safe preview currently copies the source image directly.");
+        }
 
-        if (srv != 0) {
+        if (!deviceData.huntPreview.status.empty()) {
             ImGui::SameLine();
-            ImGui::Text(std::format(" Address: 0x{:x} ", deviceData.huntPreview.target.handle).c_str());
+            ImGui::TextDisabled("%s", deviceData.huntPreview.status.c_str());
+        }
+
+        if (deviceData.huntPreview.target != 0) {
+            const char* stageName = deviceData.huntPreview.hunted_stage == 0 ? "PS" :
+                                    deviceData.huntPreview.hunted_stage == 1 ? "VS" : "CS";
+            ImGui::Text("Shader: 0x%08x (%s)", deviceData.huntPreview.hunted_shader_hash, stageName);
             ImGui::SameLine();
-            ImGui::Text(std::format("Format: {} ", static_cast<uint32_t>(deviceData.huntPreview.format)).c_str());
+            ImGui::Text("Target: %ux%u", deviceData.huntPreview.width, deviceData.huntPreview.height);
             ImGui::SameLine();
-            ImGui::Text(std::format("Width: {} ", deviceData.huntPreview.width).c_str());
+            ImGui::Text("Format: %s", Rendering::RenderingManager::FormatName(deviceData.huntPreview.format).c_str());
             ImGui::SameLine();
-            ImGui::Text(std::format("Height: {} ", deviceData.huntPreview.height).c_str());
+            ImGui::Text("Address: 0x%llx", static_cast<unsigned long long>(deviceData.huntPreview.target.handle));
             ImGui::Separator();
+        }
+
+        static int previewChannel = 0;
+        if (srv != 0 && deviceData.huntPreview.matched) {
+            ImGui::TextDisabled("View");
+            ImGui::SameLine();
+            ImGui::RadioButton("RGB", &previewChannel, 0);
+            ImGui::SameLine();
+            ImGui::RadioButton("R", &previewChannel, 1);
+            ImGui::SameLine();
+            ImGui::RadioButton("G", &previewChannel, 2);
+            ImGui::SameLine();
+            ImGui::RadioButton("B", &previewChannel, 3);
+
+            const ImVec4 previewTint =
+              previewChannel == 1 ? ImVec4(1.0f, 0.0f, 0.0f, 1.0f) :
+              previewChannel == 2 ? ImVec4(0.0f, 1.0f, 0.0f, 1.0f) :
+              previewChannel == 3 ? ImVec4(0.0f, 0.0f, 1.0f, 1.0f) :
+                                    ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
 
             if (ImGui::BeginChild("RTPreview##preview", { 0, 0 }, false, ImGuiWindowFlags_None)) {
-                DrawPreview(srv.handle, deviceData.huntPreview.width, deviceData.huntPreview.height);
+                DrawPreview(srv.handle, deviceData.huntPreview.width, deviceData.huntPreview.height, previewTint);
             }
+            ImGui::EndChild();
+        } else if (vulkan && ImGui::BeginChild("RTPreview##preview", { 0, 0 }, false, ImGuiWindowFlags_None)) {
+            if (deviceData.huntPreview.status.empty())
+                ImGui::TextDisabled("Select a shader while hunting to capture a Vulkan preview.");
+            else
+                ImGui::TextDisabled("%s", deviceData.huntPreview.status.c_str());
             ImGui::EndChild();
         }
 
@@ -378,13 +421,16 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
                 ImGui::EndDisabled();
             if (!autoSceneColourSupported) {
                 ImGui::SameLine();
-                ImGui::TextDisabled("(D3D10/D3D11/D3D12 only)");
+                ImGui::TextDisabled("(D3D10/D3D11/D3D12/Vulkan only)");
             }
             if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-                ImGui::SetTooltip("Auto Scene Colour supports D3D10, D3D11 and D3D12. Baldur's Gate 3 DX11 + DLSS is the primary runtime regression reference. Vulkan is not supported.");
+                ImGui::SetTooltip("Auto Scene Colour supports D3D10, D3D11, D3D12 and Vulkan. Vulkan native staging uses ReShade\'s generic image-blit path.");
             }
 
             const bool autoSceneColourActive = autoSceneColour && autoSceneColourSupported;
+            const bool pendingVulkanShaderEdits =
+              deviceApi == reshade::api::device_api::vulkan &&
+              instance.GetToggleGroupIdShaderEditing().load() == group->getId();
 
             ImGui::TableNextRow();
 
@@ -405,51 +451,80 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
                     ImGui::TextUnformatted("D3D10");
                 else if (deviceApi == reshade::api::device_api::d3d11)
                     ImGui::TextUnformatted("D3D11");
-                else
+                else if (deviceApi == reshade::api::device_api::d3d12)
                     ImGui::TextUnformatted("D3D12");
+                else
+                    ImGui::TextUnformatted("Vulkan");
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
-                ImGui::Text("Scene resolution");
+                ImGui::Text("Current attempt");
                 ImGui::TableNextColumn();
-                if (group->getDebugSceneWidth() > 0 && group->getDebugSceneHeight() > 0)
-                    ImGui::Text("%ux%u", group->getDebugSceneWidth(), group->getDebugSceneHeight());
+                if (pendingVulkanShaderEdits)
+                    ImGui::TextUnformatted("Finish shader hunting (Done) to apply marks");
+                else if (!group->getDebugAutoStatus().empty())
+                    ImGui::TextUnformatted(group->getDebugAutoStatus().c_str());
                 else
                     ImGui::TextUnformatted("Waiting for matching render target...");
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
-                ImGui::Text("Effect resolution");
+                ImGui::Text("Current target");
                 ImGui::TableNextColumn();
-                if (group->getDebugEffectWidth() > 0 && group->getDebugEffectHeight() > 0) {
-                    ImGui::Text("%ux%u%s",
-                                group->getDebugEffectWidth(),
-                                group->getDebugEffectHeight(),
-                                group->getDebugNativeStaging() ? " (native staging)" : "");
+                if (group->getDebugCurrentSceneWidth() > 0 && group->getDebugCurrentSceneHeight() > 0) {
+                    ImGui::Text("%ux%u | %s | 0x%llx",
+                                group->getDebugCurrentSceneWidth(),
+                                group->getDebugCurrentSceneHeight(),
+                                group->getDebugCurrentFormat().empty() ? "(format unknown)" : group->getDebugCurrentFormat().c_str(),
+                                static_cast<unsigned long long>(group->getDebugCurrentTarget()));
                 } else {
-                    ImGui::TextUnformatted("Waiting for effect dispatch...");
+                    ImGui::TextUnformatted("(none)");
                 }
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
-                ImGui::Text("Technique order");
+                ImGui::Text("Last successful injection");
                 ImGui::TableNextColumn();
-                ImGui::TextUnformatted(group->getDebugLastTechniqueOrder().empty() ? "(none)" : group->getDebugLastTechniqueOrder().c_str());
+                if (group->getDebugEffectRenderCalls() > 0) {
+                    ImGui::Text("%ux%u -> %ux%u",
+                                group->getDebugSceneWidth(),
+                                group->getDebugSceneHeight(),
+                                group->getDebugEffectWidth(),
+                                group->getDebugEffectHeight());
+                } else {
+                    ImGui::TextUnformatted("(none yet)");
+                }
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
-                ImGui::Text("Injection");
+                ImGui::Text("Last successful staging");
+                ImGui::TableNextColumn();
+                if (group->getDebugEffectRenderCalls() == 0) {
+                    ImGui::TextUnformatted("(none)");
+                } else if (group->getDebugNativeStaging() && deviceApi == reshade::api::device_api::vulkan) {
+                    ImGui::TextUnformatted("Vulkan image blit");
+                } else if (group->getDebugNativeStaging()) {
+                    ImGui::TextUnformatted("Fullscreen shader copy");
+                } else {
+                    ImGui::TextUnformatted("Direct");
+                }
+
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::Text("Last successful techniques");
                 ImGui::TableNextColumn();
                 if (group->getDebugEffectRenderCalls() > 0)
-                    ImGui::Text("Successful (%u technique%s)", group->getDebugLastRenderedTechniqueCount(), group->getDebugLastRenderedTechniqueCount() == 1 ? "" : "s");
+                    ImGui::Text("%u | %s",
+                                group->getDebugLastRenderedTechniqueCount(),
+                                group->getDebugLastTechniqueOrder().empty() ? "(none)" : group->getDebugLastTechniqueOrder().c_str());
                 else
-                    ImGui::TextUnformatted("Waiting for effect dispatch...");
+                    ImGui::TextUnformatted("(none)");
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
-                ImGui::Text("Native staging");
+                ImGui::Text("Successful renders");
                 ImGui::TableNextColumn();
-                ImGui::TextUnformatted(group->getDebugNativeStaging() ? "Active" : "Not required");
+                ImGui::Text("%llu", static_cast<unsigned long long>(group->getDebugEffectRenderCalls()));
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
@@ -457,17 +532,43 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
                 ImGui::TableNextColumn();
                 if (ImGui::Button("Copy diagnostics")) {
                     const char* apiName = deviceApi == reshade::api::device_api::d3d10 ? "D3D10" :
-                                          deviceApi == reshade::api::device_api::d3d11 ? "D3D11" : "D3D12";
+                                          deviceApi == reshade::api::device_api::d3d11 ? "D3D11" :
+                                          deviceApi == reshade::api::device_api::d3d12 ? "D3D12" : "Vulkan";
                     const std::string diagnostics = std::format(
-                      "REST {}\nGroup: {}\nAPI: {}\nAuto Scene Colour: active\nScene: {}x{}\nEffect: {}x{}\nNative staging: {}\nLast techniques: {}\nTechnique order: {}\nRender calls: {}\nLast target: 0x{:x}",
+                      "REST {}\n"
+                      "Group: {}\n"
+                      "API: {}\n"
+                      "Auto Scene Colour: active\n"
+                      "\nCurrent candidate / latest attempt\n"
+                      "Status: {}\n"
+                      "Target: {}x{} | {} | 0x{:x}\n"
+                      "\nLast successful injection\n"
+                      "Scene -> effect: {}x{} -> {}x{}\n"
+                      "Staging path: {}\n"
+                      "Vulkan boundary: {}\n"
+                      "Techniques: {}\n"
+                      "Technique order: {}\n"
+                      "Successful renders: {}\n"
+                      "Last successful target: 0x{:x}",
                       REST_VERSION_STRING,
                       group->getName(),
                       apiName,
+                      group->getDebugAutoStatus().empty() ? "(none)" : group->getDebugAutoStatus(),
+                      group->getDebugCurrentSceneWidth(),
+                      group->getDebugCurrentSceneHeight(),
+                      group->getDebugCurrentFormat().empty() ? "(unknown)" : group->getDebugCurrentFormat(),
+                      static_cast<unsigned long long>(group->getDebugCurrentTarget()),
                       group->getDebugSceneWidth(),
                       group->getDebugSceneHeight(),
                       group->getDebugEffectWidth(),
                       group->getDebugEffectHeight(),
-                      group->getDebugNativeStaging() ? "active" : "not required",
+                      group->getDebugEffectRenderCalls() == 0 ? "(none)" :
+                        (group->getDebugNativeStaging() ?
+                          (deviceApi == reshade::api::device_api::vulkan ? "Vulkan image blit" : "fullscreen shader copy") :
+                          "direct"),
+                      deviceApi == reshade::api::device_api::vulkan ?
+                        (group->getDebugLastVulkanBoundary().empty() ? "(none yet)" : group->getDebugLastVulkanBoundary()) :
+                        "not applicable",
                       group->getDebugLastRenderedTechniqueCount(),
                       group->getDebugLastTechniqueOrder().empty() ? "(none)" : group->getDebugLastTechniqueOrder(),
                       static_cast<unsigned long long>(group->getDebugEffectRenderCalls()),
@@ -678,6 +779,12 @@ static void DisplayGroupView(AddonImGui::AddonUIData& instance,
                              ShaderToggler::ShaderManager* shaderManager) {
     float height = ImGui::GetWindowHeight();
 
+    if (!shaderManager->isInHuntingMode()) {
+        ImGui::TextDisabled("Shader hunting is not active.");
+        ImGui::TextDisabled("The group's committed shader hashes remain active while you inspect Auto Scene Colour and other settings.");
+        return;
+    }
+
     if (*instance.ActiveCollectorFrameCounter() > 0) {
         ImGui::Text("Collecting active shaders... %u frames remaining", instance.ActiveCollectorFrameCounter()->load());
         ImGui::TextDisabled("Keep the relevant scene visible until collection finishes.");
@@ -735,10 +842,22 @@ static void DisplayGroupView(AddonImGui::AddonUIData& instance,
     if (navigationChanged)
         instance.UpdateToggleGroupsForShaderHashes();
 
-    ImGui::TextDisabled("%zu collected | %zu marked", shaderManager->getAmountShaderHashesCollected(), shaderManager->getMarkedShaderCount());
+    const size_t markedCount = shaderManager->getMarkedShaderCount();
+    ImGui::TextDisabled("%zu collected | %zu marked", shaderManager->getAmountShaderHashesCollected(), markedCount);
+    ImGui::SameLine();
+    if (markedCount == 0)
+        ImGui::BeginDisabled();
+    if (ImGui::Button("Clear marked")) {
+        shaderManager->clearMarkedShaderHashes();
+        instance.UpdateToggleGroupsForShaderHashes();
+    }
+    if (markedCount == 0)
+        ImGui::EndDisabled();
+
+    ImGui::TextDisabled("Pending shader marks are applied to the group when you click Done.");
     ImGui::Separator();
 
-    const std::unordered_set<uint32_t>& hashes = shaderManager->getCollectedShaderHashes();
+    const std::unordered_set<uint32_t> hashes = shaderManager->getCollectedShaderHashes();
     const int32_t selected = shaderManager->getActiveHuntedShaderIndex();
     uint32_t index = 0;
 
@@ -1073,9 +1192,9 @@ static void DisplayTextureBindings(AddonImGui::AddonUIData& instance,
 }
 
 static void DisplayOverlay(AddonImGui::AddonUIData& instance, Rendering::ResourceManager& resManager, reshade::api::effect_runtime* runtime) {
-    if (instance.GetToggleGroupIdShaderEditing() >= 0) {
+    if (instance.GetToggleGroupIdSettingsOpen() >= 0) {
         std::string editingGroupName = "";
-        const int idx = instance.GetToggleGroupIdShaderEditing();
+        const int idx = instance.GetToggleGroupIdSettingsOpen();
         ShaderToggler::ToggleGroup* group = nullptr;
         if (instance.GetToggleGroups().find(idx) != instance.GetToggleGroups().end()) {
             editingGroupName = instance.GetToggleGroups()[idx].getName();
@@ -1103,6 +1222,20 @@ static void DisplayOverlay(AddonImGui::AddonUIData& instance, Rendering::Resourc
             ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
             if (ImGui::BeginChild("GroupView", { width / 3.0f + 20.0f, 0 }, true, ImGuiWindowFlags_NoScrollbar)) {
                 ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(3, 3));
+
+                const bool huntingThisGroup = instance.GetToggleGroupIdShaderEditing().load() == group->getId();
+                if (huntingThisGroup) {
+                    if (ImGui::Button("Done hunting")) {
+                        instance.EndShaderEditing(true, *group);
+                    }
+                    ImGui::SameLine();
+                    ImGui::TextDisabled("Marks will be committed to this group.");
+                } else {
+                    if (ImGui::Button("Start shader hunting"))
+                        instance.StartShaderEditing(*group);
+                    ImGui::SameLine();
+                    ImGui::TextDisabled("Settings remain open when hunting finishes.");
+                }
 
                 DisplayGroupView(instance, resManager, runtime, group, selectedShaderManager);
 
@@ -1190,7 +1323,7 @@ static void DisplayOverlay(AddonImGui::AddonUIData& instance, Rendering::Resourc
 
         if (!wndOpen) {
             instance.SetCurrentTabType(AddonImGui::TAB_NONE);
-            instance.EndShaderEditing(true, *group);
+            instance.CloseGroupSettings(true, *group);
         }
     } else {
         instance.SetCurrentTabType(AddonImGui::TAB_NONE);
@@ -1429,17 +1562,17 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, reshade::api::eff
                 group.setEditing(true);
 
             ImGui::SameLine();
-            if (instance.GetToggleGroupIdShaderEditing() >= 0) {
-                if (instance.GetToggleGroupIdShaderEditing() == group.getId()) {
-                    if (ImGui::Button("Done"))
-                        instance.EndShaderEditing(true, group);
+            if (instance.GetToggleGroupIdSettingsOpen() >= 0) {
+                if (instance.GetToggleGroupIdSettingsOpen() == group.getId()) {
+                    if (ImGui::Button("Close"))
+                        instance.CloseGroupSettings(true, group);
                 } else {
                     ImGui::BeginDisabled(true);
                     ImGui::Button("Settings");
                     ImGui::EndDisabled();
                 }
             } else if (ImGui::Button("Settings")) {
-                instance.StartShaderEditing(group);
+                instance.OpenGroupSettings(group);
             }
 
             ImGui::SameLine();
@@ -1469,17 +1602,19 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, reshade::api::eff
             else
                 ImGui::Text("%s", group.getName().c_str());
 
-            const size_t psCount = group.getPixelShaderHashCount();
-            const size_t vsCount = group.getVertexShaderHashCount();
-            const size_t csCount = group.getComputeShaderHashCount();
+            const bool shaderEditingThisGroup = instance.GetToggleGroupIdShaderEditing().load() == group.getId();
+            const size_t psCount = shaderEditingThisGroup ? instance.GetPixelShaderManager()->getMarkedShaderCount() : group.getPixelShaderHashCount();
+            const size_t vsCount = shaderEditingThisGroup ? instance.GetVertexShaderManager()->getMarkedShaderCount() : group.getVertexShaderHashCount();
+            const size_t csCount = shaderEditingThisGroup ? instance.GetComputeShaderManager()->getMarkedShaderCount() : group.getComputeShaderHashCount();
             const size_t fxCount = group.preferredTechniques().size();
 
-            ImGui::TextDisabled("PS: %zu | VS: %zu | CS: %zu | FX: %zu%s",
+            ImGui::TextDisabled("PS: %zu | VS: %zu | CS: %zu | FX: %zu%s%s",
                                 psCount,
                                 vsCount,
                                 csCount,
                                 fxCount,
-                                group.getAutoRenderSRV() ? " | Auto Scene Colour" : "");
+                                group.getAutoRenderSRV() ? " | Auto Scene Colour" : "",
+                                shaderEditingThisGroup ? " | pending" : "");
 
             if (group.getToggleKey() != 0) {
                 bool conflictShown = false;
@@ -1540,6 +1675,7 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, reshade::api::eff
 
         if (!toRemove.empty()) {
             instance.GetToggleGroupIdEffectEditing() = -1;
+            instance.GetToggleGroupIdSettingsOpen() = -1;
             instance.GetToggleGroupIdShaderEditing() = -1;
             instance.GetToggleGroupIdConstantEditing() = -1;
             instance.StopHuntingMode();

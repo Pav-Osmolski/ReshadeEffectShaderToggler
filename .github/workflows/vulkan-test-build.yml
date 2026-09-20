@@ -1,0 +1,73 @@
+name: Vulkan Test Build
+
+on:
+  push:
+    branches:
+      - vulkan-auto-scene-colour
+    paths:
+      - .github/workflows/vulkan-test-build.yml
+      - src/**
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v3
+
+      - name: Build x64
+        run: msbuild /m /property:Platform=x64 /p:Configuration=Release src/ReshadeEffectShaderToggler.sln
+
+      - name: Build x86
+        run: msbuild /m /property:Platform=x86 /p:Configuration=Release src/ReshadeEffectShaderToggler.sln
+
+      - name: Validate x86/x64 binaries
+        shell: pwsh
+        run: |
+          $x86 = "src/Win32/Release/ReshadeEffectShaderToggler.addon32"
+          $x64 = "src/x64/Release/ReshadeEffectShaderToggler.addon64"
+
+          function Get-PeMachine([string]$Path) {
+            $stream = [System.IO.File]::OpenRead($Path)
+            try {
+              $reader = [System.IO.BinaryReader]::new($stream)
+              $stream.Position = 0x3c
+              $peOffset = $reader.ReadInt32()
+              $stream.Position = $peOffset
+              if ($reader.ReadUInt32() -ne 0x00004550) { throw "$Path does not contain a valid PE signature." }
+              return $reader.ReadUInt16()
+            }
+            finally { $stream.Dispose() }
+          }
+
+          if ((Get-PeMachine $x86) -ne 0x014c) { throw "addon32 is not an i386/PE32 binary." }
+          if ((Get-PeMachine $x64) -ne 0x8664) { throw "addon64 is not an AMD64/PE32+ binary." }
+
+          $match = Select-String -Path "./src/version.h" -Pattern 'REST_VERSION_STRING "([^"]+)"'
+          if (-not $match.Matches.Success) { throw "Could not read REST version." }
+          $version = $match.Matches[0].Groups[1].Value
+
+          foreach ($binary in @($x86, $x64)) {
+            $fileVersion = (Get-Item $binary).VersionInfo.FileVersion
+            if ($fileVersion -ne $version) { throw "$binary reports version $fileVersion; expected $version." }
+          }
+
+      - name: Upload Vulkan test binaries
+        uses: actions/upload-artifact@v7
+        with:
+          name: REST-Vulkan-test-${{ github.sha }}
+          path: |
+            src/x64/Release/ReshadeEffectShaderToggler.addon64
+            src/Win32/Release/ReshadeEffectShaderToggler.addon32
+          if-no-files-found: error
+          retention-days: 14

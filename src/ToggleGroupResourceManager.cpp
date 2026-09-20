@@ -110,12 +110,12 @@ void ToggleGroupResourceManager::DisposeGroupResources(device* device, resource&
         device->destroy_resource_view(srv);
     }
 
-    if (rtv != 0) {
-        device->destroy_resource_view(rtv);
+    if (rtv_srgb != 0 && rtv_srgb != rtv) {
+        device->destroy_resource_view(rtv_srgb);
     }
 
-    if (rtv_srgb != 0) {
-        device->destroy_resource_view(rtv_srgb);
+    if (rtv != 0) {
+        device->destroy_resource_view(rtv);
     }
 
     if (res != 0) {
@@ -182,32 +182,56 @@ void ToggleGroupResourceManager::CheckGroupBuffers(reshade::api::effect_runtime*
                 }
 
                 resource_desc desc = resources.target_description;
+                const bool vulkan = runtime->get_device()->get_api() == device_api::vulkan;
+                const reshade::api::format groupFormat =
+                  vulkan
+                    ? (resources.view_format != format::unknown ? resources.view_format : format_to_default_typed(desc.texture.format, 0))
+                    : format_to_typeless(desc.texture.format);
                 resource_desc group_desc =
-                  resource_desc(desc.texture.width, desc.texture.height, 1, 1, format_to_typeless(desc.texture.format), 1, memory_heap::gpu_only, res_usage);
+                  resource_desc(desc.texture.width, desc.texture.height, 1, 1, groupFormat, 1, memory_heap::gpu_only, res_usage);
 
                 const resource_usage initial_state =
                   static_cast<GroupResourceType>(i) == GroupResourceType::RESOURCE_NATIVE_STAGING ? resource_usage::render_target : resource_usage::copy_dest;
 
                 if (!runtime->get_device()->create_resource(group_desc, nullptr, initial_state, &resources.res)) {
-                    reshade::log::message(reshade::log::level::error, "Failed to create group render target!");
+                    reshade::log::message(
+                      reshade::log::level::error,
+                      std::format("Failed to create group render target (group '{}', resource type {}, {}x{}, format {}).",
+                                  group.getName(),
+                                  i,
+                                  desc.texture.width,
+                                  desc.texture.height,
+                                  static_cast<uint32_t>(groupFormat))
+                        .c_str());
                 }
+
+                const reshade::api::format linearViewFormat =
+                  vulkan
+                    ? (resources.view_format != format::unknown ? resources.view_format : groupFormat)
+                    : format_to_default_typed(resources.view_format, 0);
 
                 if (validRT && resources.res != 0 &&
                     !runtime->get_device()->create_resource_view(
-                      resources.res, resource_usage::shader_resource, resource_view_desc(format_to_default_typed(resources.view_format, 0)), &resources.srv)) {
+                      resources.res, resource_usage::shader_resource, resource_view_desc(linearViewFormat), &resources.srv)) {
                     reshade::log::message(reshade::log::level::error, "Failed to create group shader resource view!");
                 }
 
                 if (validRT && resources.res != 0 &&
                     !runtime->get_device()->create_resource_view(
-                      resources.res, resource_usage::render_target, resource_view_desc(format_to_default_typed(resources.view_format, 0)), &resources.rtv)) {
+                      resources.res, resource_usage::render_target, resource_view_desc(linearViewFormat), &resources.rtv)) {
                     reshade::log::message(reshade::log::level::error, "Failed to create group render target view!");
                 }
 
-                if (resources.res != 0 && !runtime->get_device()->create_resource_view(resources.res,
-                                                                                       resource_usage::render_target,
-                                                                                       resource_view_desc(format_to_default_typed(resources.view_format, 1)),
-                                                                                       &resources.rtv_srgb)) {
+                if (vulkan) {
+                    // Vulkan images have a concrete format rather than D3D-style typeless
+                    // storage. Reuse the compatible render-target view instead of asking
+                    // for an alternate sRGB reinterpretation that may be illegal.
+                    resources.rtv_srgb = resources.rtv;
+                } else if (resources.res != 0 &&
+                           !runtime->get_device()->create_resource_view(resources.res,
+                                                                        resource_usage::render_target,
+                                                                        resource_view_desc(format_to_default_typed(resources.view_format, 1)),
+                                                                        &resources.rtv_srgb)) {
                     reshade::log::message(reshade::log::level::error, "Failed to create group SRGB render target view!");
                 }
             } else if (static_cast<GroupResourceType>(i) == GroupResourceType::RESOURCE_CONSTANTS_COPY) {

@@ -188,6 +188,11 @@ static void onReshadeReloadedEffects(effect_runtime* runtime) {
     RuntimeDataContainer& runtimeData = runtime->get_private_data<RuntimeDataContainer>();
     DeviceDataContainer& deviceData = runtime->get_device()->get_private_data<DeviceDataContainer>();
 
+    {
+        unique_lock<shared_mutex> renderLock(deviceData.render_mutex);
+        deviceData.vulkanAutoPendingEffects.clear();
+    }
+
     techniqueManager.OnReshadeReloadedEffects(runtime);
 
     if (deviceData.current_runtime == runtime) {
@@ -415,6 +420,33 @@ static void onBindRenderTargetsAndDepthStencil(command_list* cmd_list, uint32_t 
     //}
 }
 
+static void onBarrier(command_list* cmd_list,
+                      uint32_t count,
+                      const resource* resources,
+                      const resource_usage* oldStates,
+                      const resource_usage* newStates) {
+    if (cmd_list == nullptr || cmd_list->get_device() == nullptr ||
+        cmd_list->get_device()->get_api() != device_api::vulkan) {
+        return;
+    }
+
+    CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
+
+    // An end_render_pass callback may describe either a real render-pass end or the
+    // first half of vkCmdNextSubpass. Seeing a subsequent barrier proves the actual
+    // render pass has ended, because there is no command-recording opportunity between
+    // ReShade's paired end/begin callbacks for a subpass transition.
+    if (commandListData.vulkanRenderPassEndPending) {
+        commandListData.vulkanInsideRenderPass = false;
+        commandListData.vulkanRenderPassEndPending = false;
+    }
+
+    if (commandListData.vulkanAutoInjectionActive || commandListData.vulkanInsideRenderPass)
+        return;
+
+    renderingEffectManager.RenderDeferredVulkanAutoEffectsAfterBarrier(cmd_list, count, resources, oldStates, newStates);
+}
+
 static void onBeginRenderPass(command_list* cmd_list, uint32_t count, const render_pass_render_target_desc* rts, const render_pass_depth_stencil_desc* ds) {
     if (cmd_list == nullptr || cmd_list->get_device() == nullptr) {
         return;
@@ -424,8 +456,41 @@ static void onBeginRenderPass(command_list* cmd_list, uint32_t count, const rend
     CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
     DeviceDataContainer& deviceData = device->get_private_data<DeviceDataContainer>();
 
-    if (!deviceData.current_runtime->get_effects_state()) {
+    if (deviceData.current_runtime == nullptr || !deviceData.current_runtime->get_effects_state()) {
+        if (device->get_api() == device_api::vulkan) {
+            commandListData.vulkanInsideRenderPass = true;
+            commandListData.vulkanRenderPassEndPending = false;
+        }
         return;
+    }
+
+    if (device->get_api() == device_api::vulkan) {
+        // ReShade also emits begin_render_pass around vkCmdNextSubpass. In that case
+        // Vulkan is still inside the original render pass, so effect/preview transfer
+        // work is not legal here. Only treat a begin callback as a safe boundary when
+        // REST has positively tracked the command list as being outside a render pass.
+        const bool safeVulkanBoundary = !commandListData.vulkanInsideRenderPass;
+        if (safeVulkanBoundary)
+            renderingPreviewManager.CaptureDeferredVulkanPreview(cmd_list);
+
+        // Vulkan does not emit bind_render_targets_and_depth_stencil events for render
+        // pass attachments. Mirror the begin_render_pass descriptors into REST's state
+        // tracker so a marked draw can resolve the live primary colour target.
+        state_tracking& trackedState = cmd_list->get_private_data<state_tracking>();
+        trackedState.render_targets.clear();
+        trackedState.render_targets.reserve(count);
+        for (uint32_t i = 0; i < count; ++i)
+            trackedState.render_targets.push_back(rts[i].view);
+        trackedState.depth_stencil = ds != nullptr ? ds->view : resource_view{ 0 };
+
+        // For a true new render pass this callback occurs before vkCmdBeginRenderPass
+        // or vkCmdBeginRendering and is safe. Subpass transitions are intentionally
+        // skipped and remain pending for a proven post-pass boundary.
+        if (safeVulkanBoundary)
+            renderingEffectManager.RenderDeferredVulkanAutoEffects(cmd_list, count, rts);
+
+        commandListData.vulkanInsideRenderPass = true;
+        commandListData.vulkanRenderPassEndPending = false;
     }
 
     if (commandListData.commandQueue & Rendering::CHECK_MATCH_DRAW_BINDING) {
@@ -435,6 +500,21 @@ static void onBeginRenderPass(command_list* cmd_list, uint32_t count, const rend
     if (commandListData.commandQueue & Rendering::CHECK_MATCH_DRAW_EFFECT) {
         renderingEffectManager.RenderEffects(cmd_list, Rendering::CALL_DRAW, Rendering::MATCH_EFFECT_PS | Rendering::MATCH_EFFECT_VS);
     }
+
+}
+
+static void onEndRenderPass(command_list* cmd_list) {
+    if (cmd_list == nullptr || cmd_list->get_device() == nullptr ||
+        cmd_list->get_device()->get_api() != device_api::vulkan) {
+        return;
+    }
+
+    // This event is also emitted immediately before vkCmdNextSubpass. Keep the
+    // command list marked as inside the render pass until a later event proves that
+    // vkCmdEndRenderPass/vkCmdEndRendering really occurred.
+    CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
+    commandListData.vulkanInsideRenderPass = true;
+    commandListData.vulkanRenderPassEndPending = true;
 }
 
 static void onReshadeOverlay(effect_runtime* runtime) {
@@ -471,6 +551,11 @@ static void onReshadePresent(effect_runtime* runtime) {
     DeviceDataContainer& deviceData = dev->get_private_data<DeviceDataContainer>();
     command_queue* queue = runtime->get_command_queue();
 
+    {
+        unique_lock<shared_mutex> renderLock(deviceData.render_mutex);
+        deviceData.vulkanAutoPendingEffects.clear();
+    }
+
     deviceData.rendered_effects = false;
 
     keyMonitor.PollKeyStates(runtime);
@@ -490,6 +575,7 @@ static void onReshadePresent(effect_runtime* runtime) {
 
     deviceData.bindingsUpdated.clear();
     deviceData.constantsUpdated.clear();
+    renderingPreviewManager.CancelDeferredVulkanPreview(dev);
     deviceData.huntPreview.Reset();
 
     CheckHotkeys(g_addonUIData, runtime);
@@ -556,13 +642,93 @@ static void CheckDrawCall(command_list* cmd_list, const uint64_t match_modifier 
     }
 }
 
+static bool ShouldSuppressVulkanHuntedCall(command_list* cmd_list, uint64_t matchModifier) {
+    if (cmd_list == nullptr || cmd_list->get_device() == nullptr || cmd_list->get_device()->get_api() != device_api::vulkan)
+        return false;
+
+    CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
+
+    const bool huntingPS = g_pixelShaderManager.isInHuntingMode();
+    const bool huntingVS = g_vertexShaderManager.isInHuntingMode();
+    const bool huntingCS = g_computeShaderManager.isInHuntingMode();
+    const uint32_t huntedPS = g_pixelShaderManager.getActiveHuntedShaderHash();
+    const uint32_t huntedVS = g_vertexShaderManager.getActiveHuntedShaderHash();
+    const uint32_t huntedCS = g_computeShaderManager.getActiveHuntedShaderHash();
+
+    const bool suppressPS =
+      (matchModifier & Rendering::MATCH_PS) != 0 &&
+      huntingPS && huntedPS != 0 &&
+      commandListData.ps.activeShaderHash == huntedPS;
+
+    const bool suppressVS =
+      (matchModifier & Rendering::MATCH_VS) != 0 &&
+      huntingVS && huntedVS != 0 &&
+      commandListData.vs.activeShaderHash == huntedVS;
+
+    const bool suppressCS =
+      (matchModifier & Rendering::MATCH_CS) != 0 &&
+      huntingCS && huntedCS != 0 &&
+      commandListData.cs.activeShaderHash == huntedCS;
+
+    if (!suppressPS && !suppressVS && !suppressCS)
+        return false;
+
+    // Vulkan hunting keeps the visualisation safe by suppressing the whole draw,
+    // but still records the candidate target so the preview can be copied later
+    // at a legal render-pass boundary.
+    if (suppressPS)
+        renderingPreviewManager.RecordVulkanHuntedTarget(cmd_list, 0, commandListData.ps.activeShaderHash);
+    else if (suppressVS)
+        renderingPreviewManager.RecordVulkanHuntedTarget(cmd_list, 1, commandListData.vs.activeShaderHash);
+    else if (suppressCS)
+        renderingPreviewManager.RecordVulkanHuntedTarget(cmd_list, 2, commandListData.cs.activeShaderHash);
+
+    auto clearStage = [](ShaderData& stage) {
+        stage.bindingsToUpdate.clear();
+        stage.constantBuffersToUpdate.clear();
+        stage.techniquesToRender.clear();
+        stage.srvToUpdate.clear();
+        stage.blockedShaderGroups.clear();
+    };
+
+    // The entire draw/dispatch is suppressed, so discard queued REST work for
+    // every shader stage participating in that skipped call, not only the stage
+    // whose hunted hash triggered the suppression. This prevents stale VS/PS work
+    // from leaking into the next unsuppressed draw.
+    uint64_t clearMask = 0;
+    if ((matchModifier & Rendering::MATCH_PS) != 0) {
+        clearStage(commandListData.ps);
+        clearMask |= Rendering::MATCH_PS;
+    }
+    if ((matchModifier & Rendering::MATCH_VS) != 0) {
+        clearStage(commandListData.vs);
+        clearMask |= Rendering::MATCH_VS;
+    }
+    if ((matchModifier & Rendering::MATCH_CS) != 0) {
+        clearStage(commandListData.cs);
+        clearMask |= Rendering::MATCH_CS;
+    }
+
+    commandListData.commandQueue &= ~(clearMask |
+                                      (clearMask << Rendering::MATCH_DELIMITER) |
+                                      (clearMask << (2 * Rendering::MATCH_DELIMITER)));
+
+    return true;
+}
+
 static bool onDraw(command_list* cmd_list, uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance) {
+    if (ShouldSuppressVulkanHuntedCall(cmd_list, Rendering::MATCH_PS | Rendering::MATCH_VS))
+        return true;
+
     CheckDrawCall(cmd_list, Rendering::MATCH_PS | Rendering::MATCH_VS);
 
     return false;
 }
 
 static bool onDispatch(command_list* cmd_list, uint32_t group_count_x, uint32_t group_count_y, uint32_t group_count_z) {
+    if (ShouldSuppressVulkanHuntedCall(cmd_list, Rendering::MATCH_CS))
+        return true;
+
     CheckDrawCall(cmd_list, Rendering::MATCH_CS);
 
     return false;
@@ -574,6 +740,9 @@ static bool onDrawIndexed(command_list* cmd_list,
                           uint32_t first_index,
                           int32_t vertex_offset,
                           uint32_t first_instance) {
+    if (ShouldSuppressVulkanHuntedCall(cmd_list, Rendering::MATCH_PS | Rendering::MATCH_VS))
+        return true;
+
     CheckDrawCall(cmd_list, Rendering::MATCH_PS | Rendering::MATCH_VS);
 
     return false;
@@ -586,9 +755,13 @@ static bool onDrawOrDispatchIndirect(command_list* cmd_list, indirect_command ty
             break;
         case indirect_command::draw:
         case indirect_command::draw_indexed:
+            if (ShouldSuppressVulkanHuntedCall(cmd_list, Rendering::MATCH_PS | Rendering::MATCH_VS))
+                return true;
             CheckDrawCall(cmd_list, Rendering::MATCH_PS | Rendering::MATCH_VS);
             break;
         case indirect_command::dispatch:
+            if (ShouldSuppressVulkanHuntedCall(cmd_list, Rendering::MATCH_CS))
+                return true;
             CheckDrawCall(cmd_list, Rendering::MATCH_CS);
             break;
     }
@@ -646,7 +819,9 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID) {
             reshade::register_event<reshade::addon_event::init_device>(onInitDevice);
             reshade::register_event<reshade::addon_event::destroy_device>(onDestroyDevice);
             reshade::register_event<reshade::addon_event::bind_render_targets_and_depth_stencil>(onBindRenderTargetsAndDepthStencil);
+            reshade::register_event<reshade::addon_event::barrier>(onBarrier);
             reshade::register_event<reshade::addon_event::begin_render_pass>(onBeginRenderPass);
+            reshade::register_event<reshade::addon_event::end_render_pass>(onEndRenderPass);
             reshade::register_event<reshade::addon_event::init_effect_runtime>(onInitEffectRuntime);
             reshade::register_event<reshade::addon_event::destroy_effect_runtime>(onDestroyEffectRuntime);
             reshade::register_event<reshade::addon_event::present>(onPresent);
@@ -680,7 +855,9 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID) {
             reshade::unregister_event<reshade::addon_event::init_device>(onInitDevice);
             reshade::unregister_event<reshade::addon_event::destroy_device>(onDestroyDevice);
             reshade::unregister_event<reshade::addon_event::bind_render_targets_and_depth_stencil>(onBindRenderTargetsAndDepthStencil);
+            reshade::unregister_event<reshade::addon_event::barrier>(onBarrier);
             reshade::unregister_event<reshade::addon_event::begin_render_pass>(onBeginRenderPass);
+            reshade::unregister_event<reshade::addon_event::end_render_pass>(onEndRenderPass);
             reshade::unregister_event<reshade::addon_event::init_effect_runtime>(onInitEffectRuntime);
             reshade::unregister_event<reshade::addon_event::destroy_effect_runtime>(onDestroyEffectRuntime);
             reshade::unregister_event<reshade::addon_event::create_resource>(onCreateResource);

@@ -55,14 +55,15 @@ enum SwapChainMatchMode : uint32_t {
 constexpr bool IsAutoSceneColourSupported(reshade::api::device_api api) {
     return api == reshade::api::device_api::d3d10 ||
            api == reshade::api::device_api::d3d11 ||
-           api == reshade::api::device_api::d3d12;
+           api == reshade::api::device_api::d3d12 ||
+           api == reshade::api::device_api::vulkan;
 }
 
 static_assert(IsAutoSceneColourSupported(reshade::api::device_api::d3d10));
 static_assert(IsAutoSceneColourSupported(reshade::api::device_api::d3d11));
 static_assert(IsAutoSceneColourSupported(reshade::api::device_api::d3d12));
+static_assert(IsAutoSceneColourSupported(reshade::api::device_api::vulkan));
 static_assert(!IsAutoSceneColourSupported(reshade::api::device_api::d3d9));
-static_assert(!IsAutoSceneColourSupported(reshade::api::device_api::vulkan));
 
 // ReShade resource handles are explicitly 64-bit on both Win32 and x64.
 // Keep this invariant visible so 32-bit builds cannot silently narrow them.
@@ -188,6 +189,44 @@ class ToggleGroup {
     uint32_t getDebugEffectHeight() const { return _debugEffectHeight; }
     bool getDebugNativeStaging() const { return _debugNativeStaging; }
     const std::string& getDebugLastTechniqueOrder() const { return _debugLastTechniqueOrder; }
+    const std::string& getDebugLastVulkanBoundary() const { return _debugLastVulkanBoundary; }
+    void setDebugLastVulkanBoundary(const std::string& boundary) { _debugLastVulkanBoundary = boundary; }
+
+    const std::string& getDebugAutoStatus() const { return _debugAutoStatus; }
+    void setDebugAutoStatus(const std::string& status) { _debugAutoStatus = status; }
+    uint64_t getDebugCurrentTarget() const { return _debugCurrentTarget; }
+    uint32_t getDebugCurrentSceneWidth() const { return _debugCurrentSceneWidth; }
+    uint32_t getDebugCurrentSceneHeight() const { return _debugCurrentSceneHeight; }
+    const std::string& getDebugCurrentFormat() const { return _debugCurrentFormat; }
+
+    void recordDebugAutoTarget(uint64_t targetHandle,
+                               uint32_t sceneWidth,
+                               uint32_t sceneHeight,
+                               const std::string& formatName) {
+        _debugCurrentTarget = targetHandle;
+        _debugCurrentSceneWidth = sceneWidth;
+        _debugCurrentSceneHeight = sceneHeight;
+        _debugCurrentFormat = formatName;
+    }
+
+    void resetDebugAutoDiagnostics() {
+        _debugAutoStatus.clear();
+        _debugCurrentTarget = 0;
+        _debugCurrentSceneWidth = 0;
+        _debugCurrentSceneHeight = 0;
+        _debugCurrentFormat.clear();
+
+        _debugEffectRenderCalls = 0;
+        _debugLastRenderedTechniqueCount = 0;
+        _debugLastRenderTarget = 0;
+        _debugLastTechniqueOrder.clear();
+        _debugLastVulkanBoundary.clear();
+        _debugSceneWidth = 0;
+        _debugSceneHeight = 0;
+        _debugEffectWidth = 0;
+        _debugEffectHeight = 0;
+        _debugNativeStaging = false;
+    }
     void recordDebugEffectRender(uint32_t techniqueCount,
                                  uint64_t targetHandle,
                                  const std::string& techniqueOrder,
@@ -205,6 +244,7 @@ class ToggleGroup {
         _debugEffectWidth = effectWidth;
         _debugEffectHeight = effectHeight;
         _debugNativeStaging = nativeStaging;
+        _debugAutoStatus = "Successful";
     }
     void setBindingSRVSlotIndex(uint32_t index) { _bindingSrvSlotIndex = index; }
     uint32_t getBindingSRVSlotIndex() const { return _bindingSrvSlotIndex; }
@@ -309,6 +349,13 @@ class ToggleGroup {
     uint32_t _debugEffectHeight = 0;
     bool _debugNativeStaging = false;
     std::string _debugLastTechniqueOrder;
+    std::string _debugLastVulkanBoundary;
+
+    std::string _debugAutoStatus;
+    uint64_t _debugCurrentTarget = 0;
+    uint32_t _debugCurrentSceneWidth = 0;
+    uint32_t _debugCurrentSceneHeight = 0;
+    std::string _debugCurrentFormat;
     bool _extractConstants;
     bool _extractResourceViews;
     volatile bool _clearBindings;

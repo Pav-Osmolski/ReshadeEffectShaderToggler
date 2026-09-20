@@ -102,44 +102,31 @@ void AddonUIData::AssignPreferredGroupTechniques(std::unordered_map<std::string,
     }
 }
 
-const vector<ToggleGroup*>* AddonUIData::GetToggleGroupsForPixelShaderHash(uint32_t hash)
+vector<ToggleGroup*> AddonUIData::GetToggleGroupsForPixelShaderHash(uint32_t hash) const
 {
-    const auto& it = _pixelShaderHashToToggleGroups.find(hash);
-
-    if (it != _pixelShaderHashToToggleGroups.end())
-    {
-        return &it->second;
-    }
-
-    return nullptr;
+    shared_lock lock(_shaderHashGroupsMutex);
+    const auto it = _pixelShaderHashToToggleGroups.find(hash);
+    return it != _pixelShaderHashToToggleGroups.end() ? it->second : vector<ToggleGroup*>{};
 }
 
-const vector<ToggleGroup*>* AddonUIData::GetToggleGroupsForVertexShaderHash(uint32_t hash)
+vector<ToggleGroup*> AddonUIData::GetToggleGroupsForVertexShaderHash(uint32_t hash) const
 {
-    const auto& it = _vertexShaderHashToToggleGroups.find(hash);
-
-    if (it != _vertexShaderHashToToggleGroups.end())
-    {
-        return &it->second;
-    }
-
-    return nullptr;
+    shared_lock lock(_shaderHashGroupsMutex);
+    const auto it = _vertexShaderHashToToggleGroups.find(hash);
+    return it != _vertexShaderHashToToggleGroups.end() ? it->second : vector<ToggleGroup*>{};
 }
 
-const vector<ToggleGroup*>* AddonUIData::GetToggleGroupsForComputeShaderHash(uint32_t hash)
+vector<ToggleGroup*> AddonUIData::GetToggleGroupsForComputeShaderHash(uint32_t hash) const
 {
-    const auto& it = _computeShaderHashToToggleGroups.find(hash);
-
-    if (it != _computeShaderHashToToggleGroups.end())
-    {
-        return &it->second;
-    }
-
-    return nullptr;
+    shared_lock lock(_shaderHashGroupsMutex);
+    const auto it = _computeShaderHashToToggleGroups.find(hash);
+    return it != _computeShaderHashToToggleGroups.end() ? it->second : vector<ToggleGroup*>{};
 }
 
 void AddonUIData::UpdateToggleGroupsForShaderHashes()
 {
+    unique_lock lock(_shaderHashGroupsMutex);
+
     _pixelShaderHashToToggleGroups.clear();
     _vertexShaderHashToToggleGroups.clear();
     _computeShaderHashToToggleGroups.clear();
@@ -151,36 +138,36 @@ void AddonUIData::UpdateToggleGroupsForShaderHashes()
         {
             if (_pixelShaderManager->isInHuntingMode())
             {
-                _pixelShaderHashToToggleGroups[_pixelShaderManager->getActiveHuntedShaderHash()].push_back(&group);
+                const uint32_t hash = _pixelShaderManager->getActiveHuntedShaderHash();
+                if (hash != 0)
+                    _pixelShaderHashToToggleGroups[hash].push_back(&group);
             }
 
             if (_vertexShaderManager->isInHuntingMode())
             {
-                _vertexShaderHashToToggleGroups[_vertexShaderManager->getActiveHuntedShaderHash()].push_back(&group);
+                const uint32_t hash = _vertexShaderManager->getActiveHuntedShaderHash();
+                if (hash != 0)
+                    _vertexShaderHashToToggleGroups[hash].push_back(&group);
             }
 
             if (_computeShaderManager->isInHuntingMode())
             {
-                _computeShaderHashToToggleGroups[_computeShaderManager->getActiveHuntedShaderHash()].push_back(&group);
+                const uint32_t hash = _computeShaderManager->getActiveHuntedShaderHash();
+                if (hash != 0)
+                    _computeShaderHashToToggleGroups[hash].push_back(&group);
             }
 
             continue;
         }
 
         for (const auto& h : group.getPixelShaderHashes())
-        {
             _pixelShaderHashToToggleGroups[h].push_back(&group);
-        }
 
         for (const auto& h : group.getVertexShaderHashes())
-        {
             _vertexShaderHashToToggleGroups[h].push_back(&group);
-        }
 
         for (const auto& h : group.getComputeShaderHashes())
-        {
             _computeShaderHashToToggleGroups[h].push_back(&group);
-        }
     }
 }
 
@@ -393,15 +380,32 @@ void AddonUIData::SaveShaderTogglerIniFile(const string& fileName)
 /// </summary>
 /// <param name="acceptCollectedShaderHashes"></param>
 /// <param name="groupEditing"></param>
+void AddonUIData::OpenGroupSettings(ToggleGroup& group)
+{
+    _toggleGroupIdSettingsOpen = group.getId();
+}
+
+void AddonUIData::CloseGroupSettings(bool acceptCollectedShaderHashes, ToggleGroup& group)
+{
+    if (_toggleGroupIdShaderEditing == group.getId())
+        EndShaderEditing(acceptCollectedShaderHashes, group);
+
+    _toggleGroupIdSettingsOpen = -1;
+}
+
 void AddonUIData::EndShaderEditing(bool acceptCollectedShaderHashes, ToggleGroup& groupEditing)
 {
     if (acceptCollectedShaderHashes && _toggleGroupIdShaderEditing == groupEditing.getId())
     {
-        groupEditing.storeCollectedHashes(_pixelShaderManager->getMarkedShaderHashes(), _vertexShaderManager->getMarkedShaderHashes(), _computeShaderManager->getMarkedShaderHashes());
-        _pixelShaderManager->stopHuntingMode();
-        _vertexShaderManager->stopHuntingMode();
-        _computeShaderManager->stopHuntingMode();
+        groupEditing.storeCollectedHashes(_pixelShaderManager->getMarkedShaderHashes(),
+                                          _vertexShaderManager->getMarkedShaderHashes(),
+                                          _computeShaderManager->getMarkedShaderHashes());
+        groupEditing.resetDebugAutoDiagnostics();
     }
+
+    _pixelShaderManager->stopHuntingMode();
+    _vertexShaderManager->stopHuntingMode();
+    _computeShaderManager->stopHuntingMode();
     _toggleGroupIdShaderEditing = -1;
 
     UpdateToggleGroupsForShaderHashes();
@@ -414,6 +418,8 @@ void AddonUIData::EndShaderEditing(bool acceptCollectedShaderHashes, ToggleGroup
 /// <param name="groupEditing"></param>
 void AddonUIData::StartShaderEditing(ToggleGroup& groupEditing)
 {
+    _toggleGroupIdSettingsOpen = groupEditing.getId();
+
     if (_toggleGroupIdShaderEditing == groupEditing.getId())
     {
         return;

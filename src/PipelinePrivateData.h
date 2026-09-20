@@ -37,7 +37,7 @@ struct __declspec(novtable) ShaderData final {
     std::unordered_set<ShaderToggler::ToggleGroup*> constantBuffersToUpdate;
     effect_queue techniquesToRender;
     std::unordered_set<ShaderToggler::ToggleGroup*> srvToUpdate;
-    const std::vector<ShaderToggler::ToggleGroup*>* blockedShaderGroups = nullptr;
+    std::vector<ShaderToggler::ToggleGroup*> blockedShaderGroups;
     uint32_t id = 0;
 
     ShaderData(uint32_t _id)
@@ -49,12 +49,15 @@ struct __declspec(novtable) ShaderData final {
         constantBuffersToUpdate.clear();
         techniquesToRender.clear();
         srvToUpdate.clear();
-        blockedShaderGroups = nullptr;
+        blockedShaderGroups.clear();
     }
 };
 
 struct __declspec(uuid("222F7169-3C09-40DB-9BC9-EC53842CE537")) CommandListDataContainer {
     uint64_t commandQueue = 0;
+    bool vulkanAutoInjectionActive = false;
+    bool vulkanInsideRenderPass = false;
+    bool vulkanRenderPassEndPending = false;
     ShaderData ps{ 0 };
     ShaderData vs{ 1 };
     ShaderData cs{ 2 };
@@ -65,6 +68,9 @@ struct __declspec(uuid("222F7169-3C09-40DB-9BC9-EC53842CE537")) CommandListDataC
         cs.Reset();
 
         commandQueue = 0;
+        vulkanAutoInjectionActive = false;
+        vulkanInsideRenderPass = false;
+        vulkanRenderPassEndPending = false;
     }
 };
 
@@ -92,6 +98,15 @@ struct __declspec(novtable) HuntPreview final {
     reshade::api::resource_desc target_desc;
     bool recreate_preview = false;
 
+    // Vulkan hunting cannot copy from the target inside the active render pass.
+    // Record the candidate at the suppressed draw and consume it at the next safe
+    // render-pass boundary on the same command list.
+    bool vulkan_capture_pending = false;
+    reshade::api::command_list* vulkan_command_list = nullptr;
+    uint32_t hunted_shader_hash = 0;
+    uint32_t hunted_stage = 0;
+    std::string status;
+
     void Reset() {
         matched = false;
         target = reshade::api::resource{ 0 };
@@ -99,7 +114,13 @@ struct __declspec(novtable) HuntPreview final {
         width = 0;
         height = 0;
         format = reshade::api::format::unknown;
+        view_format = reshade::api::format::unknown;
         recreate_preview = false;
+        vulkan_capture_pending = false;
+        vulkan_command_list = nullptr;
+        hunted_shader_hash = 0;
+        hunted_stage = 0;
+        status.clear();
     }
 };
 
@@ -146,6 +167,7 @@ struct __declspec(uuid("C63E95B1-4E2F-46D6-A276-E8B4612C069A")) DeviceDataContai
     std::unordered_set<const ShaderToggler::ToggleGroup*> bindingsUpdated;
     std::unordered_set<const ShaderToggler::ToggleGroup*> constantsUpdated;
     std::unordered_set<const ShaderToggler::ToggleGroup*> srvUpdated;
+    effect_queue vulkanAutoPendingEffects;
     HuntPreview huntPreview;
     CustomShader customShader;
     ResouceManagerData resourceManagerData;
