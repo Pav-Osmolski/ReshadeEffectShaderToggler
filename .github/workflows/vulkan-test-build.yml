@@ -6,6 +6,7 @@ on:
       - vulkan-auto-scene-colour
     paths:
       - .github/workflows/vulkan-test-build.yml
+      - src/**
 
 permissions:
   contents: read
