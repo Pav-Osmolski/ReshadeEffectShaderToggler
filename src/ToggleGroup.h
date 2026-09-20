@@ -189,6 +189,8 @@ class ToggleGroup {
     uint32_t getDebugEffectHeight() const { return _debugEffectHeight; }
     bool getDebugNativeStaging() const { return _debugNativeStaging; }
     const std::string& getDebugLastTechniqueOrder() const { return _debugLastTechniqueOrder; }
+    const std::string& getDebugLastVulkanBoundary() const { return _debugLastVulkanBoundary; }
+    void setDebugLastVulkanBoundary(const std::string& boundary) { _debugLastVulkanBoundary = boundary; }
 
     const std::string& getDebugAutoStatus() const { return _debugAutoStatus; }
     void setDebugAutoStatus(const std::string& status) { _debugAutoStatus = status; }
@@ -218,6 +220,7 @@ class ToggleGroup {
         _debugLastRenderedTechniqueCount = 0;
         _debugLastRenderTarget = 0;
         _debugLastTechniqueOrder.clear();
+        _debugLastVulkanBoundary.clear();
         _debugSceneWidth = 0;
         _debugSceneHeight = 0;
         _debugEffectWidth = 0;
@@ -346,6 +349,7 @@ class ToggleGroup {
     uint32_t _debugEffectHeight = 0;
     bool _debugNativeStaging = false;
     std::string _debugLastTechniqueOrder;
+    std::string _debugLastVulkanBoundary;
 
     std::string _debugAutoStatus;
     uint64_t _debugCurrentTarget = 0;
