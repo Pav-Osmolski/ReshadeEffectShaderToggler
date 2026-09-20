@@ -240,6 +240,10 @@ t_Str CDataFile::Serialize() {
         }
     }
 
+    // Serializing to memory is a completed save operation for callers such as
+    // REST group clipboard export. Avoid the destructor trying to save the same
+    // data to a non-existent filename afterwards.
+    m_bDirty = false;
     return output.str();
 }
 
