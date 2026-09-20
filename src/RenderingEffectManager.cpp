@@ -123,11 +123,21 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
             // needs transfer-destination usage for the processed result to be blitted back.
             const bool hasCopySource = static_cast<uint32_t>(desc.usage & resource_usage::copy_source) != 0;
             const bool hasCopyDest = static_cast<uint32_t>(desc.usage & resource_usage::copy_dest) != 0;
-            if (!hasCopySource || (wantsNativeStaging && !hasCopyDest))
+            if (!hasCopySource) {
+                group->setDebugAutoStatus("Unsupported target: missing transfer source");
                 continue;
+            }
+            if (wantsNativeStaging && !hasCopyDest) {
+                group->setDebugAutoStatus("Unsupported target: missing transfer destination");
+                continue;
+            }
 
-            if (!runtime->get_device()->check_format_support(desc.texture.format, resource_usage::copy_source) ||
-                (wantsNativeStaging && !runtime->get_device()->check_format_support(desc.texture.format, resource_usage::copy_dest))) {
+            if (!runtime->get_device()->check_format_support(desc.texture.format, resource_usage::copy_source)) {
+                group->setDebugAutoStatus("Unsupported format: transfer source");
+                continue;
+            }
+            if (wantsNativeStaging && !runtime->get_device()->check_format_support(desc.texture.format, resource_usage::copy_dest)) {
+                group->setDebugAutoStatus("Unsupported format: transfer destination");
                 continue;
             }
         }
@@ -142,6 +152,7 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
                 // continuation pass may be recorded on a different command buffer, so
                 // pending work is tracked at device scope. Preserve the first applicable
                 // group/target for a technique, matching REST's first-render-wins model.
+                group->setDebugAutoStatus("Waiting for safe render-pass continuation");
                 for (EffectData* effect : effectList) {
                     deviceData.vulkanAutoPendingEffects.try_emplace(effect, active_resource);
                     removalList.push_back(effect);
@@ -163,8 +174,12 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
             if (vulkanNativeStaging) {
                 // Vulkan image blits require single-sample transfer-capable images.
                 // The live render target was opted into transfer usage at resource creation.
-                if (desc.texture.samples != 1 ||
-                    !runtime->get_device()->check_capability(device_caps::blit)) {
+                if (desc.texture.samples != 1) {
+                    group->setDebugAutoStatus("Unsupported target: multisampled");
+                    continue;
+                }
+                if (!runtime->get_device()->check_capability(device_caps::blit)) {
+                    group->setDebugAutoStatus("Unsupported device: image blit unavailable");
                     continue;
                 }
             }
