@@ -365,6 +365,17 @@ void AddonUIData::SaveShaderTogglerIniFile(const string& fileName)
         return;
     }
 
+    CDataFile verifier;
+    const int expectedGroupCount = static_cast<int>(_toggleGroups.size());
+    if (!verifier.Load(tempPath.string()) ||
+        verifier.GetInt("ConfigVersion", "General") != REST_CONFIG_VERSION ||
+        verifier.GetInt("AmountGroups", "General") != expectedGroupCount) {
+        reshade::log::message(reshade::log::level::error,
+          std::format("Temporary configuration verification failed for \"{}\"", tempPath.string()).c_str());
+        std::filesystem::remove(tempPath, ec);
+        return;
+    }
+
     if (std::filesystem::exists(targetPath, ec)) {
         ec.clear();
         std::filesystem::copy_file(targetPath, backupPath, std::filesystem::copy_options::overwrite_existing, ec);
