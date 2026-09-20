@@ -566,7 +566,7 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
                         (group->getDebugNativeStaging() ?
                           (deviceApi == reshade::api::device_api::vulkan ? "Vulkan image blit" : "fullscreen shader copy") :
                           "direct"),
-                      deviceApi == reshade::api::device_api::vulkan ? "deferred to same-target LOAD pass" : "not applicable",
+                      deviceApi == reshade::api::device_api::vulkan ? "same-target LOAD or post-pass transition" : "not applicable",
                       group->getDebugLastRenderedTechniqueCount(),
                       group->getDebugLastTechniqueOrder().empty() ? "(none)" : group->getDebugLastTechniqueOrder(),
                       static_cast<unsigned long long>(group->getDebugEffectRenderCalls()),
