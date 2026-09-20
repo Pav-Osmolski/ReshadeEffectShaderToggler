@@ -211,10 +211,8 @@ class ToggleGroup {
 
     const std::string& getDebugAutoStatus() const { return _debugAutoStatus; }
     void setDebugAutoStatus(const std::string& status) {
-        if (_debugAutoStatus != status) {
-            _debugAutoStatus = status;
-            appendDebugHistory(status);
-        }
+        _debugAutoStatus = status;
+        appendDebugHistory(status);
     }
     uint64_t getDebugCurrentTarget() const { return _debugCurrentTarget; }
     uint32_t getDebugCurrentSceneWidth() const { return _debugCurrentSceneWidth; }
