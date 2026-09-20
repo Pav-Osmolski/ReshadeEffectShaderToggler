@@ -5,7 +5,7 @@
 
 A ReShade 5.8+ add-on for applying ReShade effects at specific points inside a game's rendering pipeline. REST groups user-selected shaders and can inject selected ReShade techniques immediately before those shaders are encountered.
 
-Both 64-bit and 32-bit are first-class build targets. CI builds and validates both architectures, including PE machine type, version metadata and required add-on exports. Auto Scene Colour uses the same D3D10/D3D11/D3D12 path on x86 and x64. Legacy game-specific hooks may remain architecture-specific; the FFXIV constant-copy hook is x64-only because its signatures target 64-bit game code.
+Both 64-bit and 32-bit are first-class build targets. CI builds and validates both architectures, including PE machine type, version metadata and required add-on exports. Auto Scene Colour supports D3D10/D3D11/D3D12 and Vulkan through ReShade's generic API, with a Vulkan-specific native-staging blit path. Legacy game-specific hooks may remain architecture-specific; the FFXIV constant-copy hook is x64-only because its signatures target 64-bit game code.
 
 ## Highlights
 
@@ -14,7 +14,7 @@ Both 64-bit and 32-bit are first-class build targets. CI builds and validates bo
 - Render effects at configurable render-target boundaries.
 - Preview and inspect render targets while hunting shaders.
 - Extract and reuse constant-buffer or texture-binding data where supported.
-- **Automatic scene-colour injection for D3D10/D3D11/D3D12 games using DLSS or other dynamic-resolution/upscaling paths.**
+- **Automatic scene-colour injection for D3D10/D3D11/D3D12 and Vulkan games using DLSS or other dynamic-resolution/upscaling paths.**
 - Preserve technique selections reliably across ReShade effect reloads and ordering changes.
 - Search, filter and recollect shaders with mouse controls or configurable keyboard shortcuts.
 - Track unsaved configuration changes, clone groups safely, confirm deletions and flag shortcut conflicts.
@@ -25,7 +25,7 @@ REST requires a ReShade build with add-on support enabled.
 
 The existing render-target, shader-hunting and binding features remain API/game dependent. D3D10/D3D11/D3D12 and Vulkan behaviour outside the paths that have been specifically tested may vary by title.
 
-The **Auto scene colour** path supports D3D10, D3D11 and D3D12 on both x86 and x64. The implementation is shared across architectures through ReShade's generic API. Baldur's Gate 3 in DX11 mode using DLSS is the primary runtime-validated configuration. Auto scene colour does not currently support Vulkan.
+The **Auto scene colour** path supports D3D10, D3D11, D3D12 and Vulkan on both x86 and x64. D3D10/11/12 retain the existing shader-based native-staging copy path, while Vulkan uses ReShade's generic image-blit API with explicit transfer-state transitions. Baldur's Gate 3 in DX11 mode using DLSS remains the primary regression-tested D3D configuration; Vulkan runtime validation is required separately before release.
 
 ## Installation
 
@@ -79,7 +79,7 @@ Important behaviour:
 - Multi-pass effects must keep their required techniques enabled and in the correct ReShade order.
 - Technique selections are stored by name and preserved when ReShade reloads or reorders its effect list.
 
-## Automatic scene colour for D3D10/D3D11/D3D12 upscalers
+## Automatic scene colour for D3D10/D3D11/D3D12 and Vulkan upscalers
 
 For games that render the scene below output resolution and upscale later, rendering a ReShade effect directly into the lower-resolution scene target can break multi-pass effects or produce incorrectly scaled output.
 
@@ -141,7 +141,7 @@ A normal pull request to `main` runs the full build. Tagged releases use the for
 
 For example:
 
-`v1.5.0.633`
+`v1.6.0.633`
 
 See [Release Process](docs/RELEASING.md) for the release checklist and packaging details.
 
