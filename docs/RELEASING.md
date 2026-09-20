@@ -64,21 +64,30 @@ D3D10, D3D11, D3D12 and Vulkan are supported on x86 and x64. BG3 DX11 remains th
 
 Before releasing Vulkan support, validate a representative Vulkan title with Auto Scene Colour enabled:
 
-1. **Same-resolution path**
+1. **Safe continuation boundary**
    - Auto Scene Colour is clickable and reports `Vulkan`.
+   - Mark a shader in a pass whose colour target is reused by a later render pass with **LOAD** semantics.
+   - Before the continuation is found, the editor may report **Waiting for safe render-pass continuation...**.
+   - Confirm the effect is injected before the first compatible same-target LOAD pass, not inside the matched game render pass.
+2. **Same-resolution path**
    - Scene and effect resolutions match.
-   - Selected effects update every frame at the marked shader boundary.
-2. **Native-staging/upscaling path**
+   - Confirm **Native staging: Not required**.
+   - Selected effects update every frame once the safe continuation boundary is reached.
+3. **Native-staging/upscaling path**
    - Use a Vulkan title/configuration where the live scene resolution differs from the ReShade/output resolution.
-   - Confirm **Native staging: Active**.
+   - Confirm **Native staging: Active (Vulkan blit)**.
+   - Copy diagnostics and confirm **Staging path: Vulkan image blit** and **Vulkan boundary: deferred to same-target LOAD pass**.
    - Confirm the image remains live while moving the camera and that the effect is not frozen or one frame behind.
-   - Confirm later game UI/post-processing remains above the injected effect when the chosen shader boundary is before those passes.
-3. **Resolution changes**
+   - Confirm later game UI/post-processing remains above the injected effect when the compatible continuation pass precedes those passes.
+4. **Same-pass limitation**
+   - Test a boundary where later composition remains inside the same Vulkan render pass, if one is readily identifiable.
+   - REST must not issue the Auto injection inside that pass or destabilise the game; pending work should be skipped/reset safely.
+5. **Resolution changes**
    - Change the internal/output resolution while Auto is active.
    - Allow one frame for staging recreation, then confirm continuous updates resume.
-4. **Fallback safety**
-   - Confirm unsupported/multisampled transfer cases skip Auto staging rather than corrupting the render target or device state.
-5. **D3D regression**
+6. **Fallback safety**
+   - Confirm CLEAR/DISCARD continuation passes, unsupported transfer formats and multisampled targets skip Auto staging rather than corrupting the render target or device state.
+7. **D3D regression**
    - Re-run the BG3 DX11 + DLSS matrix after Vulkan changes to prove the D3D staging path is unchanged.
 
 For API-specific changes, verify in a representative title that Auto Scene Colour is clickable, the live scene/effect resolutions are reported correctly, native staging activates only when needed, and the effect remains at the intended shader boundary.
