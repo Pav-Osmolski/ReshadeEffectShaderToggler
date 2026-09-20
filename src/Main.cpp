@@ -431,10 +431,10 @@ static void onBarrier(command_list* cmd_list,
     }
 
     CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
-    if (commandListData.vulkanAutoInjectionActive)
+    if (commandListData.vulkanAutoInjectionActive || commandListData.vulkanInsideRenderPass)
         return;
 
-    renderingEffectManager.RenderDeferredVulkanAutoEffectsAfterBarrier(cmd_list, count, resources, newStates);
+    renderingEffectManager.RenderDeferredVulkanAutoEffectsAfterBarrier(cmd_list, count, resources, oldStates, newStates);
 }
 
 static void onBeginRenderPass(command_list* cmd_list, uint32_t count, const render_pass_render_target_desc* rts, const render_pass_depth_stencil_desc* ds) {
@@ -478,6 +478,21 @@ static void onBeginRenderPass(command_list* cmd_list, uint32_t count, const rend
     if (commandListData.commandQueue & Rendering::CHECK_MATCH_DRAW_EFFECT) {
         renderingEffectManager.RenderEffects(cmd_list, Rendering::CALL_DRAW, Rendering::MATCH_EFFECT_PS | Rendering::MATCH_EFFECT_VS);
     }
+
+    if (device->get_api() == device_api::vulkan)
+        commandListData.vulkanInsideRenderPass = true;
+}
+
+static void onEndRenderPass(command_list* cmd_list) {
+    if (cmd_list == nullptr || cmd_list->get_device() == nullptr ||
+        cmd_list->get_device()->get_api() != device_api::vulkan) {
+        return;
+    }
+
+    // ReShade invokes this before vkCmdEndRenderPass/vkCmdEndRendering. Mark the
+    // tracked pass inactive now so the next barrier callback (which happens after
+    // Vulkan has recorded the end command) is eligible for the post-pass fallback.
+    cmd_list->get_private_data<CommandListDataContainer>().vulkanInsideRenderPass = false;
 }
 
 static void onReshadeOverlay(effect_runtime* runtime) {
@@ -780,6 +795,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID) {
             reshade::register_event<reshade::addon_event::bind_render_targets_and_depth_stencil>(onBindRenderTargetsAndDepthStencil);
             reshade::register_event<reshade::addon_event::barrier>(onBarrier);
             reshade::register_event<reshade::addon_event::begin_render_pass>(onBeginRenderPass);
+            reshade::register_event<reshade::addon_event::end_render_pass>(onEndRenderPass);
             reshade::register_event<reshade::addon_event::init_effect_runtime>(onInitEffectRuntime);
             reshade::register_event<reshade::addon_event::destroy_effect_runtime>(onDestroyEffectRuntime);
             reshade::register_event<reshade::addon_event::present>(onPresent);
@@ -815,6 +831,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID) {
             reshade::unregister_event<reshade::addon_event::bind_render_targets_and_depth_stencil>(onBindRenderTargetsAndDepthStencil);
             reshade::unregister_event<reshade::addon_event::barrier>(onBarrier);
             reshade::unregister_event<reshade::addon_event::begin_render_pass>(onBeginRenderPass);
+            reshade::unregister_event<reshade::addon_event::end_render_pass>(onEndRenderPass);
             reshade::unregister_event<reshade::addon_event::init_effect_runtime>(onInitEffectRuntime);
             reshade::unregister_event<reshade::addon_event::destroy_effect_runtime>(onDestroyEffectRuntime);
             reshade::unregister_event<reshade::addon_event::create_resource>(onCreateResource);
