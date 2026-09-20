@@ -1,6 +1,6 @@
 ///////////////////////////////////////////////////////////////////////
 //
-// Part of ShaderToggler, a shader toggler add on for Reshade 5+ which allows you
+// Part of ShaderToggler, a shader toggler add on for ReShade 5+ which allows you
 // to define groups of shaders to toggle them on/off with one key press
 //
 // (c) Frans 'Otis_Inf' Bouma.
@@ -48,7 +48,7 @@
 
 #define MAX_DESCRIPTOR_INDEX 10
 
-// From Reshade, see https://github.com/crosire/reshade/blob/main/source/imgui_widgets.cpp
+// From ReShade, see https://github.com/crosire/reshade/blob/main/source/imgui_widgets.cpp
 static bool key_input_box(const char* name, uint32_t* keys, const reshade::api::effect_runtime* runtime) {
     char buf[48];
     buf[0] = '\0';
