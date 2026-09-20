@@ -366,9 +366,11 @@ void RenderingEffectManager::RenderDeferredVulkanAutoEffects(command_list* cmd_l
     unordered_set<uint64_t> safeTargets;
     safeTargets.reserve(renderTargetCount);
     for (uint32_t i = 0; i < renderTargetCount; ++i) {
-        if (renderTargets[i].view == 0)
+        if (renderTargets[i].view == 0 || renderTargets[i].load_op != render_pass_load_op::load)
             continue;
 
+        // Only inject before a continuation pass that LOADs the existing target.
+        // CLEAR/DISCARD would immediately overwrite the injected result.
         const resource target = cmd_list->get_device()->get_resource_from_view(renderTargets[i].view);
         if (target != 0)
             safeTargets.insert(target.handle);
