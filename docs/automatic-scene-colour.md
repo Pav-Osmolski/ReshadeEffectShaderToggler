@@ -43,7 +43,9 @@ Vulkan does not permit image-transfer barriers, blits or a nested ReShade effect
 
 REST processes that deferred work at the next ReShade `begin_render_pass` callback that references the **same colour target with LOAD semantics**. ReShade emits that callback before the underlying Vulkan render pass begins, giving REST a legal command-buffer boundary. A CLEAR or DISCARD continuation is ignored because it would immediately overwrite the injected result.
 
-When the deferred Vulkan injection needs native-resolution staging, REST does not use its embedded Direct3D fullscreen-copy shaders. Instead it uses ReShade's generic `copy_texture_region` blit path. Compatible Vulkan colour targets are opted into transfer-source and transfer-destination usage when they are created, then REST performs explicit `render target -> copy source/copy destination -> render target` transitions around the up/downscale blits. The staging path requires a single-sample colour target plus Vulkan transfer/blit support for the selected format.
+ReShade's Vulkan `render_technique` path first copies the supplied colour target into its internal effect-colour texture, so the live game image must already have transfer-source usage even when scene and effect resolutions match. REST deliberately does not retrofit transfer flags onto arbitrary Vulkan game images because the generic ReShade resource descriptor does not expose every native image-creation constraint (for example transient attachments).
+
+When the deferred Vulkan injection needs native-resolution staging, the live target must additionally have transfer-destination usage. REST then uses ReShade's generic `copy_texture_region` blit path rather than its embedded Direct3D fullscreen-copy shaders, with explicit `render target -> copy source/copy destination -> render target` transitions around the up/downscale blits. The staging path also requires a single-sample colour target and Vulkan blit support.
 
 This first Vulkan implementation deliberately does not split an existing game render pass. If the desired later UI/fog/post-processing composition occurs inside the same pass as the matched draw, REST leaves the pending injection untouched rather than recording invalid Vulkan commands.
 
@@ -153,7 +155,7 @@ The selected ReShade techniques also execute at the native runtime resolution ra
 - **D3D10, D3D11, D3D12 and Vulkan are supported on x86 and x64.** They share the same live-target selection and effect-dispatch architecture through ReShade's generic API.
 - Baldur's Gate 3 DX11 + DLSS remains the primary runtime-tested D3D configuration and regression reference for scene-colour behaviour.
 - D3D10/11/12 use REST's existing fullscreen shader-copy path when native staging is required.
-- Vulkan uses ReShade's image-blit path for native staging and therefore requires a single-sample colour target with transfer/blit support.
+- Vulkan requires the live colour target to have existing transfer-source usage. Native staging additionally requires existing transfer-destination usage, a single-sample target and Vulkan blit support.
 - Vulkan runtime validation is a separate release gate; support should not be considered release-ready until a representative Vulkan title has exercised both direct and native-staging paths.
 - The implementation targets the **primary colour RTV (slot 0)**.
 - It is intended for scene-colour injection around a user-selected shader boundary, not as a general replacement for ReShade's depth-buffer detection.
