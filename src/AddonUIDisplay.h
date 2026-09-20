@@ -265,25 +265,47 @@ static void DisplayPreview(AddonImGui::AddonUIData& instance,
         reshade::api::resource_view srv = reshade::api::resource_view{ 0 };
         resManager.SetPongPreviewHandles(runtime->get_device(), nullptr, nullptr, &srv);
         bool clearAlpha = group->getClearPreviewAlpha();
+        const bool vulkan = runtime->get_device()->get_api() == reshade::api::device_api::vulkan;
 
         ImGui::Text("Clear alpha channel");
         ImGui::SameLine();
+        if (vulkan)
+            ImGui::BeginDisabled();
         ImGui::Checkbox("##Clearalpha", &clearAlpha);
+        if (vulkan) {
+            ImGui::EndDisabled();
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Vulkan safe preview currently copies the source image directly.");
+        }
 
-        if (srv != 0) {
+        if (!deviceData.huntPreview.status.empty()) {
             ImGui::SameLine();
-            ImGui::Text(std::format(" Address: 0x{:x} ", deviceData.huntPreview.target.handle).c_str());
+            ImGui::TextDisabled("%s", deviceData.huntPreview.status.c_str());
+        }
+
+        if (deviceData.huntPreview.target != 0) {
+            const char* stageName = deviceData.huntPreview.hunted_stage == 0 ? "PS" :
+                                    deviceData.huntPreview.hunted_stage == 1 ? "VS" : "CS";
+            ImGui::Text("Shader: 0x%08x (%s)", deviceData.huntPreview.hunted_shader_hash, stageName);
             ImGui::SameLine();
-            ImGui::Text(std::format("Format: {} ", static_cast<uint32_t>(deviceData.huntPreview.format)).c_str());
+            ImGui::Text("Target: %ux%u", deviceData.huntPreview.width, deviceData.huntPreview.height);
             ImGui::SameLine();
-            ImGui::Text(std::format("Width: {} ", deviceData.huntPreview.width).c_str());
+            ImGui::Text("Format: %s", Rendering::RenderingManager::FormatName(deviceData.huntPreview.format).c_str());
             ImGui::SameLine();
-            ImGui::Text(std::format("Height: {} ", deviceData.huntPreview.height).c_str());
+            ImGui::Text("Address: 0x%llx", static_cast<unsigned long long>(deviceData.huntPreview.target.handle));
             ImGui::Separator();
+        }
 
+        if (srv != 0 && deviceData.huntPreview.matched) {
             if (ImGui::BeginChild("RTPreview##preview", { 0, 0 }, false, ImGuiWindowFlags_None)) {
                 DrawPreview(srv.handle, deviceData.huntPreview.width, deviceData.huntPreview.height);
             }
+            ImGui::EndChild();
+        } else if (vulkan && ImGui::BeginChild("RTPreview##preview", { 0, 0 }, false, ImGuiWindowFlags_None)) {
+            if (deviceData.huntPreview.status.empty())
+                ImGui::TextDisabled("Select a shader while hunting to capture a Vulkan preview.");
+            else
+                ImGui::TextDisabled("%s", deviceData.huntPreview.status.c_str());
             ImGui::EndChild();
         }
 
