@@ -263,8 +263,8 @@ void ResourceManager::CheckPreview(reshade::api::command_list* cmd_list, reshade
         resource_desc desc = deviceData.huntPreview.target_desc;
 
         const bool vulkan = device->get_api() == device_api::vulkan;
-        const format previewFormat = vulkan ?
-          format_to_default_typed(deviceData.huntPreview.view_format != format::unknown ? deviceData.huntPreview.view_format : desc.texture.format, 0) :
+        const reshade::api::format previewFormat = vulkan ?
+          format_to_default_typed(deviceData.huntPreview.view_format != reshade::api::format::unknown ? deviceData.huntPreview.view_format : desc.texture.format, 0) :
           format_to_typeless(desc.texture.format);
 
         const resource_usage vulkanUsage = resource_usage::copy_dest | resource_usage::shader_resource;
