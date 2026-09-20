@@ -57,6 +57,7 @@ struct __declspec(uuid("222F7169-3C09-40DB-9BC9-EC53842CE537")) CommandListDataC
     uint64_t commandQueue = 0;
     bool vulkanAutoInjectionActive = false;
     bool vulkanInsideRenderPass = false;
+    bool vulkanRenderPassEndPending = false;
     ShaderData ps{ 0 };
     ShaderData vs{ 1 };
     ShaderData cs{ 2 };
@@ -69,6 +70,7 @@ struct __declspec(uuid("222F7169-3C09-40DB-9BC9-EC53842CE537")) CommandListDataC
         commandQueue = 0;
         vulkanAutoInjectionActive = false;
         vulkanInsideRenderPass = false;
+        vulkanRenderPassEndPending = false;
     }
 };
 
