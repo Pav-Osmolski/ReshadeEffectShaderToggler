@@ -86,7 +86,8 @@ Before releasing Vulkan support, validate a representative Vulkan title with Aut
    - Change the internal/output resolution while Auto is active.
    - Allow one frame for staging recreation, then confirm continuous updates resume.
 6. **Fallback safety**
-   - Confirm CLEAR/DISCARD continuation passes, unsupported transfer formats and multisampled targets skip Auto staging rather than corrupting the render target or device state.
+   - Confirm CLEAR/DISCARD continuation passes, missing transfer-source/transfer-destination usage, unsupported transfer formats and multisampled targets do not attempt unsafe Auto staging.
+   - Verify the editor reports the relevant eligibility reason and the globally enabled technique can fall back to ordinary end-of-frame ReShade placement.
 7. **D3D regression**
    - Re-run the BG3 DX11 + DLSS matrix after Vulkan changes to prove the D3D staging path is unchanged.
 
