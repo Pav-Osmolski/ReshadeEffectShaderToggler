@@ -355,7 +355,8 @@ class ToggleGroup {
         std::lock_guard lock(_debugHistoryMutex);
         if (!_debugAutoHistory.empty()) {
             auto& last = _debugAutoHistory.back();
-            if (last.status == status && last.target == _debugCurrentTarget &&
+            if (last.status == status && last.shaderHash == _debugCurrentShaderHash &&
+                last.target == _debugCurrentTarget &&
                 last.sceneWidth == _debugCurrentSceneWidth && last.sceneHeight == _debugCurrentSceneHeight) {
                 if (!boundary.empty())
                     last.boundary = boundary;
