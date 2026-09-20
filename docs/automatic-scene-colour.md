@@ -1,6 +1,6 @@
 # Automatic Scene Colour
 
-Automatic Scene Colour is a rendering mode for REST groups that need to apply ReShade effects to the live scene before later game passes such as fog or UI, while still allowing those effects to execute at the normal ReShade runtime resolution. It supports D3D10, D3D11 and D3D12 on both x86 and x64 through ReShade's generic graphics API.
+Automatic Scene Colour is a rendering mode for REST groups that need to apply ReShade effects to the live scene before later game passes such as fog or UI, while still allowing those effects to execute at the normal ReShade runtime resolution. It supports D3D10, D3D11, D3D12 and Vulkan on both x86 and x64 through ReShade's generic graphics API.
 
 It was developed and validated against **Baldur's Gate 3 in DX11 mode with DLSS enabled**.
 
@@ -36,6 +36,10 @@ When **Auto scene colour** is enabled for a group, REST:
 6. Lets the game's matched draw and all subsequent passes continue normally.
 
 The result is part of the scene before the later game passes are composited.
+
+### Vulkan native staging
+
+When Vulkan needs native-resolution staging, REST does not use its embedded Direct3D fullscreen-copy shaders. Instead it uses ReShade's generic `copy_texture_region` blit path. Compatible Vulkan colour targets are opted into transfer-source and transfer-destination usage when they are created, then REST performs explicit `render target -> copy source/copy destination -> render target` transitions around the up/downscale blits. The staging path requires a single-sample colour target plus Vulkan transfer/blit support for the selected format.
 
 ## What is automatic
 
@@ -140,9 +144,10 @@ The selected ReShade techniques also execute at the native runtime resolution ra
 
 ## Current scope
 
-- **D3D10, D3D11 and D3D12 are supported on x86 and x64.** They share the same live-RTV/native-staging architecture through ReShade's generic API.
-- Baldur's Gate 3 DX11 + DLSS is the primary runtime-tested configuration and remains the regression reference for scene-colour behaviour.
-- D3D10 and D3D12 use the same REST Auto Scene Colour implementation, while the underlying ReShade backend supplies the API-specific resource and barrier handling.
-- Vulkan is not currently supported by Auto Scene Colour. If an INI contains Auto enabled on an unsupported API, REST falls back to the saved manual render-target configuration without deleting the Auto preference.
+- **D3D10, D3D11, D3D12 and Vulkan are supported on x86 and x64.** They share the same live-target selection and effect-dispatch architecture through ReShade's generic API.
+- Baldur's Gate 3 DX11 + DLSS remains the primary runtime-tested D3D configuration and regression reference for scene-colour behaviour.
+- D3D10/11/12 use REST's existing fullscreen shader-copy path when native staging is required.
+- Vulkan uses ReShade's image-blit path for native staging and therefore requires a single-sample colour target with transfer/blit support.
+- Vulkan runtime validation is a separate release gate; support should not be considered release-ready until a representative Vulkan title has exercised both direct and native-staging paths.
 - The implementation targets the **primary colour RTV (slot 0)**.
 - It is intended for scene-colour injection around a user-selected shader boundary, not as a general replacement for ReShade's depth-buffer detection.
