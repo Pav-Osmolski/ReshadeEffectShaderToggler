@@ -1238,8 +1238,9 @@ static void DisplayOverlay(AddonImGui::AddonUIData& instance, Rendering::Resourc
         static float width = ImGui::GetWindowWidth();
 
         const char* typeItems[] = { "Pixel shader", "Vertex shader", "Compute Shader" };
-        static const char* typeSelectedItem = typeItems[0];
         uint32_t& selectedIndex = instance.GetHuntingUIState().selectedShaderType;
+        selectedIndex = std::min<uint32_t>(selectedIndex, 2);
+        const char* typeSelectedItem = typeItems[selectedIndex];
 
         ShaderToggler::ShaderManager* selectedShaderManager =
           selectedIndex == 0 ? instance.GetPixelShaderManager() : (selectedIndex == 1 ? instance.GetVertexShaderManager() : instance.GetComputeShaderManager());
@@ -1585,9 +1586,12 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, reshade::api::eff
         ImGui::SameLine();
         if (ImGui::Button("Import group")) {
             const char* clipboard = ImGui::GetClipboardText();
-            if (clipboard != nullptr && instance.ImportToggleGroup(clipboard) != nullptr)
+            if (clipboard != nullptr && instance.ImportToggleGroup(clipboard) != nullptr) {
+                RuntimeDataContainer& runtimeData = runtime->get_private_data<RuntimeDataContainer>();
+                std::shared_lock<std::shared_mutex> techLock(runtimeData.technique_mutex);
+                instance.AssignPreferredGroupTechniques(runtimeData.allTechniques);
                 groupClipboardStatus = "Group imported from clipboard.";
-            else
+            } else
                 groupClipboardStatus = "Clipboard does not contain a valid REST group.";
         }
 
