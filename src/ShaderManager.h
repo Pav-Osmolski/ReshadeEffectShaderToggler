@@ -86,6 +86,10 @@ class ShaderManager {
     uint32_t getShaderHash(uint64_t handle);
     void addActivePipelineHandle(uint64_t handle);
     void toggleMarkOnHuntedShader();
+    void clearMarkedShaderHashes() {
+        std::unique_lock lock(_markedShaderHashMutex);
+        _markedShaderHashes.clear();
+    }
     void resetActiveHuntedShader();
 
     size_t getPipelineCount() { return _handleToShaderHash.size(); }
