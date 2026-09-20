@@ -98,6 +98,7 @@ class AddonUIData {
     std::atomic_uint32_t* _activeCollectorFrameCounter;
     std::atomic_uint _invocationLocation = 0;
     std::atomic_uint _descriptorIndex = 0;
+    std::atomic_int _toggleGroupIdSettingsOpen = -1;
     std::atomic_int _toggleGroupIdShaderEditing = -1;
     std::atomic_int _toggleGroupIdEffectEditing = -1;
     std::atomic_int _toggleGroupIdConstantEditing = -1;
@@ -135,7 +136,10 @@ class AddonUIData {
     void AddDefaultGroup();
     ShaderToggler::ToggleGroup* CloneToggleGroup(int sourceGroupId);
     bool IsConfigDirty() const;
+    const std::atomic_int& GetToggleGroupIdSettingsOpen() const { return _toggleGroupIdSettingsOpen; }
     const std::atomic_int& GetToggleGroupIdShaderEditing() const;
+    void OpenGroupSettings(ShaderToggler::ToggleGroup& group);
+    void CloseGroupSettings(bool acceptCollectedShaderHashes, ShaderToggler::ToggleGroup& group);
     void EndShaderEditing(bool acceptCollectedShaderHashes, ShaderToggler::ToggleGroup& groupEditing);
     void StartShaderEditing(ShaderToggler::ToggleGroup& groupEditing);
     void StartEffectEditing(ShaderToggler::ToggleGroup& groupEditing);
@@ -147,6 +151,7 @@ class AddonUIData {
     std::filesystem::path GetBasePath() { return _basePath; };
     void SaveShaderTogglerIniFile(const std::string& fileName = HASH_FILE_NAME);
     void LoadShaderTogglerIniFile(const std::string& fileName = HASH_FILE_NAME);
+    std::atomic_int& GetToggleGroupIdSettingsOpen() { return _toggleGroupIdSettingsOpen; }
     std::atomic_int& GetToggleGroupIdShaderEditing() { return _toggleGroupIdShaderEditing; }
     std::atomic_int& GetToggleGroupIdEffectEditing() { return _toggleGroupIdEffectEditing; }
     std::atomic_int& GetToggleGroupIdConstantEditing() { return _toggleGroupIdConstantEditing; }
