@@ -174,6 +174,8 @@ struct __declspec(uuid("C63E95B1-4E2F-46D6-A276-E8B4612C069A")) DeviceDataContai
     std::unordered_set<const ShaderToggler::ToggleGroup*> constantsUpdated;
     std::unordered_set<const ShaderToggler::ToggleGroup*> srvUpdated;
     effect_queue vulkanAutoPendingEffects;
+    std::atomic_bool vulkanAutoWorkPending{ false };
+    std::atomic_bool vulkanPreviewWorkPending{ false };
     HuntPreview huntPreview;
     CustomShader customShader;
     ResouceManagerData resourceManagerData;
