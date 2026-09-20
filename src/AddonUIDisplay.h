@@ -378,10 +378,10 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
                 ImGui::EndDisabled();
             if (!autoSceneColourSupported) {
                 ImGui::SameLine();
-                ImGui::TextDisabled("(D3D10/D3D11/D3D12 only)");
+                ImGui::TextDisabled("(D3D10/D3D11/D3D12/Vulkan only)");
             }
             if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-                ImGui::SetTooltip("Auto Scene Colour supports D3D10, D3D11 and D3D12. Baldur's Gate 3 DX11 + DLSS is the primary runtime regression reference. Vulkan is not supported.");
+                ImGui::SetTooltip("Auto Scene Colour supports D3D10, D3D11, D3D12 and Vulkan. Vulkan native staging uses ReShade\'s generic image-blit path.");
             }
 
             const bool autoSceneColourActive = autoSceneColour && autoSceneColourSupported;
@@ -405,8 +405,10 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
                     ImGui::TextUnformatted("D3D10");
                 else if (deviceApi == reshade::api::device_api::d3d11)
                     ImGui::TextUnformatted("D3D11");
-                else
+                else if (deviceApi == reshade::api::device_api::d3d12)
                     ImGui::TextUnformatted("D3D12");
+                else
+                    ImGui::TextUnformatted("Vulkan");
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
@@ -457,7 +459,8 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
                 ImGui::TableNextColumn();
                 if (ImGui::Button("Copy diagnostics")) {
                     const char* apiName = deviceApi == reshade::api::device_api::d3d10 ? "D3D10" :
-                                          deviceApi == reshade::api::device_api::d3d11 ? "D3D11" : "D3D12";
+                                          deviceApi == reshade::api::device_api::d3d11 ? "D3D11" :
+                                          deviceApi == reshade::api::device_api::d3d12 ? "D3D12" : "Vulkan";
                     const std::string diagnostics = std::format(
                       "REST {}\nGroup: {}\nAPI: {}\nAuto Scene Colour: active\nScene: {}x{}\nEffect: {}x{}\nNative staging: {}\nLast techniques: {}\nTechnique order: {}\nRender calls: {}\nLast target: 0x{:x}",
                       REST_VERSION_STRING,
