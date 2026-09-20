@@ -404,7 +404,7 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
                 if (deviceApi == reshade::api::device_api::d3d10)
                     ImGui::TextUnformatted("D3D10");
                 else if (deviceApi == reshade::api::device_api::d3d11)
-                    ImGui::TextUnformatted("D3D11 (BG3 validated)");
+                    ImGui::TextUnformatted("D3D11");
                 else
                     ImGui::TextUnformatted("D3D12");
 
