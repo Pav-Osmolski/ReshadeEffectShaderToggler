@@ -191,6 +191,7 @@ static void onReshadeReloadedEffects(effect_runtime* runtime) {
     {
         unique_lock<shared_mutex> renderLock(deviceData.render_mutex);
         deviceData.vulkanAutoPendingEffects.clear();
+        deviceData.vulkanAutoWorkPending.store(false, std::memory_order_release);
     }
 
     techniqueManager.OnReshadeReloadedEffects(runtime);
@@ -557,6 +558,7 @@ static void onReshadePresent(effect_runtime* runtime) {
     {
         unique_lock<shared_mutex> renderLock(deviceData.render_mutex);
         deviceData.vulkanAutoPendingEffects.clear();
+        deviceData.vulkanAutoWorkPending.store(false, std::memory_order_release);
     }
 
     deviceData.rendered_effects = false;
