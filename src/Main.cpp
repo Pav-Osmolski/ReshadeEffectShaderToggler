@@ -648,23 +648,27 @@ static bool ShouldSuppressVulkanHuntedCall(command_list* cmd_list, uint64_t matc
 
     CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
 
+    const bool huntingPS = g_pixelShaderManager.isInHuntingMode();
+    const bool huntingVS = g_vertexShaderManager.isInHuntingMode();
+    const bool huntingCS = g_computeShaderManager.isInHuntingMode();
+    const uint32_t huntedPS = g_pixelShaderManager.getActiveHuntedShaderHash();
+    const uint32_t huntedVS = g_vertexShaderManager.getActiveHuntedShaderHash();
+    const uint32_t huntedCS = g_computeShaderManager.getActiveHuntedShaderHash();
+
     const bool suppressPS =
       (matchModifier & Rendering::MATCH_PS) != 0 &&
-      g_pixelShaderManager.isInHuntingMode() &&
-      g_pixelShaderManager.getActiveHuntedShaderHash() != 0 &&
-      commandListData.ps.activeShaderHash == g_pixelShaderManager.getActiveHuntedShaderHash();
+      huntingPS && huntedPS != 0 &&
+      commandListData.ps.activeShaderHash == huntedPS;
 
     const bool suppressVS =
       (matchModifier & Rendering::MATCH_VS) != 0 &&
-      g_vertexShaderManager.isInHuntingMode() &&
-      g_vertexShaderManager.getActiveHuntedShaderHash() != 0 &&
-      commandListData.vs.activeShaderHash == g_vertexShaderManager.getActiveHuntedShaderHash();
+      huntingVS && huntedVS != 0 &&
+      commandListData.vs.activeShaderHash == huntedVS;
 
     const bool suppressCS =
       (matchModifier & Rendering::MATCH_CS) != 0 &&
-      g_computeShaderManager.isInHuntingMode() &&
-      g_computeShaderManager.getActiveHuntedShaderHash() != 0 &&
-      commandListData.cs.activeShaderHash == g_computeShaderManager.getActiveHuntedShaderHash();
+      huntingCS && huntedCS != 0 &&
+      commandListData.cs.activeShaderHash == huntedCS;
 
     if (!suppressPS && !suppressVS && !suppressCS)
         return false;
