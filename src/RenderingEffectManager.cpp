@@ -154,9 +154,10 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
                 // pending work is tracked at device scope. Preserve the first applicable
                 // group/target for a technique, matching REST's first-render-wins model.
                 group->setDebugAutoStatus("Waiting for safe Vulkan continuation or target transition");
+                if (!effectList.empty())
+                    deviceData.vulkanAutoWorkPending.store(true, std::memory_order_release);
                 for (EffectData* effect : effectList) {
                     deviceData.vulkanAutoPendingEffects.try_emplace(effect, active_resource);
-                    deviceData.vulkanAutoWorkPending.store(true, std::memory_order_release);
                     removalList.push_back(effect);
                 }
                 continue;
