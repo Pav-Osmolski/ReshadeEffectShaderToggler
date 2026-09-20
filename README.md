@@ -1,4 +1,4 @@
-# ReshadeEffectShaderToggler
+# REST Enhanced — ReShade Effect Shader Toggler
 
 [![MSBuild](https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler/actions/workflows/msbuild.yml/badge.svg)](https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler/actions/workflows/msbuild.yml)
 [![Release](https://img.shields.io/github/v/release/Pav-Osmolski/ReshadeEffectShaderToggler?label=release)](https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler/releases/latest)
@@ -40,11 +40,11 @@ For Unreal Engine games this is often the executable under a path such as:
 
 ReShade must be installed against that executable as well.
 
-Start the game and open the ReShade overlay. The **Add-ons** tab should list **Reshade Effect Shader Toggler**.
+Start the game and open the ReShade overlay. The **Add-ons** tab should list **REST Enhanced — ReShade Effect Shader Toggler**.
 
 ## Basic workflow
 
-1. Open the ReShade overlay and expand **Reshade Effect Shader Toggler**.
+1. Open the ReShade overlay and expand **REST Enhanced — ReShade Effect Shader Toggler**.
 2. Click **New group** to create a toggle group.
 3. Click **Edit** to give the group a useful name and optional hotkey.
 4. Click **Settings** and keep the relevant scene visible while REST collects active shaders.
