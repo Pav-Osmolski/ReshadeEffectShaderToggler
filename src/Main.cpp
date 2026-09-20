@@ -521,6 +521,7 @@ static void onReshadePresent(effect_runtime* runtime) {
 
     deviceData.bindingsUpdated.clear();
     deviceData.constantsUpdated.clear();
+    renderingPreviewManager.CancelDeferredVulkanPreview(dev);
     deviceData.huntPreview.Reset();
 
     CheckHotkeys(g_addonUIData, runtime);
