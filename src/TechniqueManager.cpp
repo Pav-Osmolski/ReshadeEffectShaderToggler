@@ -1,4 +1,6 @@
 #include "TechniqueManager.h"
+#include <algorithm>
+#include <cctype>
 
 using namespace reshade::api;
 using namespace ShaderToggler;
@@ -37,6 +39,7 @@ void TechniqueManager::OnReshadeReloadedEffects(reshade::api::effect_runtime* ru
     data.allEnabledTechniques.clear();
     data.allTechniques.clear();
     data.allSortedTechniques.clear();
+    data.techniqueUiCache.clear();
 
     Rendering::RenderingManager::EnumerateTechniques(
       runtime, [&data, this](effect_runtime* runtime, effect_technique technique, string& name, string& eff_name) {
@@ -63,6 +66,16 @@ void TechniqueManager::OnReshadeReloadedEffects(reshade::api::effect_runtime* ru
               data.allEnabledTechniques.emplace(&it.first->second);
           }
       });
+
+    data.techniqueUiCache.reserve(data.allTechniques.size());
+    for (auto& [name, effect] : data.allTechniques) {
+        std::string upper = name;
+        std::transform(upper.begin(), upper.end(), upper.begin(),
+                       [](unsigned char ch) { return static_cast<char>(std::toupper(ch)); });
+        data.techniqueUiCache.push_back({ name, std::move(upper), &effect });
+    }
+    std::sort(data.techniqueUiCache.begin(), data.techniqueUiCache.end(),
+              [](const auto& lhs, const auto& rhs) { return lhs.name < rhs.name; });
 
     int32_t enabledCount = static_cast<int32_t>(data.allTechniques.size());
 
@@ -124,6 +137,7 @@ bool TechniqueManager::OnReshadeReorderTechniques(reshade::api::effect_runtime* 
     data.allEnabledTechniques.clear();
     data.allTechniques.clear();
     data.allSortedTechniques.clear();
+    data.techniqueUiCache.clear();
 
     for (uint32_t i = 0; i < count; i++) {
         effect_technique technique = techniques[i];
@@ -161,6 +175,16 @@ bool TechniqueManager::OnReshadeReorderTechniques(reshade::api::effect_runtime* 
             data.allEnabledTechniques.emplace(&it.first->second);
         }
     }
+
+    data.techniqueUiCache.reserve(data.allTechniques.size());
+    for (auto& [name, effect] : data.allTechniques) {
+        std::string upper = name;
+        std::transform(upper.begin(), upper.end(), upper.begin(),
+                       [](unsigned char ch) { return static_cast<char>(std::toupper(ch)); });
+        data.techniqueUiCache.push_back({ name, std::move(upper), &effect });
+    }
+    std::sort(data.techniqueUiCache.begin(), data.techniqueUiCache.end(),
+              [](const auto& lhs, const auto& rhs) { return lhs.name < rhs.name; });
 
     return false;
 }
