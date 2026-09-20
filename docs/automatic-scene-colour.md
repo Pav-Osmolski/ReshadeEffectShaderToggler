@@ -96,17 +96,26 @@ The exact technique names and requirements depend on the shader package being us
 
 ## Diagnostics
 
-The group editor displays:
+The group editor separates **the current candidate/latest target attempt** from **the last successful injection** so a rejected draw cannot make an earlier successful render look contradictory.
 
-- **Target** - confirms that Auto mode is using the live render target.
-- **Scene resolution** - resolution of the matched live game target.
-- **Effect resolution** - resolution at which the ReShade techniques are running.
-- **Technique order** - the techniques REST rendered on the last successful injection.
-- **Injection** - reports whether an effect dispatch has completed successfully and how many techniques were rendered.
-- **Native staging** - reports whether the native-resolution staging path is active or not required.
-- **Copy diagnostics** - copies a support-ready block containing the REST version, graphics API, group name, scene/effect resolutions, staging state, technique count/order, render-call count and last target handle.
+Current-attempt diagnostics include:
 
-When DLSS is active and the game renders below output resolution, a healthy configuration should normally show a lower scene resolution, the native effect resolution and **Native staging: Active**.
+- **Current attempt** - the latest target-match/injection status, including Vulkan rejection reasons.
+- **Current target** - dimensions, a human-readable ReShade format name and the resource handle for the latest candidate.
+
+Last-success diagnostics include:
+
+- **Last successful injection** - scene resolution -> effect resolution from the most recent successful render.
+- **Last successful staging** - Direct, Vulkan image blit or fullscreen shader copy.
+- **Last successful techniques** - technique count and execution order.
+- **Successful renders** - successful effect-render count for the currently committed shader set.
+- **Copy diagnostics** - copies both sections in a support-ready block.
+
+Committing a new shader set resets the diagnostic history, so values from a previous candidate are not carried into the next test.
+
+Vulkan target-rejection messages use format names such as **R16_FLOAT**, **R16G16_FLOAT** and **R8_UNORM** rather than raw enum values. Aspect-ratio failures and scale-range failures are reported separately.
+
+When DLSS is active and the game renders below output resolution, a healthy Vulkan native-staging configuration should show a lower current/last-success scene resolution, the native effect resolution and **Vulkan image blit** as the last successful staging path.
 
 ## Troubleshooting
 
