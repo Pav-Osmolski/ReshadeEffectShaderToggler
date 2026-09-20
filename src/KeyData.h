@@ -1,6 +1,6 @@
 ///////////////////////////////////////////////////////////////////////
 //
-// Part of ShaderToggler, a shader toggler add on for Reshade 5+ which allows you
+// Part of ShaderToggler, a shader toggler add on for ReShade 5+ which allows you
 // to define groups of shaders to toggle them on/off with one key press
 //
 // (c) Frans 'Otis_Inf' Bouma.
@@ -36,7 +36,7 @@
 #include <assert.h>
 #include "stdafx.h"
 
-// Mostly from Reshade, see https://github.com/crosire/reshade/blob/main/source/input.cpp
+// Mostly from ReShade, see https://github.com/crosire/reshade/blob/main/source/input.cpp
 namespace ShaderToggler {
 static std::string vkCodeToString(uint8_t vkCode) {
     static const char* keyboard_keys[256] = { "",
