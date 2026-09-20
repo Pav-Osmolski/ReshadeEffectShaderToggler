@@ -277,7 +277,7 @@ static void DisplayPreview(AddonImGui::AddonUIData& instance,
             ImGui::Separator();
         }
 
-        static int previewChannel = 0;
+        int& previewChannel = instance.GetHuntingUIState().previewChannel;
         if (srv != 0 && deviceData.huntPreview.matched) {
             ImGui::TextDisabled("View");
             ImGui::SameLine();
@@ -552,6 +552,27 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
                       static_cast<unsigned long long>(group->getDebugLastRenderTarget()));
                     ImGui::SetClipboardText(diagnostics.c_str());
                 }
+
+                const auto recentAttempts = group->getDebugAutoHistory();
+                if (!recentAttempts.empty() && ImGui::TreeNode("Recent attempts")) {
+                    for (auto it = recentAttempts.rbegin(); it != recentAttempts.rend(); ++it) {
+                        const auto& entry = *it;
+                        ImGui::Text("#%llu 0x%08x | %ux%u | %s",
+                                    static_cast<unsigned long long>(entry.sequence),
+                                    entry.shaderHash,
+                                    entry.sceneWidth,
+                                    entry.sceneHeight,
+                                    entry.status.empty() ? "(no status)" : entry.status.c_str());
+                        if (entry.target != 0) {
+                            ImGui::TextDisabled("Target 0x%llx | %s%s%s",
+                                                static_cast<unsigned long long>(entry.target),
+                                                entry.format.empty() ? "(format unknown)" : entry.format.c_str(),
+                                                entry.boundary.empty() ? "" : " | ",
+                                                entry.boundary.empty() ? "" : entry.boundary.c_str());
+                        }
+                    }
+                    ImGui::TreePop();
+                }
             } else {
                 if (supportsSRVwrite) {
                     ImGui::TableNextColumn();
@@ -768,12 +789,13 @@ static void DisplayGroupView(AddonImGui::AddonUIData& instance,
         return;
     }
 
-    static char shaderSearch[64] = "";
-    static int filterMode = 0;
+    auto& huntingUI = instance.GetHuntingUIState();
+    char* shaderSearch = huntingUI.shaderSearch;
+    int& filterMode = huntingUI.filterMode;
     const char* filterItems[] = { "All", "Marked", "Unmarked" };
 
     ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.45f);
-    ImGui::InputTextWithHint("##shaderSearch", "Search shader hash...", shaderSearch, IM_ARRAYSIZE(shaderSearch));
+    ImGui::InputTextWithHint("##shaderSearch", "Search shader hash...", shaderSearch, 64);
     ImGui::SameLine();
     ImGui::SetNextItemWidth(120.0f);
     ImGui::Combo("##shaderFilter", &filterMode, filterItems, IM_ARRAYSIZE(filterItems));
@@ -790,18 +812,25 @@ static void DisplayGroupView(AddonImGui::AddonUIData& instance,
         return;
     }
 
+    auto repeatButton = [](const char* label) {
+        ImGui::PushButtonRepeat(true);
+        const bool pressed = ImGui::Button(label);
+        ImGui::PopButtonRepeat();
+        return pressed;
+    };
+
     bool navigationChanged = false;
-    if (ImGui::Button("Prev")) {
+    if (repeatButton("Prev")) {
         shaderManager->huntPreviousShader(false);
         navigationChanged = true;
     }
     ImGui::SameLine();
-    if (ImGui::Button("Next")) {
+    if (repeatButton("Next")) {
         shaderManager->huntNextShader(false);
         navigationChanged = true;
     }
     ImGui::SameLine();
-    if (ImGui::Button("Prev marked")) {
+    if (repeatButton("Prev marked")) {
         shaderManager->huntPreviousShader(true);
         navigationChanged = true;
     }
@@ -811,8 +840,20 @@ static void DisplayGroupView(AddonImGui::AddonUIData& instance,
         navigationChanged = true;
     }
     ImGui::SameLine();
-    if (ImGui::Button("Next marked")) {
+    if (repeatButton("Next marked")) {
         shaderManager->huntNextShader(true);
+        navigationChanged = true;
+    }
+
+    if (repeatButton("Mark + Prev")) {
+        shaderManager->toggleMarkOnHuntedShader();
+        shaderManager->huntPreviousShader(false);
+        navigationChanged = true;
+    }
+    ImGui::SameLine();
+    if (repeatButton("Mark + Next")) {
+        shaderManager->toggleMarkOnHuntedShader();
+        shaderManager->huntNextShader(false);
         navigationChanged = true;
     }
 
@@ -821,6 +862,14 @@ static void DisplayGroupView(AddonImGui::AddonUIData& instance,
 
     const size_t markedCount = shaderManager->getMarkedShaderCount();
     ImGui::TextDisabled("%zu collected | %zu marked", shaderManager->getAmountShaderHashesCollected(), markedCount);
+    const uint32_t activeHuntedHash = shaderManager->getActiveHuntedShaderHash();
+    if (activeHuntedHash != 0) {
+        ImGui::SameLine();
+        if (ImGui::Button("Copy hash")) {
+            const std::string hashText = std::format("0x{:08x}", activeHuntedHash);
+            ImGui::SetClipboardText(hashText.c_str());
+        }
+    }
     ImGui::SameLine();
     if (markedCount == 0)
         ImGui::BeginDisabled();
@@ -1190,7 +1239,7 @@ static void DisplayOverlay(AddonImGui::AddonUIData& instance, Rendering::Resourc
 
         const char* typeItems[] = { "Pixel shader", "Vertex shader", "Compute Shader" };
         static const char* typeSelectedItem = typeItems[0];
-        static uint32_t selectedIndex = 0;
+        uint32_t& selectedIndex = instance.GetHuntingUIState().selectedShaderType;
 
         ShaderToggler::ShaderManager* selectedShaderManager =
           selectedIndex == 0 ? instance.GetPixelShaderManager() : (selectedIndex == 1 ? instance.GetVertexShaderManager() : instance.GetComputeShaderManager());
@@ -1432,9 +1481,11 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, reshade::api::eff
     if (ImGui::CollapsingHeader("Shader selection parameters", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::AlignTextToFramePadding();
         ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.5f);
-        ImGui::SliderFloat("Overlay opacity", instance.OverlayOpacity(), 0.0f, 1.0f);
+        if (ImGui::SliderFloat("Overlay opacity", instance.OverlayOpacity(), 0.0f, 1.0f))
+            instance.MarkConfigDirty();
         ImGui::AlignTextToFramePadding();
-        ImGui::SliderInt("# of frames to collect", instance.StartValueFramecountCollectionPhase(), 10, 1000);
+        if (ImGui::SliderInt("# of frames to collect", instance.StartValueFramecountCollectionPhase(), 10, 1000))
+            instance.MarkConfigDirty();
         ImGui::SameLine();
         ShowHelpMarker("This is the number of frames the addon will collect active shaders. Set this to a high number if the shader you want to mark is only "
                        "used occasionally. Only shaders that are used in the frames collected can be marked.");
@@ -1508,8 +1559,18 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, reshade::api::eff
     }
 
     if (ImGui::CollapsingHeader("List of Toggle Groups", ImGuiTreeNodeFlags_DefaultOpen)) {
+        static std::string groupClipboardStatus;
         if (ImGui::Button("New group"))
             instance.AddDefaultGroup();
+
+        ImGui::SameLine();
+        if (ImGui::Button("Import group")) {
+            const char* clipboard = ImGui::GetClipboardText();
+            if (clipboard != nullptr && instance.ImportToggleGroup(clipboard) != nullptr)
+                groupClipboardStatus = "Group imported from clipboard.";
+            else
+                groupClipboardStatus = "Clipboard does not contain a valid REST group.";
+        }
 
         ImGui::SameLine();
         if (instance.IsConfigDirty())
@@ -1555,6 +1616,13 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, reshade::api::eff
             ImGui::SameLine();
             if (ImGui::Button("Clone"))
                 toClone.push_back(group.getId());
+
+            ImGui::SameLine();
+            if (ImGui::Button("Copy group")) {
+                const std::string serialized = instance.ExportToggleGroup(group);
+                ImGui::SetClipboardText(serialized.c_str());
+                groupClipboardStatus = "Group copied to clipboard.";
+            }
 
             ImGui::SameLine();
             if (ImGui::Button("Delete"))
@@ -1664,8 +1732,13 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, reshade::api::eff
             std::erase_if(instance.GetToggleGroups(), [id](const auto& item) { return item.first == id; });
         }
 
-        if (!toRemove.empty())
+        if (!toRemove.empty()) {
             instance.UpdateToggleGroupsForShaderHashes();
+            instance.MarkConfigDirty();
+        }
+
+        if (!groupClipboardStatus.empty())
+            ImGui::TextDisabled("%s", groupClipboardStatus.c_str());
 
         ImGui::Separator();
 
