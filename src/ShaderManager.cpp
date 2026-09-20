@@ -101,23 +101,23 @@ void ShaderManager::stopHuntingMode() {
 }
 
 void ShaderManager::setActiveHuntedShaderHandle() {
-    if (_activeHuntedShaderIndex < 0 || _collectedActiveShaderHashes.size() == 0 ||
-        static_cast<size_t>(_activeHuntedShaderIndex) >= _collectedActiveShaderHashes.size()) {
+    if (_activeHuntedShaderIndex < 0) {
         _activeHuntedShaderHash.store(0, memory_order_release);
         return;
     }
 
-    // no lock needed, collecting phase is over
-    auto it = _collectedActiveShaderHashes.begin();
-    std::advance(it, _activeHuntedShaderIndex);
-    _activeHuntedShaderHash.store(*it, memory_order_release);
+    _activeHuntedShaderHash.store(
+      getCollectedShaderHash(static_cast<uint32_t>(_activeHuntedShaderIndex)),
+      memory_order_release);
 }
 
 void ShaderManager::huntNextShader(bool ctrlPressed) {
-    if (!_isInHuntingMode || _collectedActiveShaderHashes.empty())
+    if (!_isInHuntingMode.load(memory_order_acquire))
         return;
 
-    const int32_t count = static_cast<int32_t>(_collectedActiveShaderHashes.size());
+    const int32_t count = static_cast<int32_t>(getAmountShaderHashesCollected());
+    if (count <= 0)
+        return;
 
     if (ctrlPressed) {
         std::shared_lock lock(_markedShaderHashMutex);
@@ -146,10 +146,12 @@ void ShaderManager::huntNextShader(bool ctrlPressed) {
 }
 
 void ShaderManager::huntPreviousShader(bool ctrlPressed) {
-    if (!_isInHuntingMode || _collectedActiveShaderHashes.empty())
+    if (!_isInHuntingMode.load(memory_order_acquire))
         return;
 
-    const int32_t count = static_cast<int32_t>(_collectedActiveShaderHashes.size());
+    const int32_t count = static_cast<int32_t>(getAmountShaderHashesCollected());
+    if (count <= 0)
+        return;
 
     if (ctrlPressed) {
         std::shared_lock lock(_markedShaderHashMutex);
@@ -178,14 +180,16 @@ void ShaderManager::huntPreviousShader(bool ctrlPressed) {
 }
 
 void ShaderManager::setActivedHuntedShaderIndex(uint32_t index) {
-    if (!_isInHuntingMode) {
-        return;
-    }
-    if (_collectedActiveShaderHashes.size() <= 0) {
+    if (!_isInHuntingMode.load(memory_order_acquire)) {
         return;
     }
 
-    if (index >= _collectedActiveShaderHashes.size()) {
+    const size_t count = getAmountShaderHashesCollected();
+    if (count == 0) {
+        return;
+    }
+
+    if (index >= count) {
         _activeHuntedShaderIndex = 0;
     } else {
         _activeHuntedShaderIndex = index;
