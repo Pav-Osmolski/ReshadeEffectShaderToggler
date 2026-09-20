@@ -191,6 +191,11 @@ class ToggleGroup {
     const std::string& getDebugLastTechniqueOrder() const { return _debugLastTechniqueOrder; }
     const std::string& getDebugAutoStatus() const { return _debugAutoStatus; }
     void setDebugAutoStatus(const std::string& status) { _debugAutoStatus = status; }
+    void recordDebugAutoTarget(uint64_t targetHandle, uint32_t sceneWidth, uint32_t sceneHeight) {
+        _debugLastRenderTarget = targetHandle;
+        _debugSceneWidth = sceneWidth;
+        _debugSceneHeight = sceneHeight;
+    }
     void recordDebugEffectRender(uint32_t techniqueCount,
                                  uint64_t targetHandle,
                                  const std::string& techniqueOrder,
