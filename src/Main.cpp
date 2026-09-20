@@ -424,9 +424,24 @@ static void onBeginRenderPass(command_list* cmd_list, uint32_t count, const rend
     CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
     DeviceDataContainer& deviceData = device->get_private_data<DeviceDataContainer>();
 
-    if (!deviceData.current_runtime->get_effects_state()) {
+    if (deviceData.current_runtime == nullptr || !deviceData.current_runtime->get_effects_state()) {
         return;
     }
+
+    // Vulkan does not emit bind_render_targets_and_depth_stencil events for render
+    // pass attachments. Mirror the begin_render_pass descriptors into REST's state
+    // tracker so a marked draw can resolve the live primary colour target.
+    state_tracking& trackedState = cmd_list->get_private_data<state_tracking>();
+    trackedState.render_targets.clear();
+    trackedState.render_targets.reserve(count);
+    for (uint32_t i = 0; i < count; ++i)
+        trackedState.render_targets.push_back(rts[i].view);
+    trackedState.depth_stencil = ds != nullptr ? ds->view : resource_view{ 0 };
+
+    // ReShade invokes the Vulkan begin_render_pass event before the underlying
+    // vkCmdBeginRenderPass/vkCmdBeginRendering call. This is the safe point for
+    // Auto Scene Colour work deferred from a matched draw in the previous pass.
+    renderingEffectManager.RenderDeferredVulkanAutoEffects(cmd_list, count, rts);
 
     if (commandListData.commandQueue & Rendering::CHECK_MATCH_DRAW_BINDING) {
         renderingBindingManager.UpdateTextureBindings(cmd_list, Rendering::CALL_DRAW, Rendering::MATCH_BINDING_PS | Rendering::MATCH_BINDING_VS);
