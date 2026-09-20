@@ -420,6 +420,23 @@ static void onBindRenderTargetsAndDepthStencil(command_list* cmd_list, uint32_t 
     //}
 }
 
+static void onBarrier(command_list* cmd_list,
+                      uint32_t count,
+                      const resource* resources,
+                      const resource_usage* oldStates,
+                      const resource_usage* newStates) {
+    if (cmd_list == nullptr || cmd_list->get_device() == nullptr ||
+        cmd_list->get_device()->get_api() != device_api::vulkan) {
+        return;
+    }
+
+    CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
+    if (commandListData.vulkanAutoInjectionActive)
+        return;
+
+    renderingEffectManager.RenderDeferredVulkanAutoEffectsAfterBarrier(cmd_list, count, resources, newStates);
+}
+
 static void onBeginRenderPass(command_list* cmd_list, uint32_t count, const render_pass_render_target_desc* rts, const render_pass_depth_stencil_desc* ds) {
     if (cmd_list == nullptr || cmd_list->get_device() == nullptr) {
         return;
@@ -761,6 +778,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID) {
             reshade::register_event<reshade::addon_event::init_device>(onInitDevice);
             reshade::register_event<reshade::addon_event::destroy_device>(onDestroyDevice);
             reshade::register_event<reshade::addon_event::bind_render_targets_and_depth_stencil>(onBindRenderTargetsAndDepthStencil);
+            reshade::register_event<reshade::addon_event::barrier>(onBarrier);
             reshade::register_event<reshade::addon_event::begin_render_pass>(onBeginRenderPass);
             reshade::register_event<reshade::addon_event::init_effect_runtime>(onInitEffectRuntime);
             reshade::register_event<reshade::addon_event::destroy_effect_runtime>(onDestroyEffectRuntime);
@@ -795,6 +813,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID) {
             reshade::unregister_event<reshade::addon_event::init_device>(onInitDevice);
             reshade::unregister_event<reshade::addon_event::destroy_device>(onDestroyDevice);
             reshade::unregister_event<reshade::addon_event::bind_render_targets_and_depth_stencil>(onBindRenderTargetsAndDepthStencil);
+            reshade::unregister_event<reshade::addon_event::barrier>(onBarrier);
             reshade::unregister_event<reshade::addon_event::begin_render_pass>(onBeginRenderPass);
             reshade::unregister_event<reshade::addon_event::init_effect_runtime>(onInitEffectRuntime);
             reshade::unregister_event<reshade::addon_event::destroy_effect_runtime>(onDestroyEffectRuntime);
