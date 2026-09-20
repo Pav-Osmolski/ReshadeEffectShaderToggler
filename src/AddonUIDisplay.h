@@ -444,6 +444,8 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
                 ImGui::TableNextColumn();
                 if (group->getDebugEffectRenderCalls() > 0)
                     ImGui::Text("Successful (%u technique%s)", group->getDebugLastRenderedTechniqueCount(), group->getDebugLastRenderedTechniqueCount() == 1 ? "" : "s");
+                else if (deviceApi == reshade::api::device_api::vulkan)
+                    ImGui::TextUnformatted("Waiting for safe render-pass continuation...");
                 else
                     ImGui::TextUnformatted("Waiting for effect dispatch...");
 
@@ -465,7 +467,7 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
                                           deviceApi == reshade::api::device_api::d3d11 ? "D3D11" :
                                           deviceApi == reshade::api::device_api::d3d12 ? "D3D12" : "Vulkan";
                     const std::string diagnostics = std::format(
-                      "REST {}\nGroup: {}\nAPI: {}\nAuto Scene Colour: active\nScene: {}x{}\nEffect: {}x{}\nNative staging: {}\nStaging path: {}\nLast techniques: {}\nTechnique order: {}\nRender calls: {}\nLast target: 0x{:x}",
+                      "REST {}\nGroup: {}\nAPI: {}\nAuto Scene Colour: active\nScene: {}x{}\nEffect: {}x{}\nNative staging: {}\nStaging path: {}\nVulkan boundary: {}\nLast techniques: {}\nTechnique order: {}\nRender calls: {}\nLast target: 0x{:x}",
                       REST_VERSION_STRING,
                       group->getName(),
                       apiName,
@@ -475,6 +477,7 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
                       group->getDebugEffectHeight(),
                       group->getDebugNativeStaging() ? "active" : "not required",
                       group->getDebugNativeStaging() ? (deviceApi == reshade::api::device_api::vulkan ? "Vulkan image blit" : "fullscreen shader copy") : "direct",
+                      deviceApi == reshade::api::device_api::vulkan ? "deferred to same-target LOAD pass" : "not applicable",
                       group->getDebugLastRenderedTechniqueCount(),
                       group->getDebugLastTechniqueOrder().empty() ? "(none)" : group->getDebugLastTechniqueOrder(),
                       static_cast<unsigned long long>(group->getDebugEffectRenderCalls()),
