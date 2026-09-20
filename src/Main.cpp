@@ -431,6 +431,16 @@ static void onBarrier(command_list* cmd_list,
     }
 
     CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
+
+    // An end_render_pass callback may describe either a real render-pass end or the
+    // first half of vkCmdNextSubpass. Seeing a subsequent barrier proves the actual
+    // render pass has ended, because there is no command-recording opportunity between
+    // ReShade's paired end/begin callbacks for a subpass transition.
+    if (commandListData.vulkanRenderPassEndPending) {
+        commandListData.vulkanInsideRenderPass = false;
+        commandListData.vulkanRenderPassEndPending = false;
+    }
+
     if (commandListData.vulkanAutoInjectionActive || commandListData.vulkanInsideRenderPass)
         return;
 
@@ -451,9 +461,13 @@ static void onBeginRenderPass(command_list* cmd_list, uint32_t count, const rend
     }
 
     if (device->get_api() == device_api::vulkan) {
-        // The callback occurs before Vulkan begins the new render pass. Any hunted
-        // target recorded in the previous pass can therefore be copied safely here.
-        renderingPreviewManager.CaptureDeferredVulkanPreview(cmd_list);
+        // ReShade also emits begin_render_pass around vkCmdNextSubpass. In that case
+        // Vulkan is still inside the original render pass, so effect/preview transfer
+        // work is not legal here. Only treat a begin callback as a safe boundary when
+        // REST has positively tracked the command list as being outside a render pass.
+        const bool safeVulkanBoundary = !commandListData.vulkanInsideRenderPass;
+        if (safeVulkanBoundary)
+            renderingPreviewManager.CaptureDeferredVulkanPreview(cmd_list);
 
         // Vulkan does not emit bind_render_targets_and_depth_stencil events for render
         // pass attachments. Mirror the begin_render_pass descriptors into REST's state
@@ -465,10 +479,14 @@ static void onBeginRenderPass(command_list* cmd_list, uint32_t count, const rend
             trackedState.render_targets.push_back(rts[i].view);
         trackedState.depth_stencil = ds != nullptr ? ds->view : resource_view{ 0 };
 
-        // ReShade invokes the Vulkan begin_render_pass event before the underlying
-        // vkCmdBeginRenderPass/vkCmdBeginRendering call. This is the safe point for
-        // Auto Scene Colour work deferred from a matched draw in the previous pass.
-        renderingEffectManager.RenderDeferredVulkanAutoEffects(cmd_list, count, rts);
+        // For a true new render pass this callback occurs before vkCmdBeginRenderPass
+        // or vkCmdBeginRendering and is safe. Subpass transitions are intentionally
+        // skipped and remain pending for a proven post-pass boundary.
+        if (safeVulkanBoundary)
+            renderingEffectManager.RenderDeferredVulkanAutoEffects(cmd_list, count, rts);
+
+        commandListData.vulkanInsideRenderPass = true;
+        commandListData.vulkanRenderPassEndPending = false;
     }
 
     if (commandListData.commandQueue & Rendering::CHECK_MATCH_DRAW_BINDING) {
@@ -479,8 +497,6 @@ static void onBeginRenderPass(command_list* cmd_list, uint32_t count, const rend
         renderingEffectManager.RenderEffects(cmd_list, Rendering::CALL_DRAW, Rendering::MATCH_EFFECT_PS | Rendering::MATCH_EFFECT_VS);
     }
 
-    if (device->get_api() == device_api::vulkan)
-        commandListData.vulkanInsideRenderPass = true;
 }
 
 static void onEndRenderPass(command_list* cmd_list) {
@@ -489,10 +505,12 @@ static void onEndRenderPass(command_list* cmd_list) {
         return;
     }
 
-    // ReShade invokes this before vkCmdEndRenderPass/vkCmdEndRendering. Mark the
-    // tracked pass inactive now so the next barrier callback (which happens after
-    // Vulkan has recorded the end command) is eligible for the post-pass fallback.
-    cmd_list->get_private_data<CommandListDataContainer>().vulkanInsideRenderPass = false;
+    // This event is also emitted immediately before vkCmdNextSubpass. Keep the
+    // command list marked as inside the render pass until a later event proves that
+    // vkCmdEndRenderPass/vkCmdEndRendering really occurred.
+    CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
+    commandListData.vulkanInsideRenderPass = true;
+    commandListData.vulkanRenderPassEndPending = true;
 }
 
 static void onReshadeOverlay(effect_runtime* runtime) {
