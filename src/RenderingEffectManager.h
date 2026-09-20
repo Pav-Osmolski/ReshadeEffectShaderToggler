@@ -17,6 +17,7 @@ class __declspec(novtable) RenderingEffectManager final {
     void RenderDeferredVulkanAutoEffectsAfterBarrier(reshade::api::command_list* cmd_list,
                                                      uint32_t barrierCount,
                                                      const reshade::api::resource* resources,
+                                                     const reshade::api::resource_usage* oldStates,
                                                      const reshade::api::resource_usage* newStates);
     bool RenderRemainingEffects(reshade::api::effect_runtime* runtime);
     void PreventRuntimeReload(reshade::api::effect_runtime* runtime, reshade::api::command_list* cmd_list);
@@ -38,6 +39,7 @@ class __declspec(novtable) RenderingEffectManager final {
 
     void _RenderDeferredVulkanAutoEffects(
       reshade::api::command_list* cmd_list,
-      const std::unordered_map<uint64_t, reshade::api::resource_usage>& safeTargets);
+      const std::unordered_map<uint64_t, reshade::api::resource_usage>& safeTargets,
+      const char* boundaryName);
 };
 }
