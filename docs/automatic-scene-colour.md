@@ -37,9 +37,15 @@ When **Auto scene colour** is enabled for a group, REST:
 
 The result is part of the scene before the later game passes are composited.
 
-### Vulkan native staging
+### Vulkan render-pass boundary and native staging
 
-When Vulkan needs native-resolution staging, REST does not use its embedded Direct3D fullscreen-copy shaders. Instead it uses ReShade's generic `copy_texture_region` blit path. Compatible Vulkan colour targets are opted into transfer-source and transfer-destination usage when they are created, then REST performs explicit `render target -> copy source/copy destination -> render target` transitions around the up/downscale blits. The staging path requires a single-sample colour target plus Vulkan transfer/blit support for the selected format.
+Vulkan does not permit image-transfer barriers, blits or a nested ReShade effect render while the game's render pass is active. ReShade's draw callback occurs inside that pass, so REST records the matched live target and defers the Auto injection.
+
+REST processes that deferred work at the next ReShade `begin_render_pass` callback that references the **same colour target with LOAD semantics**. ReShade emits that callback before the underlying Vulkan render pass begins, giving REST a legal command-buffer boundary. A CLEAR or DISCARD continuation is ignored because it would immediately overwrite the injected result.
+
+When the deferred Vulkan injection needs native-resolution staging, REST does not use its embedded Direct3D fullscreen-copy shaders. Instead it uses ReShade's generic `copy_texture_region` blit path. Compatible Vulkan colour targets are opted into transfer-source and transfer-destination usage when they are created, then REST performs explicit `render target -> copy source/copy destination -> render target` transitions around the up/downscale blits. The staging path requires a single-sample colour target plus Vulkan transfer/blit support for the selected format.
+
+This first Vulkan implementation deliberately does not split an existing game render pass. If the desired later UI/fog/post-processing composition occurs inside the same pass as the matched draw, REST leaves the pending injection untouched rather than recording invalid Vulkan commands.
 
 ## What is automatic
 
