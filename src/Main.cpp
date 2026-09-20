@@ -618,16 +618,20 @@ static bool ShouldSuppressVulkanHuntedCall(command_list* cmd_list, uint64_t matc
         stage.blockedShaderGroups = nullptr;
     };
 
+    // The entire draw/dispatch is suppressed, so discard queued REST work for
+    // every shader stage participating in that skipped call, not only the stage
+    // whose hunted hash triggered the suppression. This prevents stale VS/PS work
+    // from leaking into the next unsuppressed draw.
     uint64_t clearMask = 0;
-    if (suppressPS) {
+    if ((matchModifier & Rendering::MATCH_PS) != 0) {
         clearStage(commandListData.ps);
         clearMask |= Rendering::MATCH_PS;
     }
-    if (suppressVS) {
+    if ((matchModifier & Rendering::MATCH_VS) != 0) {
         clearStage(commandListData.vs);
         clearMask |= Rendering::MATCH_VS;
     }
-    if (suppressCS) {
+    if ((matchModifier & Rendering::MATCH_CS) != 0) {
         clearStage(commandListData.cs);
         clearMask |= Rendering::MATCH_CS;
     }
