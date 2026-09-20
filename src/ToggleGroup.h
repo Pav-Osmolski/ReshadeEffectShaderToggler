@@ -189,6 +189,8 @@ class ToggleGroup {
     uint32_t getDebugEffectHeight() const { return _debugEffectHeight; }
     bool getDebugNativeStaging() const { return _debugNativeStaging; }
     const std::string& getDebugLastTechniqueOrder() const { return _debugLastTechniqueOrder; }
+    const std::string& getDebugAutoStatus() const { return _debugAutoStatus; }
+    void setDebugAutoStatus(const std::string& status) { _debugAutoStatus = status; }
     void recordDebugEffectRender(uint32_t techniqueCount,
                                  uint64_t targetHandle,
                                  const std::string& techniqueOrder,
@@ -206,6 +208,7 @@ class ToggleGroup {
         _debugEffectWidth = effectWidth;
         _debugEffectHeight = effectHeight;
         _debugNativeStaging = nativeStaging;
+        _debugAutoStatus = "Successful";
     }
     void setBindingSRVSlotIndex(uint32_t index) { _bindingSrvSlotIndex = index; }
     uint32_t getBindingSRVSlotIndex() const { return _bindingSrvSlotIndex; }
@@ -310,6 +313,7 @@ class ToggleGroup {
     uint32_t _debugEffectHeight = 0;
     bool _debugNativeStaging = false;
     std::string _debugLastTechniqueOrder;
+    std::string _debugAutoStatus;
     bool _extractConstants;
     bool _extractResourceViews;
     volatile bool _clearBindings;
