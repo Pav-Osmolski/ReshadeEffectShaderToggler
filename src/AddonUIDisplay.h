@@ -415,61 +415,73 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
-                ImGui::Text("Scene resolution");
+                ImGui::Text("Current attempt");
                 ImGui::TableNextColumn();
                 if (pendingVulkanShaderEdits)
                     ImGui::TextUnformatted("Finish shader hunting (Done) to apply marks");
-                else if (group->getDebugSceneWidth() > 0 && group->getDebugSceneHeight() > 0)
-                    ImGui::Text("%ux%u", group->getDebugSceneWidth(), group->getDebugSceneHeight());
+                else if (!group->getDebugAutoStatus().empty())
+                    ImGui::TextUnformatted(group->getDebugAutoStatus().c_str());
                 else
                     ImGui::TextUnformatted("Waiting for matching render target...");
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
-                ImGui::Text("Effect resolution");
+                ImGui::Text("Current target");
                 ImGui::TableNextColumn();
-                if (pendingVulkanShaderEdits) {
-                    ImGui::TextUnformatted("Waiting until shader hunting is finished...");
-                } else if (group->getDebugEffectWidth() > 0 && group->getDebugEffectHeight() > 0) {
-                    ImGui::Text("%ux%u%s",
+                if (group->getDebugCurrentSceneWidth() > 0 && group->getDebugCurrentSceneHeight() > 0) {
+                    ImGui::Text("%ux%u | %s | 0x%llx",
+                                group->getDebugCurrentSceneWidth(),
+                                group->getDebugCurrentSceneHeight(),
+                                group->getDebugCurrentFormat().empty() ? "(format unknown)" : group->getDebugCurrentFormat().c_str(),
+                                static_cast<unsigned long long>(group->getDebugCurrentTarget()));
+                } else {
+                    ImGui::TextUnformatted("(none)");
+                }
+
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::Text("Last successful injection");
+                ImGui::TableNextColumn();
+                if (group->getDebugEffectRenderCalls() > 0) {
+                    ImGui::Text("%ux%u -> %ux%u",
+                                group->getDebugSceneWidth(),
+                                group->getDebugSceneHeight(),
                                 group->getDebugEffectWidth(),
-                                group->getDebugEffectHeight(),
-                                group->getDebugNativeStaging() ? " (native staging)" : "");
+                                group->getDebugEffectHeight());
                 } else {
-                    ImGui::TextUnformatted("Waiting for effect dispatch...");
+                    ImGui::TextUnformatted("(none yet)");
                 }
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
-                ImGui::Text("Technique order");
+                ImGui::Text("Last successful staging");
                 ImGui::TableNextColumn();
-                ImGui::TextUnformatted(group->getDebugLastTechniqueOrder().empty() ? "(none)" : group->getDebugLastTechniqueOrder().c_str());
-
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn();
-                ImGui::Text("Injection");
-                ImGui::TableNextColumn();
-                if (pendingVulkanShaderEdits) {
-                    ImGui::TextUnformatted("Finish shader hunting (Done) to test Auto");
-                } else if (deviceApi == reshade::api::device_api::vulkan && !group->getDebugAutoStatus().empty()) {
-                    if (group->getDebugAutoStatus() == "Successful")
-                        ImGui::Text("Successful (%u technique%s)", group->getDebugLastRenderedTechniqueCount(), group->getDebugLastRenderedTechniqueCount() == 1 ? "" : "s");
-                    else
-                        ImGui::TextUnformatted(group->getDebugAutoStatus().c_str());
-                } else if (group->getDebugEffectRenderCalls() > 0) {
-                    ImGui::Text("Successful (%u technique%s)", group->getDebugLastRenderedTechniqueCount(), group->getDebugLastRenderedTechniqueCount() == 1 ? "" : "s");
+                if (group->getDebugEffectRenderCalls() == 0) {
+                    ImGui::TextUnformatted("(none)");
+                } else if (group->getDebugNativeStaging() && deviceApi == reshade::api::device_api::vulkan) {
+                    ImGui::TextUnformatted("Vulkan image blit");
+                } else if (group->getDebugNativeStaging()) {
+                    ImGui::TextUnformatted("Fullscreen shader copy");
                 } else {
-                    ImGui::TextUnformatted("Waiting for effect dispatch...");
+                    ImGui::TextUnformatted("Direct");
                 }
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
-                ImGui::Text("Native staging");
+                ImGui::Text("Last successful techniques");
                 ImGui::TableNextColumn();
-                if (group->getDebugNativeStaging() && deviceApi == reshade::api::device_api::vulkan)
-                    ImGui::TextUnformatted("Active (Vulkan blit)");
+                if (group->getDebugEffectRenderCalls() > 0)
+                    ImGui::Text("%u | %s",
+                                group->getDebugLastRenderedTechniqueCount(),
+                                group->getDebugLastTechniqueOrder().empty() ? "(none)" : group->getDebugLastTechniqueOrder().c_str());
                 else
-                    ImGui::TextUnformatted(group->getDebugNativeStaging() ? "Active" : "Not required");
+                    ImGui::TextUnformatted("(none)");
+
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::Text("Successful renders");
+                ImGui::TableNextColumn();
+                ImGui::Text("%llu", static_cast<unsigned long long>(group->getDebugEffectRenderCalls()));
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
@@ -480,17 +492,37 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
                                           deviceApi == reshade::api::device_api::d3d11 ? "D3D11" :
                                           deviceApi == reshade::api::device_api::d3d12 ? "D3D12" : "Vulkan";
                     const std::string diagnostics = std::format(
-                      "REST {}\nGroup: {}\nAPI: {}\nAuto Scene Colour: active\nAuto status: {}\nScene: {}x{}\nEffect: {}x{}\nNative staging: {}\nStaging path: {}\nVulkan boundary: {}\nLast techniques: {}\nTechnique order: {}\nRender calls: {}\nLast target: 0x{:x}",
+                      "REST {}\n"
+                      "Group: {}\n"
+                      "API: {}\n"
+                      "Auto Scene Colour: active\n"
+                      "\nCurrent candidate / latest attempt\n"
+                      "Status: {}\n"
+                      "Target: {}x{} | {} | 0x{:x}\n"
+                      "\nLast successful injection\n"
+                      "Scene -> effect: {}x{} -> {}x{}\n"
+                      "Staging path: {}\n"
+                      "Vulkan boundary: {}\n"
+                      "Techniques: {}\n"
+                      "Technique order: {}\n"
+                      "Successful renders: {}\n"
+                      "Last successful target: 0x{:x}",
                       REST_VERSION_STRING,
                       group->getName(),
                       apiName,
                       group->getDebugAutoStatus().empty() ? "(none)" : group->getDebugAutoStatus(),
+                      group->getDebugCurrentSceneWidth(),
+                      group->getDebugCurrentSceneHeight(),
+                      group->getDebugCurrentFormat().empty() ? "(unknown)" : group->getDebugCurrentFormat(),
+                      static_cast<unsigned long long>(group->getDebugCurrentTarget()),
                       group->getDebugSceneWidth(),
                       group->getDebugSceneHeight(),
                       group->getDebugEffectWidth(),
                       group->getDebugEffectHeight(),
-                      group->getDebugNativeStaging() ? "active" : "not required",
-                      group->getDebugNativeStaging() ? (deviceApi == reshade::api::device_api::vulkan ? "Vulkan image blit" : "fullscreen shader copy") : "direct",
+                      group->getDebugEffectRenderCalls() == 0 ? "(none)" :
+                        (group->getDebugNativeStaging() ?
+                          (deviceApi == reshade::api::device_api::vulkan ? "Vulkan image blit" : "fullscreen shader copy") :
+                          "direct"),
                       deviceApi == reshade::api::device_api::vulkan ? "deferred to same-target LOAD pass" : "not applicable",
                       group->getDebugLastRenderedTechniqueCount(),
                       group->getDebugLastTechniqueOrder().empty() ? "(none)" : group->getDebugLastTechniqueOrder(),
