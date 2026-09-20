@@ -442,12 +442,16 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
                 ImGui::TableNextColumn();
                 ImGui::Text("Injection");
                 ImGui::TableNextColumn();
-                if (group->getDebugEffectRenderCalls() > 0)
+                if (deviceApi == reshade::api::device_api::vulkan && !group->getDebugAutoStatus().empty()) {
+                    if (group->getDebugAutoStatus() == "Successful")
+                        ImGui::Text("Successful (%u technique%s)", group->getDebugLastRenderedTechniqueCount(), group->getDebugLastRenderedTechniqueCount() == 1 ? "" : "s");
+                    else
+                        ImGui::TextUnformatted(group->getDebugAutoStatus().c_str());
+                } else if (group->getDebugEffectRenderCalls() > 0) {
                     ImGui::Text("Successful (%u technique%s)", group->getDebugLastRenderedTechniqueCount(), group->getDebugLastRenderedTechniqueCount() == 1 ? "" : "s");
-                else if (deviceApi == reshade::api::device_api::vulkan)
-                    ImGui::TextUnformatted("Waiting for safe render-pass continuation...");
-                else
+                } else {
                     ImGui::TextUnformatted("Waiting for effect dispatch...");
+                }
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
@@ -467,10 +471,11 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
                                           deviceApi == reshade::api::device_api::d3d11 ? "D3D11" :
                                           deviceApi == reshade::api::device_api::d3d12 ? "D3D12" : "Vulkan";
                     const std::string diagnostics = std::format(
-                      "REST {}\nGroup: {}\nAPI: {}\nAuto Scene Colour: active\nScene: {}x{}\nEffect: {}x{}\nNative staging: {}\nStaging path: {}\nVulkan boundary: {}\nLast techniques: {}\nTechnique order: {}\nRender calls: {}\nLast target: 0x{:x}",
+                      "REST {}\nGroup: {}\nAPI: {}\nAuto Scene Colour: active\nAuto status: {}\nScene: {}x{}\nEffect: {}x{}\nNative staging: {}\nStaging path: {}\nVulkan boundary: {}\nLast techniques: {}\nTechnique order: {}\nRender calls: {}\nLast target: 0x{:x}",
                       REST_VERSION_STRING,
                       group->getName(),
                       apiName,
+                      group->getDebugAutoStatus().empty() ? "(none)" : group->getDebugAutoStatus(),
                       group->getDebugSceneWidth(),
                       group->getDebugSceneHeight(),
                       group->getDebugEffectWidth(),
