@@ -1,0 +1,36 @@
+name: Create v1.5.0.633 tag
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/create-v1.5.0.633-tag.yml
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create immutable release tag
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          repo="${{ github.repository }}"
+          tag="v1.5.0.633"
+          sha="0b44148b8bb71938114017f2958fbba4c324e1d9"
+
+          if gh api "repos/$repo/git/ref/tags/$tag" >/tmp/ref.json 2>/dev/null; then
+            existing="$(python -c 'import json; print(json.load(open("/tmp/ref.json"))["object"]["sha"])')"
+            if [ "$existing" != "$sha" ]; then
+              echo "Existing tag points to $existing, expected $sha" >&2
+              exit 1
+            fi
+            echo "Tag already exists at expected commit."
+          else
+            gh api --method POST "repos/$repo/git/refs" -f ref="refs/tags/$tag" -f sha="$sha"
+          fi
