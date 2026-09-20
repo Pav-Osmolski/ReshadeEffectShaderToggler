@@ -43,6 +43,14 @@
 
 constexpr auto FRAMECOUNT_COLLECTION_PHASE_DEFAULT = 10;
 constexpr auto HASH_FILE_NAME = "ReshadeEffectShaderToggler.ini";
+constexpr int REST_CONFIG_VERSION = 1;
+
+struct HuntingUIState {
+    char shaderSearch[64] = {};
+    int filterMode = 0;
+    uint32_t selectedShaderType = 0;
+    int previewChannel = 0;
+};
 
 namespace AddonImGui {
 enum Keybind : uint32_t {
@@ -118,9 +126,8 @@ class AddonUIData {
     bool _preventRuntimeReload = false;
     std::filesystem::path _basePath;
     TabType _currentTab = TabType::TAB_NONE;
-    std::string _savedConfigSignature;
-
-    std::string BuildConfigSignature() const;
+    std::atomic_bool _configDirty{ false };
+    HuntingUIState _huntingUIState;
 
     std::vector<std::function<void(reshade::api::effect_runtime*, ShaderToggler::ToggleGroup*)>> _removalCallbacks;
 
@@ -137,7 +144,12 @@ class AddonUIData {
     void UpdateToggleGroupsForShaderHashes();
     void AddDefaultGroup();
     ShaderToggler::ToggleGroup* CloneToggleGroup(int sourceGroupId);
-    bool IsConfigDirty() const;
+    bool IsConfigDirty() const { return _configDirty.load(std::memory_order_acquire); }
+    void MarkConfigDirty() { _configDirty.store(true, std::memory_order_release); }
+    void MarkConfigClean() { _configDirty.store(false, std::memory_order_release); }
+    HuntingUIState& GetHuntingUIState() { return _huntingUIState; }
+    std::string ExportToggleGroup(const ShaderToggler::ToggleGroup& group) const;
+    ShaderToggler::ToggleGroup* ImportToggleGroup(const std::string& serialized);
     const std::atomic_int& GetToggleGroupIdSettingsOpen() const { return _toggleGroupIdSettingsOpen; }
     const std::atomic_int& GetToggleGroupIdShaderEditing() const;
     void OpenGroupSettings(ShaderToggler::ToggleGroup& group);
@@ -173,18 +185,18 @@ class AddonUIData {
     const std::string& GetConstHookType() { return _constHookType; }
     const std::string& GetConstHookCopyType() { return _constHookCopyType; }
     const std::string& GetResourceShim() { return _resourceShim; }
-    void SetConstHookCopyType(std::string& copyType) { _constHookCopyType = copyType; }
-    void SetResourceShim(std::string& shim) { _resourceShim = shim; }
+    void SetConstHookCopyType(std::string& copyType) { if (_constHookCopyType != copyType) { _constHookCopyType = copyType; MarkConfigDirty(); } }
+    void SetResourceShim(std::string& shim) { if (_resourceShim != shim) { _resourceShim = shim; MarkConfigDirty(); } }
     void SetKeybinding(Keybind keybind, uint32_t keys);
     const std::unordered_map<std::string, std::tuple<Shim::Constants::constant_type, std::vector<reshade::api::effect_uniform_variable>>>* GetRESTVariables() {
         return _constantHandler->GetRESTVariables();
     };
     bool GetTrackDescriptors() const { return _trackDescriptors; }
-    void SetTrackDescriptors(bool track) { _trackDescriptors = track; }
+    void SetTrackDescriptors(bool track) { if (_trackDescriptors != track) { _trackDescriptors = track; MarkConfigDirty(); } }
     void AddToggleGroupRemovalCallback(std::function<void(reshade::api::effect_runtime*, ShaderToggler::ToggleGroup*)> callback);
     void SignalToggleGroupRemoved(reshade::api::effect_runtime*, ShaderToggler::ToggleGroup*);
     bool GetPreventRuntimeReload() const { return _preventRuntimeReload; }
-    void SetPreventRuntimeReload(bool reload) { _preventRuntimeReload = reload; }
+    void SetPreventRuntimeReload(bool reload) { if (_preventRuntimeReload != reload) { _preventRuntimeReload = reload; MarkConfigDirty(); } }
 
     void AssignPreferredGroupTechniques(std::unordered_map<std::string, EffectData>& allTechniques);
 };
