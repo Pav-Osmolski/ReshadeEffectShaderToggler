@@ -413,6 +413,7 @@ void AddonUIData::EndShaderEditing(bool acceptCollectedShaderHashes, ToggleGroup
         groupEditing.storeCollectedHashes(_pixelShaderManager->getMarkedShaderHashes(),
                                           _vertexShaderManager->getMarkedShaderHashes(),
                                           _computeShaderManager->getMarkedShaderHashes());
+        groupEditing.resetDebugAutoDiagnostics();
     }
 
     _pixelShaderManager->stopHuntingMode();
