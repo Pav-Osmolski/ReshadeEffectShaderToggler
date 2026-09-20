@@ -321,6 +321,10 @@ static void onBindPipeline(command_list* commandList, pipeline_stage stages, pip
     DeviceDataContainer& deviceData = commandList->get_device()->get_private_data<DeviceDataContainer>();
 
     if (deviceData.current_runtime == nullptr || !deviceData.current_runtime->get_effects_state()) {
+        if (device->get_api() == device_api::vulkan) {
+            commandListData.vulkanInsideRenderPass = true;
+            commandListData.vulkanRenderPassEndPending = false;
+        }
         return;
     }
 
