@@ -1,6 +1,6 @@
 ///////////////////////////////////////////////////////////////////////
 //
-// Part of ShaderToggler, a shader toggler add on for Reshade 5+ which allows you
+// Part of ShaderToggler, a shader toggler add on for ReShade 5+ which allows you
 // to define groups of shaders to toggle them on/off with one key press
 //
 // (c) Frans 'Otis_Inf' Bouma.
@@ -184,7 +184,7 @@ static void onDestroyResourceView(device* device, resource_view view) {
     resourceManager.OnDestroyResourceView(device, view);
 }
 
-static void onReshadeReloadedEffects(effect_runtime* runtime) {
+static void onReShadeReloadedEffects(effect_runtime* runtime) {
     RuntimeDataContainer& runtimeData = runtime->get_private_data<RuntimeDataContainer>();
     DeviceDataContainer& deviceData = runtime->get_device()->get_private_data<DeviceDataContainer>();
 
@@ -194,7 +194,7 @@ static void onReshadeReloadedEffects(effect_runtime* runtime) {
         deviceData.vulkanAutoWorkPending.store(false, std::memory_order_release);
     }
 
-    techniqueManager.OnReshadeReloadedEffects(runtime);
+    techniqueManager.OnReShadeReloadedEffects(runtime);
 
     if (deviceData.current_runtime == runtime) {
         shared_lock<shared_mutex> techLock(runtimeData.technique_mutex);
@@ -202,19 +202,19 @@ static void onReshadeReloadedEffects(effect_runtime* runtime) {
     }
 }
 
-static bool onReshadeSetTechniqueState(effect_runtime* runtime, effect_technique technique, bool enabled) {
+static bool onReShadeSetTechniqueState(effect_runtime* runtime, effect_technique technique, bool enabled) {
     RuntimeDataContainer& data = runtime->get_private_data<RuntimeDataContainer>();
 
-    bool ret = techniqueManager.OnReshadeSetTechniqueState(runtime, technique, enabled);
+    bool ret = techniqueManager.OnReShadeSetTechniqueState(runtime, technique, enabled);
 
     return ret;
 }
 
-static bool onReshadeReorderTechniques(effect_runtime* runtime, size_t count, effect_technique* techniques) {
+static bool onReShadeReorderTechniques(effect_runtime* runtime, size_t count, effect_technique* techniques) {
     RuntimeDataContainer& runtimeData = runtime->get_private_data<RuntimeDataContainer>();
     DeviceDataContainer& deviceData = runtime->get_device()->get_private_data<DeviceDataContainer>();
 
-    bool ret = techniqueManager.OnReshadeReorderTechniques(runtime, count, techniques);
+    bool ret = techniqueManager.OnReShadeReorderTechniques(runtime, count, techniques);
 
     if (deviceData.current_runtime == runtime) {
         shared_lock<shared_mutex> techLock(runtimeData.technique_mutex);
@@ -521,7 +521,7 @@ static void onEndRenderPass(command_list* cmd_list) {
     commandListData.vulkanRenderPassEndPending = true;
 }
 
-static void onReshadeOverlay(effect_runtime* runtime) {
+static void onReShadeOverlay(effect_runtime* runtime) {
     DisplayOverlay(g_addonUIData, resourceManager, runtime);
 }
 
@@ -550,7 +550,7 @@ static void onPresent(command_queue* queue,
         onResetCommandList(runtime->get_command_queue()->get_immediate_command_list());
 }
 
-static void onReshadePresent(effect_runtime* runtime) {
+static void onReShadePresent(effect_runtime* runtime) {
     device* dev = runtime->get_device();
     DeviceDataContainer& deviceData = dev->get_private_data<DeviceDataContainer>();
     command_queue* queue = runtime->get_command_queue();
@@ -576,7 +576,7 @@ static void onReshadePresent(effect_runtime* runtime) {
         resourceManager.CheckResourceViews(runtime);
     }
 
-    techniqueManager.OnReshadePresent(runtime);
+    techniqueManager.OnReShadePresent(runtime);
 
     deviceData.bindingsUpdated.clear();
     deviceData.constantsUpdated.clear();
@@ -775,7 +775,7 @@ static bool onDrawOrDispatchIndirect(command_list* cmd_list, indirect_command ty
 }
 
 /// <summary>
-/// copied from Reshade
+/// copied from ReShade
 /// Returns the path to the module file identified by the specified <paramref name="module"/> handle.
 /// </summary>
 filesystem::path getModulePath(HMODULE module) {
@@ -815,11 +815,11 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID) {
             reshade::register_event<reshade::addon_event::destroy_command_list>(onDestroyCommandList);
             reshade::register_event<reshade::addon_event::reset_command_list>(onResetCommandList);
             reshade::register_event<reshade::addon_event::destroy_pipeline>(onDestroyPipeline);
-            reshade::register_event<reshade::addon_event::reshade_overlay>(onReshadeOverlay);
-            reshade::register_event<reshade::addon_event::reshade_present>(onReshadePresent);
-            reshade::register_event<reshade::addon_event::reshade_reloaded_effects>(onReshadeReloadedEffects);
-            reshade::register_event<reshade::addon_event::reshade_set_technique_state>(onReshadeSetTechniqueState);
-            reshade::register_event<reshade::addon_event::reshade_reorder_techniques>(onReshadeReorderTechniques);
+            reshade::register_event<reshade::addon_event::reshade_overlay>(onReShadeOverlay);
+            reshade::register_event<reshade::addon_event::reshade_present>(onReShadePresent);
+            reshade::register_event<reshade::addon_event::reshade_reloaded_effects>(onReShadeReloadedEffects);
+            reshade::register_event<reshade::addon_event::reshade_set_technique_state>(onReShadeSetTechniqueState);
+            reshade::register_event<reshade::addon_event::reshade_reorder_techniques>(onReShadeReorderTechniques);
             reshade::register_event<reshade::addon_event::bind_pipeline>(onBindPipeline);
             reshade::register_event<reshade::addon_event::init_device>(onInitDevice);
             reshade::register_event<reshade::addon_event::destroy_device>(onDestroyDevice);
@@ -843,16 +843,16 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID) {
             reshade::unregister_event<reshade::addon_event::create_swapchain>(onCreateSwapchain);
             reshade::unregister_event<reshade::addon_event::init_swapchain>(onInitSwapchain);
             reshade::unregister_event<reshade::addon_event::destroy_swapchain>(onDestroySwapchain);
-            reshade::unregister_event<reshade::addon_event::reshade_present>(onReshadePresent);
+            reshade::unregister_event<reshade::addon_event::reshade_present>(onReShadePresent);
             reshade::unregister_event<reshade::addon_event::map_buffer_region>(onMapBufferRegion);
             reshade::unregister_event<reshade::addon_event::update_buffer_region>(onUpdateBufferRegion);
             reshade::unregister_event<reshade::addon_event::unmap_buffer_region>(onUnmapBufferRegion);
             reshade::unregister_event<reshade::addon_event::destroy_pipeline>(onDestroyPipeline);
             reshade::unregister_event<reshade::addon_event::init_pipeline>(onInitPipeline);
-            reshade::unregister_event<reshade::addon_event::reshade_overlay>(onReshadeOverlay);
-            reshade::unregister_event<reshade::addon_event::reshade_reloaded_effects>(onReshadeReloadedEffects);
-            reshade::unregister_event<reshade::addon_event::reshade_set_technique_state>(onReshadeSetTechniqueState);
-            reshade::unregister_event<reshade::addon_event::reshade_reorder_techniques>(onReshadeReorderTechniques);
+            reshade::unregister_event<reshade::addon_event::reshade_overlay>(onReShadeOverlay);
+            reshade::unregister_event<reshade::addon_event::reshade_reloaded_effects>(onReShadeReloadedEffects);
+            reshade::unregister_event<reshade::addon_event::reshade_set_technique_state>(onReShadeSetTechniqueState);
+            reshade::unregister_event<reshade::addon_event::reshade_reorder_techniques>(onReShadeReorderTechniques);
             reshade::unregister_event<reshade::addon_event::bind_pipeline>(onBindPipeline);
             reshade::unregister_event<reshade::addon_event::init_command_list>(onInitCommandList);
             reshade::unregister_event<reshade::addon_event::destroy_command_list>(onDestroyCommandList);
