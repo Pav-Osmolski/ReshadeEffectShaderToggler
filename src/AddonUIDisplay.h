@@ -702,6 +702,12 @@ static void DisplayGroupView(AddonImGui::AddonUIData& instance,
                              ShaderToggler::ShaderManager* shaderManager) {
     float height = ImGui::GetWindowHeight();
 
+    if (!shaderManager->isInHuntingMode()) {
+        ImGui::TextDisabled("Shader hunting is not active.");
+        ImGui::TextDisabled("The group's committed shader hashes remain active while you inspect Auto Scene Colour and other settings.");
+        return;
+    }
+
     if (*instance.ActiveCollectorFrameCounter() > 0) {
         ImGui::Text("Collecting active shaders... %u frames remaining", instance.ActiveCollectorFrameCounter()->load());
         ImGui::TextDisabled("Keep the relevant scene visible until collection finishes.");
@@ -1109,9 +1115,9 @@ static void DisplayTextureBindings(AddonImGui::AddonUIData& instance,
 }
 
 static void DisplayOverlay(AddonImGui::AddonUIData& instance, Rendering::ResourceManager& resManager, reshade::api::effect_runtime* runtime) {
-    if (instance.GetToggleGroupIdShaderEditing() >= 0) {
+    if (instance.GetToggleGroupIdSettingsOpen() >= 0) {
         std::string editingGroupName = "";
-        const int idx = instance.GetToggleGroupIdShaderEditing();
+        const int idx = instance.GetToggleGroupIdSettingsOpen();
         ShaderToggler::ToggleGroup* group = nullptr;
         if (instance.GetToggleGroups().find(idx) != instance.GetToggleGroups().end()) {
             editingGroupName = instance.GetToggleGroups()[idx].getName();
@@ -1139,6 +1145,20 @@ static void DisplayOverlay(AddonImGui::AddonUIData& instance, Rendering::Resourc
             ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
             if (ImGui::BeginChild("GroupView", { width / 3.0f + 20.0f, 0 }, true, ImGuiWindowFlags_NoScrollbar)) {
                 ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(3, 3));
+
+                const bool huntingThisGroup = instance.GetToggleGroupIdShaderEditing().load() == group->getId();
+                if (huntingThisGroup) {
+                    if (ImGui::Button("Done hunting")) {
+                        instance.EndShaderEditing(true, *group);
+                    }
+                    ImGui::SameLine();
+                    ImGui::TextDisabled("Marks will be committed to this group.");
+                } else {
+                    if (ImGui::Button("Start shader hunting"))
+                        instance.StartShaderEditing(*group);
+                    ImGui::SameLine();
+                    ImGui::TextDisabled("Settings remain open when hunting finishes.");
+                }
 
                 DisplayGroupView(instance, resManager, runtime, group, selectedShaderManager);
 
@@ -1226,7 +1246,7 @@ static void DisplayOverlay(AddonImGui::AddonUIData& instance, Rendering::Resourc
 
         if (!wndOpen) {
             instance.SetCurrentTabType(AddonImGui::TAB_NONE);
-            instance.EndShaderEditing(true, *group);
+            instance.CloseGroupSettings(true, *group);
         }
     } else {
         instance.SetCurrentTabType(AddonImGui::TAB_NONE);
@@ -1465,17 +1485,17 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, reshade::api::eff
                 group.setEditing(true);
 
             ImGui::SameLine();
-            if (instance.GetToggleGroupIdShaderEditing() >= 0) {
-                if (instance.GetToggleGroupIdShaderEditing() == group.getId()) {
-                    if (ImGui::Button("Done"))
-                        instance.EndShaderEditing(true, group);
+            if (instance.GetToggleGroupIdSettingsOpen() >= 0) {
+                if (instance.GetToggleGroupIdSettingsOpen() == group.getId()) {
+                    if (ImGui::Button("Close"))
+                        instance.CloseGroupSettings(true, group);
                 } else {
                     ImGui::BeginDisabled(true);
                     ImGui::Button("Settings");
                     ImGui::EndDisabled();
                 }
             } else if (ImGui::Button("Settings")) {
-                instance.StartShaderEditing(group);
+                instance.OpenGroupSettings(group);
             }
 
             ImGui::SameLine();
@@ -1578,6 +1598,7 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, reshade::api::eff
 
         if (!toRemove.empty()) {
             instance.GetToggleGroupIdEffectEditing() = -1;
+            instance.GetToggleGroupIdSettingsOpen() = -1;
             instance.GetToggleGroupIdShaderEditing() = -1;
             instance.GetToggleGroupIdConstantEditing() = -1;
             instance.StopHuntingMode();
