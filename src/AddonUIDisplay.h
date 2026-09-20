@@ -857,7 +857,7 @@ static void DisplayGroupView(AddonImGui::AddonUIData& instance,
     ImGui::TextDisabled("Pending shader marks are applied to the group when you click Done.");
     ImGui::Separator();
 
-    const std::unordered_set<uint32_t>& hashes = shaderManager->getCollectedShaderHashes();
+    const std::unordered_set<uint32_t> hashes = shaderManager->getCollectedShaderHashes();
     const int32_t selected = shaderManager->getActiveHuntedShaderIndex();
     uint32_t index = 0;
 
