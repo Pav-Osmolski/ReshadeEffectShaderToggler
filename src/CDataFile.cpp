@@ -172,6 +172,9 @@ bool CDataFile::Load(t_Str szFileName) {
     }
 
     File.close();
+    // Parsing uses the normal setters internally, but a successful load itself is
+    // not a user modification and must not trigger an implicit save in the destructor.
+    m_bDirty = false;
 
     return true;
 }
