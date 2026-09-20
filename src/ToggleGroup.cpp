@@ -65,7 +65,7 @@ ToggleGroup::ToggleGroup(string name, int id) {
     _rtCycle = CYCLE_NONE;
 
     _group_buffers[static_cast<uint32_t>(GroupResourceType::RESOURCE_ALPHA)] = {
-        {}, {}, {}, {}, {}, {}, {}, [&]() { return _preserveAlpha; }, [&]() { return false; }, GroupResourceState::RESOURCE_INVALID, true
+        {}, {}, {}, {}, {}, {}, {}, [&]() { return _preserveAlpha && !_autoRenderSRV; }, [&]() { return false; }, GroupResourceState::RESOURCE_INVALID, true
     };
     _group_buffers[static_cast<uint32_t>(GroupResourceType::RESOURCE_BINDING)] = { {},
                                                                                    {},
