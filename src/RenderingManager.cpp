@@ -160,20 +160,49 @@ const ResourceViewData RenderingManager::GetCurrentResourceView(command_list* cm
     // Automatic scene colour targets the primary live render target bound at the
     // matched draw. This keeps the effect on the scene that subsequent game passes
     // actually consume instead of relying on descriptor/SRV discovery.
-    if (action & (MATCH_EFFECT | MATCH_PREVIEW) &&
-        autoSceneColour &&
-        !rtvs.empty() && rtvs[0] != 0) {
-        // Automatic mode always targets the primary live colour RTV. Do not inherit
-        // a stale manual render-target index from the group configuration.
-        resource rs = device->get_resource_from_view(rtvs[0]);
-        if (rs != 0) {
-            resource_desc desc = device->get_resource_desc(rs);
-            resource_view_desc v_desc = device->get_resource_view_desc(rtvs[0]);
+    if (action & (MATCH_EFFECT | MATCH_PREVIEW) && autoSceneColour) {
+        if (rtvs.empty()) {
+            if (deviceApi == device_api::vulkan)
+                group->setDebugAutoStatus("No colour target tracked at marked draw");
+        } else if (rtvs[0] == 0) {
+            if (deviceApi == device_api::vulkan)
+                group->setDebugAutoStatus("Primary colour view is null");
+        } else {
+            // Automatic mode always targets the primary live colour RTV. Do not inherit
+            // a stale manual render-target index from the group configuration.
+            resource rs = device->get_resource_from_view(rtvs[0]);
+            if (rs == 0) {
+                if (deviceApi == device_api::vulkan)
+                    group->setDebugAutoStatus("Primary colour view has no resource");
+            } else {
+                resource_desc desc = device->get_resource_desc(rs);
+                resource_view_desc v_desc = device->get_resource_view_desc(rtvs[0]);
 
-            if (ValidFormat(deviceData.current_runtime, desc, ShaderToggler::SWAPCHAIN_MATCH_MODE_ASPECT_RATIO)) {
-                active_data.resource = rs;
-                active_data.format = v_desc.format;
-                return active_data;
+                if (!IsColorBuffer(desc.texture.format)) {
+                    if (deviceApi == device_api::vulkan)
+                        group->setDebugAutoStatus(std::format("Rejected target: unsupported colour format {}", static_cast<uint32_t>(desc.texture.format)));
+                } else {
+                    uint32_t screenshotWidth = 0, screenshotHeight = 0;
+                    deviceData.current_runtime->get_screenshot_width_and_height(&screenshotWidth, &screenshotHeight);
+
+                    if (!check_aspect_ratio(static_cast<float>(desc.texture.width),
+                                            static_cast<float>(desc.texture.height),
+                                            screenshotWidth,
+                                            screenshotHeight,
+                                            ShaderToggler::SWAPCHAIN_MATCH_MODE_ASPECT_RATIO)) {
+                        if (deviceApi == device_api::vulkan)
+                            group->setDebugAutoStatus(std::format("Rejected target: {}x{} aspect mismatch", desc.texture.width, desc.texture.height));
+                    } else {
+                        active_data.resource = rs;
+                        active_data.format = v_desc.format;
+                        group->recordDebugAutoTarget(rs.handle, desc.texture.width, desc.texture.height);
+
+                        if (deviceApi == device_api::vulkan)
+                            group->setDebugAutoStatus("Matched target: waiting for safe render-pass continuation");
+
+                        return active_data;
+                    }
+                }
             }
         }
     }
