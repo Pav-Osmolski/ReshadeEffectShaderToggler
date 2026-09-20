@@ -443,7 +443,7 @@ static void onBarrier(command_list* cmd_list,
     }
 
     if (commandListData.vulkanAutoInjectionActive || commandListData.vulkanInsideRenderPass ||
-        !device->get_private_data<DeviceDataContainer>().vulkanAutoWorkPending.load(std::memory_order_acquire))
+        !cmd_list->get_device()->get_private_data<DeviceDataContainer>().vulkanAutoWorkPending.load(std::memory_order_acquire))
         return;
 
     renderingEffectManager.RenderDeferredVulkanAutoEffectsAfterBarrier(cmd_list, count, resources, oldStates, newStates);
