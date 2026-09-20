@@ -25,8 +25,8 @@ void RenderingQueueManager::_CheckCallForCommandList(ShaderData& sData,
     const uint64_t match_const = MATCH_CONST_PS << sData.id;
     const uint64_t match_preview = MATCH_PREVIEW_PS << sData.id;
 
-    if (sData.blockedShaderGroups != nullptr) {
-        for (auto group : *sData.blockedShaderGroups) {
+    if (!sData.blockedShaderGroups.empty()) {
+        for (auto group : sData.blockedShaderGroups) {
             if (group->isActive()) {
                 const device_api runtimeApi =
                   deviceData.current_runtime != nullptr ? deviceData.current_runtime->get_device()->get_api() : device_api::d3d9;
