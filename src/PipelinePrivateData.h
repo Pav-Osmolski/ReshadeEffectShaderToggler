@@ -92,6 +92,15 @@ struct __declspec(novtable) HuntPreview final {
     reshade::api::resource_desc target_desc;
     bool recreate_preview = false;
 
+    // Vulkan hunting cannot copy from the target inside the active render pass.
+    // Record the candidate at the suppressed draw and consume it at the next safe
+    // render-pass boundary on the same command list.
+    bool vulkan_capture_pending = false;
+    reshade::api::command_list* vulkan_command_list = nullptr;
+    uint32_t hunted_shader_hash = 0;
+    uint32_t hunted_stage = 0;
+    std::string status;
+
     void Reset() {
         matched = false;
         target = reshade::api::resource{ 0 };
@@ -99,7 +108,13 @@ struct __declspec(novtable) HuntPreview final {
         width = 0;
         height = 0;
         format = reshade::api::format::unknown;
+        view_format = reshade::api::format::unknown;
         recreate_preview = false;
+        vulkan_capture_pending = false;
+        vulkan_command_list = nullptr;
+        hunted_shader_hash = 0;
+        hunted_stage = 0;
+        status.clear();
     }
 };
 
