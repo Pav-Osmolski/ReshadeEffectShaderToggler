@@ -36,6 +36,7 @@
 #include "ConstantManager.h"
 #include "KeyData.h"
 #include "ResourceManager.h"
+#include "RenderingManager.h"
 #include "version.h"
 #include <algorithm>
 #include <cctype>
