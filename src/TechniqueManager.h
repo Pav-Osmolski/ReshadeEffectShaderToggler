@@ -12,10 +12,10 @@ class __declspec(novtable) TechniqueManager final {
   public:
     TechniqueManager(ShaderToggler::KeyMonitor& keyMonitor);
 
-    void OnReshadeReloadedEffects(reshade::api::effect_runtime* runtime);
-    bool OnReshadeSetTechniqueState(reshade::api::effect_runtime* runtime, reshade::api::effect_technique technique, bool enabled);
-    void OnReshadePresent(reshade::api::effect_runtime* runtime);
-    bool OnReshadeReorderTechniques(reshade::api::effect_runtime* runtime, size_t count, reshade::api::effect_technique* techniques);
+    void OnReShadeReloadedEffects(reshade::api::effect_runtime* runtime);
+    bool OnReShadeSetTechniqueState(reshade::api::effect_runtime* runtime, reshade::api::effect_technique technique, bool enabled);
+    void OnReShadePresent(reshade::api::effect_runtime* runtime);
+    bool OnReShadeReorderTechniques(reshade::api::effect_runtime* runtime, size_t count, reshade::api::effect_technique* techniques);
 
     void AddEffectsReloadingCallback(std::function<void(reshade::api::effect_runtime*)> callback);
     void SignalEffectsReloading(reshade::api::effect_runtime* runtime);
