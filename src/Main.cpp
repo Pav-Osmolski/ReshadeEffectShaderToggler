@@ -434,6 +434,10 @@ static void onBeginRenderPass(command_list* cmd_list, uint32_t count, const rend
     }
 
     if (device->get_api() == device_api::vulkan) {
+        // The callback occurs before Vulkan begins the new render pass. Any hunted
+        // target recorded in the previous pass can therefore be copied safely here.
+        renderingPreviewManager.CaptureDeferredVulkanPreview(cmd_list);
+
         // Vulkan does not emit bind_render_targets_and_depth_stencil events for render
         // pass attachments. Mirror the begin_render_pass descriptors into REST's state
         // tracker so a marked draw can resolve the live primary colour target.
@@ -609,6 +613,16 @@ static bool ShouldSuppressVulkanHuntedCall(command_list* cmd_list, uint64_t matc
 
     if (!suppressPS && !suppressVS && !suppressCS)
         return false;
+
+    // Vulkan hunting keeps the visualisation safe by suppressing the whole draw,
+    // but still records the candidate target so the preview can be copied later
+    // at a legal render-pass boundary.
+    if (suppressPS)
+        renderingPreviewManager.RecordVulkanHuntedTarget(cmd_list, 0, commandListData.ps.activeShaderHash);
+    else if (suppressVS)
+        renderingPreviewManager.RecordVulkanHuntedTarget(cmd_list, 1, commandListData.vs.activeShaderHash);
+    else if (suppressCS)
+        renderingPreviewManager.RecordVulkanHuntedTarget(cmd_list, 2, commandListData.cs.activeShaderHash);
 
     auto clearStage = [](ShaderData& stage) {
         stage.bindingsToUpdate.clear();
