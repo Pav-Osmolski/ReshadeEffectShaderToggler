@@ -110,12 +110,12 @@ void ToggleGroupResourceManager::DisposeGroupResources(device* device, resource&
         device->destroy_resource_view(srv);
     }
 
-    if (rtv != 0) {
-        device->destroy_resource_view(rtv);
+    if (rtv_srgb != 0 && rtv_srgb != rtv) {
+        device->destroy_resource_view(rtv_srgb);
     }
 
-    if (rtv_srgb != 0) {
-        device->destroy_resource_view(rtv_srgb);
+    if (rtv != 0) {
+        device->destroy_resource_view(rtv);
     }
 
     if (res != 0) {
