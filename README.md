@@ -25,7 +25,7 @@ REST requires a ReShade build with add-on support enabled.
 
 The existing render-target, shader-hunting and binding features remain API/game dependent. D3D10/D3D11/D3D12 and Vulkan behaviour outside the paths that have been specifically tested may vary by title.
 
-The **Auto scene colour** path supports D3D10, D3D11, D3D12 and Vulkan on both x86 and x64. D3D10/11/12 retain the existing shader-based native-staging copy path, while Vulkan uses ReShade's generic image-blit API with explicit transfer-state transitions. Baldur's Gate 3 in DX11 mode using DLSS remains the primary regression-tested D3D configuration; Vulkan runtime validation is required separately before release.
+The **Auto scene colour** path supports D3D10, D3D11, D3D12 and Vulkan on both x86 and x64. D3D10/11/12 retain the existing shader-based native-staging copy path. Vulkan defers a matched Auto injection to the next render pass that **LOADs the same colour target**, then uses ReShade's generic image-blit API with explicit transfer-state transitions when native staging is required. This avoids issuing effects or transfer commands inside an active Vulkan render pass. If the game keeps all later composition inside the same render pass, REST skips that unsafe injection path rather than splitting the game's pass. Baldur's Gate 3 in DX11 mode using DLSS remains the primary regression-tested D3D configuration; Vulkan runtime validation is required separately before release.
 
 ## Installation
 
