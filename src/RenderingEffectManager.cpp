@@ -122,7 +122,14 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
         // ReShade invokes before the Vulkan render pass actually begins.
         if (vulkanAutoSceneColour) {
             if (!vulkanSafeBoundary) {
-                cmdData.vulkanAutoPending = true;
+                // Move Vulkan Auto work out of the current command-list queue. A later
+                // continuation pass may be recorded on a different command buffer, so
+                // pending work is tracked at device scope. Preserve the first applicable
+                // group/target for a technique, matching REST's first-render-wins model.
+                for (EffectData* effect : effectList) {
+                    deviceData.vulkanAutoPendingEffects.try_emplace(effect, active_resource);
+                    removalList.push_back(effect);
+                }
                 continue;
             }
 
@@ -355,10 +362,6 @@ void RenderingEffectManager::RenderDeferredVulkanAutoEffects(command_list* cmd_l
         return;
     }
 
-    CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
-    if (!commandListData.vulkanAutoPending)
-        return;
-
     DeviceDataContainer& deviceData = cmd_list->get_device()->get_private_data<DeviceDataContainer>();
     if (deviceData.current_runtime == nullptr)
         return;
@@ -379,93 +382,49 @@ void RenderingEffectManager::RenderDeferredVulkanAutoEffects(command_list* cmd_l
     if (safeTargets.empty())
         return;
 
-    RuntimeDataContainer& runtimeData = deviceData.current_runtime->get_private_data<RuntimeDataContainer>();
-    unordered_set<EffectData*> psToRenderNames;
-    unordered_set<EffectData*> vsToRenderNames;
-    unordered_set<EffectData*> csToRenderNames;
-
-    auto collectSafeAutoTechniques = [&](const effect_queue& queue, unordered_set<EffectData*>& names) {
-        for (const auto& [effect, data] : queue) {
-            if (effect == nullptr || data.group == nullptr || data.resource == 0)
-                continue;
-            if (!data.group->isAutoSceneColourActive(device_api::vulkan))
-                continue;
-            if (!safeTargets.contains(data.resource.handle))
-                continue;
-            if (!effect->enabled || effect->rendered)
-                continue;
-
-            names.insert(effect);
-        }
-    };
-
-    collectSafeAutoTechniques(commandListData.ps.techniquesToRender, psToRenderNames);
-    collectSafeAutoTechniques(commandListData.vs.techniquesToRender, vsToRenderNames);
-    collectSafeAutoTechniques(commandListData.cs.techniquesToRender, csToRenderNames);
-
-    if (psToRenderNames.empty() && vsToRenderNames.empty() && csToRenderNames.empty())
+    unique_lock<shared_mutex> renderLock(deviceData.render_mutex);
+    if (deviceData.vulkanAutoPendingEffects.empty())
         return;
 
-    unique_lock<shared_mutex> renderLock(deviceData.render_mutex);
+    RuntimeDataContainer& runtimeData = deviceData.current_runtime->get_private_data<RuntimeDataContainer>();
+    unordered_set<EffectData*> toRenderNames;
+
+    for (const auto& [effect, data] : deviceData.vulkanAutoPendingEffects) {
+        if (effect == nullptr || data.group == nullptr || data.resource == 0)
+            continue;
+        if (!data.group->isAutoSceneColourActive(device_api::vulkan))
+            continue;
+        if (!safeTargets.contains(data.resource.handle))
+            continue;
+        if (!effect->enabled || effect->rendered)
+            continue;
+
+        toRenderNames.insert(effect);
+    }
+
+    if (toRenderNames.empty())
+        return;
 
     if (!deviceData.rendered_effects) {
         deviceData.current_runtime->render_effects(cmd_list, resource_view{ 0 }, resource_view{ 0 });
         deviceData.rendered_effects = true;
     }
 
-    vector<EffectData*> psRemovalList;
-    vector<EffectData*> vsRemovalList;
-    vector<EffectData*> csRemovalList;
+    vector<EffectData*> removalList;
 
     shared_lock<shared_mutex> techLock(runtimeData.technique_mutex);
     _RenderEffects(cmd_list,
                    deviceData,
                    runtimeData,
-                   commandListData.ps.techniquesToRender,
-                   psRemovalList,
-                   psToRenderNames,
-                   true,
-                   &safeTargets);
-    _RenderEffects(cmd_list,
-                   deviceData,
-                   runtimeData,
-                   commandListData.vs.techniquesToRender,
-                   vsRemovalList,
-                   vsToRenderNames,
-                   true,
-                   &safeTargets);
-    _RenderEffects(cmd_list,
-                   deviceData,
-                   runtimeData,
-                   commandListData.cs.techniquesToRender,
-                   csRemovalList,
-                   csToRenderNames,
+                   deviceData.vulkanAutoPendingEffects,
+                   removalList,
+                   toRenderNames,
                    true,
                    &safeTargets);
     techLock.unlock();
 
-    for (auto* effect : psRemovalList)
-        commandListData.ps.techniquesToRender.erase(effect);
-    for (auto* effect : vsRemovalList)
-        commandListData.vs.techniquesToRender.erase(effect);
-    for (auto* effect : csRemovalList)
-        commandListData.cs.techniquesToRender.erase(effect);
-
-    commandListData.vulkanAutoPending = false;
-    auto stillPending = [](const effect_queue& queue) {
-        for (const auto& [effect, data] : queue) {
-            if (effect != nullptr && !effect->rendered && data.group != nullptr &&
-                data.group->isAutoSceneColourActive(device_api::vulkan) && data.resource != 0) {
-                return true;
-            }
-        }
-        return false;
-    };
-
-    commandListData.vulkanAutoPending =
-      stillPending(commandListData.ps.techniquesToRender) ||
-      stillPending(commandListData.vs.techniquesToRender) ||
-      stillPending(commandListData.cs.techniquesToRender);
+    for (auto* effect : removalList)
+        deviceData.vulkanAutoPendingEffects.erase(effect);
 }
 
 void RenderingEffectManager::RenderEffects(command_list* cmd_list, uint64_t callLocation, uint64_t invocation) {
