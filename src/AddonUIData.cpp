@@ -34,6 +34,10 @@
 #include <functional>
 #include "AddonUIData.h"
 #include "RenderingManager.h"
+#include <algorithm>
+#include <cfloat>
+#include <sstream>
+#include <vector>
 
 using namespace AddonImGui;
 using namespace reshade::api;
@@ -58,10 +62,17 @@ AddonUIData::AddonUIData(ShaderManager* pixelShaderManager, ShaderManager* verte
     _keyBindings[Keybind::VERTEX_SHADER_MARK] = VK_NUMPAD6;
     _keyBindings[Keybind::VERTEX_SHADER_MARKED_DOWN] = VK_NUMPAD4 | (VK_CONTROL << 8);
     _keyBindings[Keybind::VERTEX_SHADER_MARKED_UP] = VK_NUMPAD5 | (VK_CONTROL << 8);
+    _keyBindings[Keybind::COMPUTE_SHADER_DOWN] = 0;
+    _keyBindings[Keybind::COMPUTE_SHADER_UP] = 0;
+    _keyBindings[Keybind::COMPUTE_SHADER_MARK] = 0;
+    _keyBindings[Keybind::COMPUTE_SHADER_MARKED_DOWN] = 0;
+    _keyBindings[Keybind::COMPUTE_SHADER_MARKED_UP] = 0;
     _keyBindings[Keybind::INVOCATION_DOWN] = VK_NUMPAD7;
     _keyBindings[Keybind::INVOCATION_UP] = VK_NUMPAD8;
     _keyBindings[Keybind::DESCRIPTOR_DOWN] = VK_SUBTRACT;
     _keyBindings[Keybind::DESCRIPTOR_UP] = VK_ADD;
+
+    _savedConfigSignature = BuildConfigSignature();
 }
 
 
@@ -197,6 +208,50 @@ void AddonUIData::AddDefaultGroup()
 }
 
 
+std::string AddonUIData::BuildConfigSignature() const
+{
+    std::ostringstream ss;
+    ss << _resourceShim.size() << ':' << _resourceShim << ';'
+       << _constHookType.size() << ':' << _constHookType << ';'
+       << _constHookCopyType.size() << ':' << _constHookCopyType << ';'
+       << _trackDescriptors << ';' << _preventRuntimeReload << ';'
+       << _startValueFramecountCollectionPhase << ';' << _overlayOpacity << ';';
+
+    for (uint32_t i = 0; i < ARRAYSIZE(KeybindNames); ++i)
+        ss << _keyBindings[i] << ',';
+    ss << ';';
+
+    std::vector<int> groupIds;
+    groupIds.reserve(_toggleGroups.size());
+    for (const auto& [id, _] : _toggleGroups)
+        groupIds.push_back(id);
+    std::sort(groupIds.begin(), groupIds.end());
+
+    for (const int id : groupIds)
+        ss << _toggleGroups.at(id).configurationSignature() << "\n";
+
+    return ss.str();
+}
+
+bool AddonUIData::IsConfigDirty() const
+{
+    return BuildConfigSignature() != _savedConfigSignature;
+}
+
+ToggleGroup* AddonUIData::CloneToggleGroup(int sourceGroupId)
+{
+    const auto source = _toggleGroups.find(sourceGroupId);
+    if (source == _toggleGroups.end())
+        return nullptr;
+
+    const int newId = ToggleGroup::getNewGroupId();
+    ToggleGroup clone = source->second.cloneForNewId(newId);
+    _toggleGroups.emplace(newId, std::move(clone));
+    UpdateToggleGroupsForShaderHashes();
+    return &_toggleGroups.at(newId);
+}
+
+
 /// <summary>
 /// Loads the defined hashes and groups from the shaderToggler.ini file.
 /// </summary>
@@ -210,11 +265,20 @@ void AddonUIData::LoadShaderTogglerIniFile(const string& fileName)
     if (!iniFile.Load((_basePath / fileName).string()))
     {
         reshade::log::message(reshade::log::level::info, std::format("Could not find config file at \"{}\"", (_basePath / fileName).string()).c_str());
+        _savedConfigSignature = BuildConfigSignature();
         // not there
         return;
     }
 
     _trackDescriptors = iniFile.GetBoolOrDefault("TrackDescriptors", "General", true);
+
+    const float overlayOpacity = iniFile.GetFloat("OverlayOpacity", "General");
+    if (overlayOpacity != FLT_MIN)
+        _overlayOpacity = std::clamp(overlayOpacity, 0.0f, 1.0f);
+
+    const int collectionFrames = iniFile.GetInt("ShaderCollectionFrames", "General");
+    if (collectionFrames != INT_MIN)
+        _startValueFramecountCollectionPhase = std::clamp(collectionFrames, 10, 1000);
 
     _resourceShim = iniFile.GetValue("ResourceShim", "General");
     if (_resourceShim.size() <= 0)
@@ -281,8 +345,9 @@ void AddonUIData::LoadShaderTogglerIniFile(const string& fileName)
             _computeShaderHashToToggleGroups[h].push_back(&group);
         }
     }
-}
 
+    _savedConfigSignature = BuildConfigSignature();
+}
 
 /// <summary>
 /// Saves the currently known toggle groups with their shader hashes to the shadertoggler.ini file
@@ -298,6 +363,8 @@ void AddonUIData::SaveShaderTogglerIniFile(const string& fileName)
     iniFile.SetValue("ConstantBufferHookType", _constHookType, "", "General");
     iniFile.SetValue("ConstantBufferHookCopyType", _constHookCopyType, "", "General");
     iniFile.SetBool("TrackDescriptors", _trackDescriptors, "", "General");
+    iniFile.SetFloat("OverlayOpacity", _overlayOpacity, "", "General");
+    iniFile.SetInt("ShaderCollectionFrames", _startValueFramecountCollectionPhase, "", "General");
     iniFile.SetBool("PreventRuntimeReload", _preventRuntimeReload, "", "General");
 
     for (uint32_t i = 0; i < ARRAYSIZE(KeybindNames); i++)
@@ -317,6 +384,7 @@ void AddonUIData::SaveShaderTogglerIniFile(const string& fileName)
 
     iniFile.SetFileName((_basePath / fileName).string());
     iniFile.Save();
+    _savedConfigSignature = BuildConfigSignature();
 }
 
 

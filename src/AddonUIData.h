@@ -55,6 +55,11 @@ enum Keybind : uint32_t {
     VERTEX_SHADER_MARK,
     VERTEX_SHADER_MARKED_DOWN,
     VERTEX_SHADER_MARKED_UP,
+    COMPUTE_SHADER_DOWN,
+    COMPUTE_SHADER_UP,
+    COMPUTE_SHADER_MARK,
+    COMPUTE_SHADER_MARKED_DOWN,
+    COMPUTE_SHADER_MARKED_UP,
     INVOCATION_DOWN,
     INVOCATION_UP,
     DESCRIPTOR_DOWN,
@@ -64,8 +69,18 @@ enum Keybind : uint32_t {
 static const char* KeybindNames[] = { "PIXEL_SHADER_DOWN",        "PIXEL_SHADER_UP",        "PIXEL_SHADER_MARK",
                                       "PIXEL_SHADER_MARKED_DOWN", "PIXEL_SHADER_MARKED_UP", "VERTEX_SHADER_DOWN",
                                       "VERTEX_SHADER_UP",         "VERTEX_SHADER_MARK",     "VERTEX_SHADER_MARKED_DOWN",
-                                      "VERTEX_SHADER_MARKED_UP",  "INVOCATION_DOWN",        "INVOCATION_UP",
-                                      "DESCRIPTOR_DOWN",          "DESCRIPTOR_UP" };
+                                      "VERTEX_SHADER_MARKED_UP",  "COMPUTE_SHADER_DOWN",    "COMPUTE_SHADER_UP",
+                                      "COMPUTE_SHADER_MARK",      "COMPUTE_SHADER_MARKED_DOWN", "COMPUTE_SHADER_MARKED_UP",
+                                      "INVOCATION_DOWN",          "INVOCATION_UP",          "DESCRIPTOR_DOWN",
+                                      "DESCRIPTOR_UP" };
+
+static const char* KeybindDisplayNames[] = { "Pixel: previous shader", "Pixel: next shader", "Pixel: mark / unmark",
+                                             "Pixel: previous marked", "Pixel: next marked", "Vertex: previous shader",
+                                             "Vertex: next shader", "Vertex: mark / unmark", "Vertex: previous marked",
+                                             "Vertex: next marked", "Compute: previous shader", "Compute: next shader",
+                                             "Compute: mark / unmark", "Compute: previous marked", "Compute: next marked",
+                                             "Invocation: previous", "Invocation: next", "Descriptor: previous", "Descriptor: next" };
+static_assert(ARRAYSIZE(KeybindNames) == ARRAYSIZE(KeybindDisplayNames));
 
 enum TabType : uint32_t {
     TAB_NONE = 0,
@@ -100,6 +115,9 @@ class AddonUIData {
     bool _preventRuntimeReload = false;
     std::filesystem::path _basePath;
     TabType _currentTab = TabType::TAB_NONE;
+    std::string _savedConfigSignature;
+
+    std::string BuildConfigSignature() const;
 
     std::vector<std::function<void(reshade::api::effect_runtime*, ShaderToggler::ToggleGroup*)>> _removalCallbacks;
 
@@ -115,6 +133,8 @@ class AddonUIData {
     const std::vector<ShaderToggler::ToggleGroup*>* GetToggleGroupsForComputeShaderHash(uint32_t hash);
     void UpdateToggleGroupsForShaderHashes();
     void AddDefaultGroup();
+    ShaderToggler::ToggleGroup* CloneToggleGroup(int sourceGroupId);
+    bool IsConfigDirty() const;
     const std::atomic_int& GetToggleGroupIdShaderEditing() const;
     void EndShaderEditing(bool acceptCollectedShaderHashes, ShaderToggler::ToggleGroup& groupEditing);
     void StartShaderEditing(ShaderToggler::ToggleGroup& groupEditing);

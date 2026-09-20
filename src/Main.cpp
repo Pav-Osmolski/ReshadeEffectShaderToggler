@@ -65,7 +65,7 @@ using namespace AddonImGui;
 using namespace Shim::Constants;
 using namespace std;
 
-extern "C" __declspec(dllexport) const char* NAME = "Reshade Effect Shader Toggler";
+extern "C" __declspec(dllexport) const char* NAME = "REST Enhanced — ReShade Effect Shader Toggler";
 extern "C" __declspec(dllexport) const char* DESCRIPTION =
   "ReShade add-on for applying selected effects at shader-defined points in the rendering pipeline, including automatic scene-colour injection for upscaled rendering.";
 

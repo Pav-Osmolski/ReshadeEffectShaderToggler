@@ -90,9 +90,11 @@ The group editor displays:
 - **Scene resolution** - resolution of the matched live game target.
 - **Effect resolution** - resolution at which the ReShade techniques are running.
 - **Technique order** - the techniques REST rendered on the last successful injection.
-- **Status** - render-call count, number of techniques and target handle.
+- **Injection** - reports whether an effect dispatch has completed successfully and how many techniques were rendered.
+- **Native staging** - reports whether the native-resolution staging path is active or not required.
+- **Copy diagnostics** - copies a support-ready block containing the REST version, graphics API, group name, scene/effect resolutions, staging state, technique count/order, render-call count and last target handle.
 
-When DLSS is active and the game renders below output resolution, a healthy configuration should normally show a lower scene resolution and a native effect resolution marked as **native staging**.
+When DLSS is active and the game renders below output resolution, a healthy configuration should normally show a lower scene resolution, the native effect resolution and **Native staging: Active**.
 
 ## Troubleshooting
 
