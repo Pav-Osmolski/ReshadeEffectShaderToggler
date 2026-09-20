@@ -393,15 +393,31 @@ void AddonUIData::SaveShaderTogglerIniFile(const string& fileName)
 /// </summary>
 /// <param name="acceptCollectedShaderHashes"></param>
 /// <param name="groupEditing"></param>
+void AddonUIData::OpenGroupSettings(ToggleGroup& group)
+{
+    _toggleGroupIdSettingsOpen = group.getId();
+}
+
+void AddonUIData::CloseGroupSettings(bool acceptCollectedShaderHashes, ToggleGroup& group)
+{
+    if (_toggleGroupIdShaderEditing == group.getId())
+        EndShaderEditing(acceptCollectedShaderHashes, group);
+
+    _toggleGroupIdSettingsOpen = -1;
+}
+
 void AddonUIData::EndShaderEditing(bool acceptCollectedShaderHashes, ToggleGroup& groupEditing)
 {
     if (acceptCollectedShaderHashes && _toggleGroupIdShaderEditing == groupEditing.getId())
     {
-        groupEditing.storeCollectedHashes(_pixelShaderManager->getMarkedShaderHashes(), _vertexShaderManager->getMarkedShaderHashes(), _computeShaderManager->getMarkedShaderHashes());
-        _pixelShaderManager->stopHuntingMode();
-        _vertexShaderManager->stopHuntingMode();
-        _computeShaderManager->stopHuntingMode();
+        groupEditing.storeCollectedHashes(_pixelShaderManager->getMarkedShaderHashes(),
+                                          _vertexShaderManager->getMarkedShaderHashes(),
+                                          _computeShaderManager->getMarkedShaderHashes());
     }
+
+    _pixelShaderManager->stopHuntingMode();
+    _vertexShaderManager->stopHuntingMode();
+    _computeShaderManager->stopHuntingMode();
     _toggleGroupIdShaderEditing = -1;
 
     UpdateToggleGroupsForShaderHashes();
@@ -414,6 +430,8 @@ void AddonUIData::EndShaderEditing(bool acceptCollectedShaderHashes, ToggleGroup
 /// <param name="groupEditing"></param>
 void AddonUIData::StartShaderEditing(ToggleGroup& groupEditing)
 {
+    _toggleGroupIdSettingsOpen = groupEditing.getId();
+
     if (_toggleGroupIdShaderEditing == groupEditing.getId())
     {
         return;
