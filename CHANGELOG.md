@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+### QoL and configuration safety
+
+- Saves configuration through a verified temporary file, refreshes `ReshadeEffectShaderToggler.ini.bak` and atomically replaces the live INI; adds `ConfigVersion` for future migrations.
+- Replaces per-overlay full configuration signature generation with cached dirty-state tracking.
+- Adds clipboard **Copy group / Import group** using REST's existing INI group serializer.
+- Adds press-and-hold shader browsing, **Mark + Prev / Mark + Next** controls and optional shortcuts, **Copy hash**, and retained hunting search/filter/stage/channel state for the current session.
+- Adds a bounded **Recent attempts** Auto Scene Colour diagnostic history.
+
+### Optimisation
+
+- Returns committed shader-hash sets by const reference where snapshots are not required.
+- Caches sorted technique-picker metadata on ReShade effect reload/reorder instead of rebuilding and sorting it every overlay frame.
+- Avoids copying the selected-technique set every overlay frame; it is copied only when the user actually changes a checkbox.
+- Adds atomic Vulkan pending-work flags so render-pass tracking remains intact while deferred Auto Scene Colour and preview matching are skipped when there is no pending work.
+
+
 ## v1.6.0.633 — 2026-09-20
 
 ### Vulkan Auto Scene Colour
