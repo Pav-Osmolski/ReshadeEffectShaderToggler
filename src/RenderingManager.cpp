@@ -9,8 +9,7 @@ using namespace std;
 size_t RenderingManager::g_charBufferSize = CHAR_BUFFER_SIZE;
 char RenderingManager::g_charBuffer[CHAR_BUFFER_SIZE];
 
-namespace {
-std::string FormatName(reshade::api::format value) {
+std::string RenderingManager::FormatName(reshade::api::format value) {
     using reshade::api::format;
     switch (value) {
         case format::unknown: return "UNKNOWN";
@@ -72,7 +71,6 @@ std::string FormatName(reshade::api::format value) {
         case format::d32_float_s8_uint: return "D32_FLOAT_S8_UINT";
         default: return std::format("FORMAT_{}", static_cast<uint32_t>(value));
     }
-}
 }
 
 void RenderingManager::EnumerateTechniques(effect_runtime* runtime, function<void(effect_runtime*, effect_technique, string&, string&)> func) {
