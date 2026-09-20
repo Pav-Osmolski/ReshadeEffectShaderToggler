@@ -2,7 +2,7 @@
 
 Automatic Scene Colour is a rendering mode for REST groups that need to apply ReShade effects to the live scene before later game passes such as fog or UI, while still allowing those effects to execute at the normal ReShade runtime resolution. It supports D3D10, D3D11, D3D12 and Vulkan on both x86 and x64 through ReShade's generic graphics API.
 
-It was developed and validated against **Baldur's Gate 3 in DX11 mode with DLSS enabled**.
+It was developed against **Baldur's Gate 3 in DX11 mode with DLSS enabled**. The Vulkan implementation was subsequently validated in BG3 with native-resolution staging, Before Fog injection and rapid shader-hunting navigation.
 
 ## Why it exists
 
@@ -33,7 +33,7 @@ When **Auto scene colour** is enabled for a group, REST:
    - runs the selected ReShade techniques against that staging target;
    - transitions the resources back;
    - copies/downscales the completed result into the original live scene target.
-6. Lets the game's matched draw and all subsequent passes continue normally.
+6. Returns control to the game. D3D injection occurs at the matched boundary; Vulkan waits for a safe boundary after the matched pass as described below.
 
 The result is part of the scene before the later game passes are composited.
 
@@ -41,13 +41,20 @@ The result is part of the scene before the later game passes are composited.
 
 Vulkan does not permit image-transfer barriers, blits or a nested ReShade effect render while the game's render pass is active. ReShade's draw callback occurs inside that pass, so REST records the matched live target and defers the Auto injection.
 
-REST processes that deferred work at the next ReShade `begin_render_pass` callback that references the **same colour target with LOAD semantics**. ReShade emits that callback before the underlying Vulkan render pass begins, giving REST a legal command-buffer boundary. A CLEAR or DISCARD continuation is ignored because it would immediately overwrite the injected result.
+REST processes deferred work at either of two proven safe boundaries:
+
+- A new render pass that references the **same colour target with LOAD semantics**, when pass tracking establishes that the command list is outside the previous pass. CLEAR/DISCARD continuations are not eligible.
+- A **post-pass RT transition** where the exact pending target changes from render-target usage to non-render-target usage. This supports final scene targets that have no later same-target LOAD pass. After injection, REST restores the usage requested by the game.
+
+ReShade also emits end/begin callbacks at Vulkan subpass transitions. An end callback alone therefore does not prove the pass has finished. REST waits for a subsequent barrier to establish that the pass ended and rejects ambiguous subpass boundaries for both effects and preview copies. A recursion guard prevents REST's own transitions from triggering another Auto injection. Pending effects are cleared at present and effect reload so stale work does not carry into a later frame.
 
 ReShade's Vulkan `render_technique` path first copies the supplied colour target into its internal effect-colour texture, so the live game image must already have transfer-source usage even when scene and effect resolutions match. REST deliberately does not retrofit transfer flags onto arbitrary Vulkan game images because the generic ReShade resource descriptor does not expose every native image-creation constraint (for example transient attachments).
 
 When the deferred Vulkan injection needs native-resolution staging, the live target must additionally have transfer-destination usage. REST then uses ReShade's generic `copy_texture_region` blit path rather than its embedded Direct3D fullscreen-copy shaders, with explicit `render target -> copy source/copy destination -> render target` transitions around the up/downscale blits. The staging path also requires a single-sample colour target and Vulkan blit support.
 
-This first Vulkan implementation deliberately does not split an existing game render pass. If the desired later UI/fog/post-processing composition occurs inside the same pass as the matched draw, REST leaves the pending injection untouched rather than recording invalid Vulkan commands.
+REST does not split an existing game render pass. It cannot insert effects between draws within the same pass: choose a candidate with an eligible boundary before the desired later fog/UI composition. If no safe boundary is found, pending Auto work is skipped for that frame.
+
+In the validated BG3 Vulkan configuration, `0x782733c1` provided the Before Fog boundary using **post-pass RT transition**, with `2560×1440 → 3840×2160` Vulkan image-blit staging. The user confirmed that flicker was resolved and rapid Prev/Next hunting was stable after the concurrency fixes. This hash is an example from that game configuration, not a universal preset; game versions and graphics settings can change shader hashes.
 
 ## What is automatic
 
@@ -107,6 +114,7 @@ Last-success diagnostics include:
 
 - **Last successful injection** - scene resolution -> effect resolution from the most recent successful render.
 - **Last successful staging** - Direct, Vulkan image blit or fullscreen shader copy.
+- **Vulkan boundary** - the actual successful boundary: `same-target LOAD pass` or `post-pass RT transition`.
 - **Last successful techniques** - technique count and execution order.
 - **Successful renders** - successful effect-render count for the currently committed shader set.
 - **Copy diagnostics** - copies both sections in a support-ready block.
@@ -146,6 +154,10 @@ Check that:
 
 When native staging needs to be created or resized, REST may defer the effect until the staging resource has been created by its resource manager. Subsequent matching frames should render normally.
 
+### Vulkan keeps waiting for a safe boundary
+
+Finding the shader and its target does not guarantee that the target has an eligible later boundary. Check **Successful renders** and **Vulkan boundary** after clicking Done. If no successful render is recorded, select a different candidate with a same-target LOAD continuation or a post-pass transition out of render-target usage. Preview availability alone does not prove that Auto injection will be possible.
+
 ### The scene and effect resolutions are identical
 
 That is valid. Native staging is only needed when the live scene resolution differs from the ReShade runtime/output resolution.
@@ -165,6 +177,6 @@ The selected ReShade techniques also execute at the native runtime resolution ra
 - Baldur's Gate 3 DX11 + DLSS remains the primary runtime-tested D3D configuration and regression reference for scene-colour behaviour.
 - D3D10/11/12 use REST's existing fullscreen shader-copy path when native staging is required.
 - Vulkan requires the live colour target to have existing transfer-source usage. Native staging additionally requires existing transfer-destination usage, a single-sample target and Vulkan blit support.
-- Vulkan runtime validation is a separate release gate; support should not be considered release-ready until a representative Vulkan title has exercised both direct and native-staging paths.
+- BG3 Vulkan native-staging and rapid-navigation runtime validation was confirmed for v1.6.0.633. Other titles, direct-resolution configurations and x86 runtime behaviour still need representative testing; x86/x64 build validation is not a substitute for those runtime checks.
 - The implementation targets the **primary colour RTV (slot 0)**.
 - It is intended for scene-colour injection around a user-selected shader boundary, not as a general replacement for ReShade's depth-buffer detection.

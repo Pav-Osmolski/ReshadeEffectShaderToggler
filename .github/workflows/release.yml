@@ -42,6 +42,15 @@ jobs:
             throw "Release tag $tag does not match committed source version v$sourceVersion."
           }
 
+          if (-not (Test-Path "docs/releases/$tag.md")) {
+            throw "Missing committed release notes: docs/releases/$tag.md"
+          }
+
+          git merge-base --is-ancestor HEAD origin/main
+          if ($LASTEXITCODE -ne 0) {
+            throw "Release tag must point to a commit merged into main."
+          }
+
           ./src/set_release_version.ps1 $tag
           Get-Content ./src/version.h
 
@@ -118,6 +127,7 @@ jobs:
             "src/Win32/Release/ReshadeEffectShaderToggler.addon32",
             "LICENSE",
             "README.md",
+            "CHANGELOG.md",
             "Shaders",
             "docs"
           )
@@ -129,4 +139,4 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${{ github.ref_name }}" "release.zip" "SHA256SUMS.txt" --verify-tag --title "${{ github.ref_name }}" --generate-notes
+        run: gh release create "${{ github.ref_name }}" "release.zip" "SHA256SUMS.txt" --verify-tag --title "${{ github.ref_name }}" --notes-file "docs/releases/${{ github.ref_name }}.md"

@@ -25,7 +25,11 @@ REST requires a ReShade build with add-on support enabled.
 
 The existing render-target, shader-hunting and binding features remain API/game dependent. D3D10/D3D11/D3D12 and Vulkan behaviour outside the paths that have been specifically tested may vary by title.
 
-The **Auto scene colour** path supports D3D10, D3D11, D3D12 and Vulkan on both x86 and x64. D3D10/11/12 retain the existing shader-based native-staging copy path. Vulkan defers a matched Auto injection to the next render pass that **LOADs the same colour target**. The live image must already have Vulkan transfer-source usage because ReShade copies the colour target before rendering a technique; native staging additionally requires transfer-destination usage and uses ReShade's generic image-blit API with explicit transfer-state transitions. REST does not add transfer usage to arbitrary Vulkan game images, avoiding invalid combinations such as transient attachments. This avoids issuing effects or transfer commands inside an active Vulkan render pass. If the game keeps all later composition inside the same render pass, REST skips that unsafe injection path rather than splitting the game's pass. Baldur's Gate 3 in DX11 mode using DLSS remains the primary regression-tested D3D configuration; Vulkan runtime validation is required separately before release.
+The **Auto scene colour** path supports D3D10, D3D11, D3D12 and Vulkan on both x86 and x64. D3D10/11/12 retain the existing shader-based native-staging copy path. Vulkan defers injection to a proven safe boundary: a new pass that **LOADs the same colour target**, or a **post-pass transition of that exact target out of render-target usage**. Subpass transitions are not treated as completed render passes. REST restores the game's requested resource state and guards against recursive injection.
+
+The live Vulkan image must already have transfer-source usage; native staging additionally requires transfer-destination usage and uses image blits. REST does not add transfer flags to arbitrary game images or split active game passes. Unsupported targets or boundaries are skipped safely. Baldur's Gate 3 Vulkan testing confirmed stable Before Fog injection with `2560×1440 → 3840×2160` staging and rapid shader navigation after the hunting fixes. BG3 DX11 + DLSS remains the D3D regression reference; this does not imply every title or architecture has been runtime-tested.
+
+See the [changelog](CHANGELOG.md) for the changes in **v1.6.0.633**.
 
 ## Installation
 
@@ -128,6 +132,8 @@ All hunting shortcuts are configurable under **Shader hunting keybindings**, mak
 
 Use the group's **Active** checkbox or assigned hotkey while testing. When finished, click **Done** and **Save changes**.
 
+Rapid **Prev / Next** navigation uses owned shader-group snapshots, synchronised shader maps and collected lists, and atomic render-visible hunting state. Vulkan snapshots the selected shader for each draw. These fixes address the rapid-navigation crash without adding a button delay. Preview **RGB / R / G / B** controls help inspect individual channels; Vulkan previews wait for a safe copy boundary and do not support Clear alpha processing.
+
 ## Automatic scene-colour performance note
 
 When native staging is required, REST performs an additional scene copy to native resolution and another copy back to the live scene target, and the selected ReShade techniques run at native resolution. This is intentional for correctness but can cost more GPU time than rendering directly at the game's internal resolution.
@@ -149,7 +155,7 @@ See [Release Process](docs/RELEASING.md) for the release checklist and packaging
 ## Credits
 
 - [alex / 4lex4nder](https://github.com/4lex4nder) - ReshadeEffectShaderToggler development.
-- **DeViLhoOD** - Automatic Scene Colour, DLSS/upscaled rendering support, x86/x64 hardening, QoL workflow improvements, documentation and testing.
+- **DeViLhoOD** - Automatic Scene Colour, Vulkan safe-boundary injection and previews, shader-hunting stability improvements, DLSS/upscaled rendering support, x86/x64 hardening, QoL workflow improvements, documentation and testing.
 - [Frans Bouma](https://github.com/FransBouma) - original ShaderToggler.
 - [Sinom](https://github.com/sinomsinom) - contributor.
 - [crosire](https://github.com/crosire) - ReShade and effect-rendering examples.
