@@ -111,6 +111,8 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
           autoSceneColour &&
           runtimeWidth > 0 && runtimeHeight > 0 &&
           (desc.texture.width != runtimeWidth || desc.texture.height != runtimeHeight);
+        const bool vulkanAutoSceneColour = autoSceneColour && deviceApi == device_api::vulkan;
+        const bool vulkanNativeStaging = vulkanAutoSceneColour && wantsNativeStaging;
 
         bool useNativeStaging = false;
         resource nativeStageRes = {};
@@ -119,6 +121,17 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
         resource_view nativeStageSRV = {};
 
         if (wantsNativeStaging) {
+            if (vulkanNativeStaging) {
+                // Vulkan image blits require single-sample transfer-capable images.
+                // The live render target was opted into transfer usage at resource creation.
+                const resource_usage transferUsage = resource_usage::copy_source | resource_usage::copy_dest;
+                if (desc.texture.samples != 1 ||
+                    !runtime->get_device()->check_capability(device_caps::blit) ||
+                    !runtime->get_device()->check_format_support(desc.texture.format, transferUsage)) {
+                    continue;
+                }
+            }
+
             GroupResource& staging = group->GetGroupResource(GroupResourceType::RESOURCE_NATIVE_STAGING);
 
             resource_desc desired = desc;
@@ -152,19 +165,39 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
                                                        &nativeStageRTVSRGB,
                                                        &nativeStageSRV);
 
-            if (nativeStageRes == 0 || nativeStageRTV == 0 || nativeStageSRV == 0 || view->srv == 0 || view->rtv == 0) {
+            if (nativeStageRes == 0 || nativeStageRTV == 0 || view->rtv == 0) {
                 continue;
             }
 
-            // The selected resource is the live RTV bound for the matched draw.
-            // Temporarily transition it to shader-resource state so the fullscreen copy
-            // shader can sample it into the native-size staging surface.
-            cmd_list->barrier(active_resource.resource, resource_usage::render_target, resource_usage::shader_resource);
+            if (vulkanNativeStaging) {
+                // Vulkan uses the generic ReShade blit API rather than REST's embedded
+                // DXBC fullscreen-copy pipeline. Keep the live image in copy-source state
+                // until the processed native-size result is blitted back.
+                cmd_list->barrier(active_resource.resource, resource_usage::render_target, resource_usage::copy_source);
+                cmd_list->barrier(nativeStageRes, resource_usage::render_target, resource_usage::copy_dest);
+                cmd_list->copy_texture_region(active_resource.resource,
+                                              0,
+                                              nullptr,
+                                              nativeStageRes,
+                                              0,
+                                              nullptr,
+                                              filter_mode::min_mag_mip_point);
+                cmd_list->barrier(nativeStageRes, resource_usage::copy_dest, resource_usage::render_target);
+            } else {
+                if (nativeStageSRV == 0 || view->srv == 0) {
+                    continue;
+                }
 
-            // Upscale the game's pre-DLSS scene into a native-size scratch surface.
-            // This keeps ReShade's effect-created intermediate textures at their normal
-            // runtime dimensions, avoiding mixed-resolution shared-resource permutations.
-            shaderManager.CopyResource(cmd_list, view->srv, nativeStageRTV, runtimeWidth, runtimeHeight);
+                // The selected resource is the live RTV bound for the matched draw.
+                // Temporarily transition it to shader-resource state so the fullscreen copy
+                // shader can sample it into the native-size staging surface.
+                cmd_list->barrier(active_resource.resource, resource_usage::render_target, resource_usage::shader_resource);
+
+                // Upscale the game's pre-DLSS scene into a native-size scratch surface.
+                // This keeps ReShade's effect-created intermediate textures at their normal
+                // runtime dimensions, avoiding mixed-resolution shared-resource permutations.
+                shaderManager.CopyResource(cmd_list, view->srv, nativeStageRTV, runtimeWidth, runtimeHeight);
+            }
 
             view_non_srgb = nativeStageRTV;
             view_srgb = nativeStageRTVSRGB != 0 ? nativeStageRTVSRGB : nativeStageRTV;
@@ -268,14 +301,28 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
             // Downscale the completed native-size effect result back into the live
             // scene target. Leave the game resource in render-target state so the
             // matched draw can execute normally after REST returns.
-            cmd_list->barrier(nativeStageRes, resource_usage::render_target, resource_usage::shader_resource);
-            cmd_list->barrier(active_resource.resource, resource_usage::shader_resource, resource_usage::render_target);
+            if (vulkanNativeStaging) {
+                cmd_list->barrier(nativeStageRes, resource_usage::render_target, resource_usage::copy_source);
+                cmd_list->barrier(active_resource.resource, resource_usage::copy_source, resource_usage::copy_dest);
+                cmd_list->copy_texture_region(nativeStageRes,
+                                              0,
+                                              nullptr,
+                                              active_resource.resource,
+                                              0,
+                                              nullptr,
+                                              filter_mode::min_mag_mip_point);
+                cmd_list->barrier(nativeStageRes, resource_usage::copy_source, resource_usage::render_target);
+                cmd_list->barrier(active_resource.resource, resource_usage::copy_dest, resource_usage::render_target);
+            } else {
+                cmd_list->barrier(nativeStageRes, resource_usage::render_target, resource_usage::shader_resource);
+                cmd_list->barrier(active_resource.resource, resource_usage::shader_resource, resource_usage::render_target);
 
-            if (view->rtv != 0) {
-                shaderManager.CopyResource(cmd_list, nativeStageSRV, view->rtv, desc.texture.width, desc.texture.height);
+                if (view->rtv != 0) {
+                    shaderManager.CopyResource(cmd_list, nativeStageSRV, view->rtv, desc.texture.width, desc.texture.height);
+                }
+
+                cmd_list->barrier(nativeStageRes, resource_usage::shader_resource, resource_usage::render_target);
             }
-
-            cmd_list->barrier(nativeStageRes, resource_usage::shader_resource, resource_usage::render_target);
         } else if (transitionManualSRV) {
             cmd_list->barrier(active_resource.resource, resource_usage::render_target, resource_usage::shader_resource);
         }
