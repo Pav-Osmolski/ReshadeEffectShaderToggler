@@ -513,7 +513,7 @@ void RenderingEffectManager::RenderEffects(command_list* cmd_list, uint64_t call
     vector<EffectData*> vsRemovalList;
     vector<EffectData*> csRemovalList;
 
-    if (psToRenderNames.size() == 0 && vsToRenderNames.size() == 0) {
+    if (psToRenderNames.empty() && vsToRenderNames.empty() && csToRenderNames.empty()) {
         return;
     }
 
