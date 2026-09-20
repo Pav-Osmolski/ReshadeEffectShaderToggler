@@ -38,6 +38,7 @@
 #include "ToggleGroup.h"
 #include <filesystem>
 #include <reshade.hpp>
+#include <shared_mutex>
 #include <unordered_map>
 
 constexpr auto FRAMECOUNT_COLLECTION_PHASE_DEFAULT = 10;
@@ -106,6 +107,7 @@ class AddonUIData {
     std::unordered_map<uint32_t, std::vector<ShaderToggler::ToggleGroup*>> _pixelShaderHashToToggleGroups;
     std::unordered_map<uint32_t, std::vector<ShaderToggler::ToggleGroup*>> _vertexShaderHashToToggleGroups;
     std::unordered_map<uint32_t, std::vector<ShaderToggler::ToggleGroup*>> _computeShaderHashToToggleGroups;
+    mutable std::shared_mutex _shaderHashGroupsMutex;
     int _startValueFramecountCollectionPhase = FRAMECOUNT_COLLECTION_PHASE_DEFAULT;
     float _overlayOpacity = 0.2f;
     uint32_t _keyBindings[ARRAYSIZE(KeybindNames)];
@@ -129,9 +131,9 @@ class AddonUIData {
                 Shim::Constants::ConstantHandlerBase* constants,
                 std::atomic_uint32_t* activeCollectorFrameCounter);
     std::unordered_map<int, ShaderToggler::ToggleGroup>& GetToggleGroups();
-    const std::vector<ShaderToggler::ToggleGroup*>* GetToggleGroupsForPixelShaderHash(uint32_t hash);
-    const std::vector<ShaderToggler::ToggleGroup*>* GetToggleGroupsForVertexShaderHash(uint32_t hash);
-    const std::vector<ShaderToggler::ToggleGroup*>* GetToggleGroupsForComputeShaderHash(uint32_t hash);
+    std::vector<ShaderToggler::ToggleGroup*> GetToggleGroupsForPixelShaderHash(uint32_t hash) const;
+    std::vector<ShaderToggler::ToggleGroup*> GetToggleGroupsForVertexShaderHash(uint32_t hash) const;
+    std::vector<ShaderToggler::ToggleGroup*> GetToggleGroupsForComputeShaderHash(uint32_t hash) const;
     void UpdateToggleGroupsForShaderHashes();
     void AddDefaultGroup();
     ShaderToggler::ToggleGroup* CloneToggleGroup(int sourceGroupId);
