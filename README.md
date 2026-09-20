@@ -62,7 +62,7 @@ The saved configuration is written to `ReshadeEffectShaderToggler.ini` beside th
 ### Group management
 
 - **Clone** copies a group's shader hashes, effects and settings into a new inactive group with no hotkey, so it can be adjusted safely.
-- **Copy group** places a self-contained REST group INI block on the clipboard; **Import group** restores one from the clipboard without replacing the rest of the configuration.
+- **Copy group** places a self-contained REST group INI block on the clipboard; **Import group** restores one without replacing the rest of the configuration. Imported groups start inactive with no hotkey to avoid unexpected rendering changes or shortcut conflicts.
 - **Delete** requires confirmation and is not written to disk until **Save changes** is used.
 - Each group shows compact pixel/vertex/compute shader counts, selected-effect count and an **Auto Scene Colour** indicator when enabled.
 - REST warns when group hotkeys conflict with another group or with a configured REST action.
