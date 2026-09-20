@@ -415,6 +415,13 @@ ToggleGroup* AddonUIData::ImportToggleGroup(const std::string& serialized)
     const int newId = ToggleGroup::getNewGroupId();
     ToggleGroup imported("", newId);
     imported.loadState(data, 0);
+
+    // Shared/imported groups should not immediately alter rendering or collide with
+    // the recipient's shortcuts. Preserve the portable rendering configuration,
+    // but require the user to opt in to activation and choose a local hotkey.
+    if (imported.isActive())
+        imported.toggleActive();
+    imported.setToggleKey(0);
     imported.SetConfigDirtyFlag(&_configDirty);
     imported.setEditing(false);
 
