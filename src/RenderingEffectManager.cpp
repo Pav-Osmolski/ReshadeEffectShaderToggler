@@ -57,7 +57,9 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
                                             RuntimeDataContainer& runtimeData,
                                             const effect_queue& techniquesToRender,
                                             vector<EffectData*>& removalList,
-                                            const unordered_set<EffectData*>& toRenderNames) {
+                                            const unordered_set<EffectData*>& toRenderNames,
+                                            bool vulkanSafeBoundary,
+                                            const unordered_set<uint64_t>* allowedVulkanTargets) {
     bool rendered = false;
     CommandListDataContainer& cmdData = cmd_list->get_private_data<CommandListDataContainer>();
     effect_runtime* runtime = deviceData.current_runtime;
@@ -113,6 +115,20 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
           (desc.texture.width != runtimeWidth || desc.texture.height != runtimeHeight);
         const bool vulkanAutoSceneColour = autoSceneColour && deviceApi == device_api::vulkan;
         const bool vulkanNativeStaging = vulkanAutoSceneColour && wantsNativeStaging;
+
+        // Vulkan draw callbacks execute inside the game's active render pass.
+        // ReShade effect rendering and transfer/blit commands would be invalid there,
+        // so defer Auto Scene Colour until a later begin_render_pass callback, which
+        // ReShade invokes before the Vulkan render pass actually begins.
+        if (vulkanAutoSceneColour) {
+            if (!vulkanSafeBoundary) {
+                cmdData.vulkanAutoPending = true;
+                continue;
+            }
+
+            if (allowedVulkanTargets != nullptr && !allowedVulkanTargets->contains(active_resource.resource.handle))
+                continue;
+        }
 
         bool useNativeStaging = false;
         resource nativeStageRes = {};
@@ -329,6 +345,125 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
     }
 
     return rendered;
+}
+
+void RenderingEffectManager::RenderDeferredVulkanAutoEffects(command_list* cmd_list,
+                                                               uint32_t renderTargetCount,
+                                                               const render_pass_render_target_desc* renderTargets) {
+    if (cmd_list == nullptr || cmd_list->get_device() == nullptr ||
+        cmd_list->get_device()->get_api() != device_api::vulkan || renderTargetCount == 0 || renderTargets == nullptr) {
+        return;
+    }
+
+    CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
+    if (!commandListData.vulkanAutoPending)
+        return;
+
+    DeviceDataContainer& deviceData = cmd_list->get_device()->get_private_data<DeviceDataContainer>();
+    if (deviceData.current_runtime == nullptr)
+        return;
+
+    unordered_set<uint64_t> safeTargets;
+    safeTargets.reserve(renderTargetCount);
+    for (uint32_t i = 0; i < renderTargetCount; ++i) {
+        if (renderTargets[i].view == 0)
+            continue;
+
+        const resource target = cmd_list->get_device()->get_resource_from_view(renderTargets[i].view);
+        if (target != 0)
+            safeTargets.insert(target.handle);
+    }
+
+    if (safeTargets.empty())
+        return;
+
+    RuntimeDataContainer& runtimeData = deviceData.current_runtime->get_private_data<RuntimeDataContainer>();
+    unordered_set<EffectData*> psToRenderNames;
+    unordered_set<EffectData*> vsToRenderNames;
+    unordered_set<EffectData*> csToRenderNames;
+
+    auto collectSafeAutoTechniques = [&](const effect_queue& queue, unordered_set<EffectData*>& names) {
+        for (const auto& [effect, data] : queue) {
+            if (effect == nullptr || data.group == nullptr || data.resource == 0)
+                continue;
+            if (!data.group->isAutoSceneColourActive(device_api::vulkan))
+                continue;
+            if (!safeTargets.contains(data.resource.handle))
+                continue;
+            if (!effect->enabled || effect->rendered)
+                continue;
+
+            names.insert(effect);
+        }
+    };
+
+    collectSafeAutoTechniques(commandListData.ps.techniquesToRender, psToRenderNames);
+    collectSafeAutoTechniques(commandListData.vs.techniquesToRender, vsToRenderNames);
+    collectSafeAutoTechniques(commandListData.cs.techniquesToRender, csToRenderNames);
+
+    if (psToRenderNames.empty() && vsToRenderNames.empty() && csToRenderNames.empty())
+        return;
+
+    unique_lock<shared_mutex> renderLock(deviceData.render_mutex);
+
+    if (!deviceData.rendered_effects) {
+        deviceData.current_runtime->render_effects(cmd_list, resource_view{ 0 }, resource_view{ 0 });
+        deviceData.rendered_effects = true;
+    }
+
+    vector<EffectData*> psRemovalList;
+    vector<EffectData*> vsRemovalList;
+    vector<EffectData*> csRemovalList;
+
+    shared_lock<shared_mutex> techLock(runtimeData.technique_mutex);
+    _RenderEffects(cmd_list,
+                   deviceData,
+                   runtimeData,
+                   commandListData.ps.techniquesToRender,
+                   psRemovalList,
+                   psToRenderNames,
+                   true,
+                   &safeTargets);
+    _RenderEffects(cmd_list,
+                   deviceData,
+                   runtimeData,
+                   commandListData.vs.techniquesToRender,
+                   vsRemovalList,
+                   vsToRenderNames,
+                   true,
+                   &safeTargets);
+    _RenderEffects(cmd_list,
+                   deviceData,
+                   runtimeData,
+                   commandListData.cs.techniquesToRender,
+                   csRemovalList,
+                   csToRenderNames,
+                   true,
+                   &safeTargets);
+    techLock.unlock();
+
+    for (auto* effect : psRemovalList)
+        commandListData.ps.techniquesToRender.erase(effect);
+    for (auto* effect : vsRemovalList)
+        commandListData.vs.techniquesToRender.erase(effect);
+    for (auto* effect : csRemovalList)
+        commandListData.cs.techniquesToRender.erase(effect);
+
+    commandListData.vulkanAutoPending = false;
+    auto stillPending = [](const effect_queue& queue) {
+        for (const auto& [effect, data] : queue) {
+            if (effect != nullptr && !effect->rendered && data.group != nullptr &&
+                data.group->isAutoSceneColourActive(device_api::vulkan) && data.resource != 0) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    commandListData.vulkanAutoPending =
+      stillPending(commandListData.ps.techniquesToRender) ||
+      stillPending(commandListData.vs.techniquesToRender) ||
+      stillPending(commandListData.cs.techniquesToRender);
 }
 
 void RenderingEffectManager::RenderEffects(command_list* cmd_list, uint64_t callLocation, uint64_t invocation) {
