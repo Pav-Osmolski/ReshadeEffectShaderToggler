@@ -183,7 +183,7 @@ void ToggleGroupResourceManager::CheckGroupBuffers(reshade::api::effect_runtime*
 
                 resource_desc desc = resources.target_description;
                 const bool vulkan = runtime->get_device()->get_api() == device_api::vulkan;
-                const format groupFormat =
+                const reshade::api::format groupFormat =
                   vulkan
                     ? (resources.view_format != format::unknown ? resources.view_format : format_to_default_typed(desc.texture.format, 0))
                     : format_to_typeless(desc.texture.format);
@@ -205,7 +205,7 @@ void ToggleGroupResourceManager::CheckGroupBuffers(reshade::api::effect_runtime*
                         .c_str());
                 }
 
-                const format linearViewFormat =
+                const reshade::api::format linearViewFormat =
                   vulkan
                     ? (resources.view_format != format::unknown ? resources.view_format : groupFormat)
                     : format_to_default_typed(resources.view_format, 0);
