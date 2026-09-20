@@ -46,7 +46,7 @@ REST processes deferred work at either of two proven safe boundaries:
 - A new render pass that references the **same colour target with LOAD semantics**, when pass tracking establishes that the command list is outside the previous pass. CLEAR/DISCARD continuations are not eligible.
 - A **post-pass RT transition** where the exact pending target changes from render-target usage to non-render-target usage. This supports final scene targets that have no later same-target LOAD pass. After injection, REST restores the usage requested by the game.
 
-ReShade also emits end/begin callbacks at Vulkan subpass transitions. An end callback alone therefore does not prove the pass has finished. REST waits for a subsequent barrier to establish that the pass ended and rejects ambiguous subpass boundaries for both effects and preview copies. A recursion guard prevents REST's own transitions from triggering another Auto injection. Pending effects are cleared at present and effect reload so stale work does not carry into a later frame.
+ReShade also emits end/begin callbacks at Vulkan subpass transitions. An end callback alone therefore does not prove the pass has finished. REST waits for a subsequent barrier to establish that the pass ended and rejects ambiguous subpass boundaries for both effects and preview copies. A recursion guard prevents REST's own transitions from triggering another Auto injection. Pending effects are cleared at present and effect reload so stale work does not carry into a later frame. Lightweight atomic pending-work flags let REST bypass deferred matching/copy processing on Vulkan callbacks when neither Auto Scene Colour nor a deferred preview has work waiting; render-pass/subpass state tracking still runs unchanged.
 
 ReShade's Vulkan `render_technique` path first copies the supplied colour target into its internal effect-colour texture, so the live game image must already have transfer-source usage even when scene and effect resolutions match. REST deliberately does not retrofit transfer flags onto arbitrary Vulkan game images because the generic ReShade resource descriptor does not expose every native image-creation constraint (for example transient attachments).
 
@@ -118,6 +118,7 @@ Last-success diagnostics include:
 - **Last successful techniques** - technique count and execution order.
 - **Successful renders** - successful effect-render count for the currently committed shader set.
 - **Copy diagnostics** - copies both sections in a support-ready block.
+- **Recent attempts** - keeps the eight most recent distinct target/status attempts in memory, including shader hash, target, resolution/format and the successful Vulkan boundary when available.
 
 Committing a new shader set resets the diagnostic history, so values from a previous candidate are not carried into the next test.
 
