@@ -441,7 +441,8 @@ static void onBarrier(command_list* cmd_list,
         commandListData.vulkanRenderPassEndPending = false;
     }
 
-    if (commandListData.vulkanAutoInjectionActive || commandListData.vulkanInsideRenderPass)
+    if (commandListData.vulkanAutoInjectionActive || commandListData.vulkanInsideRenderPass ||
+        !device->get_private_data<DeviceDataContainer>().vulkanAutoWorkPending.load(std::memory_order_acquire))
         return;
 
     renderingEffectManager.RenderDeferredVulkanAutoEffectsAfterBarrier(cmd_list, count, resources, oldStates, newStates);
@@ -470,7 +471,8 @@ static void onBeginRenderPass(command_list* cmd_list, uint32_t count, const rend
         // work is not legal here. Only treat a begin callback as a safe boundary when
         // REST has positively tracked the command list as being outside a render pass.
         const bool safeVulkanBoundary = !commandListData.vulkanInsideRenderPass;
-        if (safeVulkanBoundary)
+        if (safeVulkanBoundary &&
+            deviceData.vulkanPreviewWorkPending.load(std::memory_order_acquire))
             renderingPreviewManager.CaptureDeferredVulkanPreview(cmd_list);
 
         // Vulkan does not emit bind_render_targets_and_depth_stencil events for render
@@ -486,7 +488,8 @@ static void onBeginRenderPass(command_list* cmd_list, uint32_t count, const rend
         // For a true new render pass this callback occurs before vkCmdBeginRenderPass
         // or vkCmdBeginRendering and is safe. Subpass transitions are intentionally
         // skipped and remain pending for a proven post-pass boundary.
-        if (safeVulkanBoundary)
+        if (safeVulkanBoundary &&
+            deviceData.vulkanAutoWorkPending.load(std::memory_order_acquire))
             renderingEffectManager.RenderDeferredVulkanAutoEffects(cmd_list, count, rts);
 
         commandListData.vulkanInsideRenderPass = true;
