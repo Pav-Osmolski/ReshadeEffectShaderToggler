@@ -583,13 +583,75 @@ static void CheckDrawCall(command_list* cmd_list, const uint64_t match_modifier 
     }
 }
 
+static bool ShouldSuppressVulkanHuntedCall(command_list* cmd_list, uint64_t matchModifier) {
+    if (cmd_list == nullptr || cmd_list->get_device() == nullptr || cmd_list->get_device()->get_api() != device_api::vulkan)
+        return false;
+
+    CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
+
+    const bool suppressPS =
+      (matchModifier & Rendering::MATCH_PS) != 0 &&
+      g_pixelShaderManager.isInHuntingMode() &&
+      g_pixelShaderManager.getActiveHuntedShaderHash() != 0 &&
+      commandListData.ps.activeShaderHash == g_pixelShaderManager.getActiveHuntedShaderHash();
+
+    const bool suppressVS =
+      (matchModifier & Rendering::MATCH_VS) != 0 &&
+      g_vertexShaderManager.isInHuntingMode() &&
+      g_vertexShaderManager.getActiveHuntedShaderHash() != 0 &&
+      commandListData.vs.activeShaderHash == g_vertexShaderManager.getActiveHuntedShaderHash();
+
+    const bool suppressCS =
+      (matchModifier & Rendering::MATCH_CS) != 0 &&
+      g_computeShaderManager.isInHuntingMode() &&
+      g_computeShaderManager.getActiveHuntedShaderHash() != 0 &&
+      commandListData.cs.activeShaderHash == g_computeShaderManager.getActiveHuntedShaderHash();
+
+    if (!suppressPS && !suppressVS && !suppressCS)
+        return false;
+
+    auto clearStage = [](ShaderData& stage) {
+        stage.bindingsToUpdate.clear();
+        stage.constantBuffersToUpdate.clear();
+        stage.techniquesToRender.clear();
+        stage.srvToUpdate.clear();
+        stage.blockedShaderGroups = nullptr;
+    };
+
+    uint64_t clearMask = 0;
+    if (suppressPS) {
+        clearStage(commandListData.ps);
+        clearMask |= Rendering::MATCH_PS;
+    }
+    if (suppressVS) {
+        clearStage(commandListData.vs);
+        clearMask |= Rendering::MATCH_VS;
+    }
+    if (suppressCS) {
+        clearStage(commandListData.cs);
+        clearMask |= Rendering::MATCH_CS;
+    }
+
+    commandListData.commandQueue &= ~(clearMask |
+                                      (clearMask << Rendering::MATCH_DELIMITER) |
+                                      (clearMask << (2 * Rendering::MATCH_DELIMITER)));
+
+    return true;
+}
+
 static bool onDraw(command_list* cmd_list, uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance) {
+    if (ShouldSuppressVulkanHuntedCall(cmd_list, Rendering::MATCH_PS | Rendering::MATCH_VS))
+        return true;
+
     CheckDrawCall(cmd_list, Rendering::MATCH_PS | Rendering::MATCH_VS);
 
     return false;
 }
 
 static bool onDispatch(command_list* cmd_list, uint32_t group_count_x, uint32_t group_count_y, uint32_t group_count_z) {
+    if (ShouldSuppressVulkanHuntedCall(cmd_list, Rendering::MATCH_CS))
+        return true;
+
     CheckDrawCall(cmd_list, Rendering::MATCH_CS);
 
     return false;
@@ -601,6 +663,9 @@ static bool onDrawIndexed(command_list* cmd_list,
                           uint32_t first_index,
                           int32_t vertex_offset,
                           uint32_t first_instance) {
+    if (ShouldSuppressVulkanHuntedCall(cmd_list, Rendering::MATCH_PS | Rendering::MATCH_VS))
+        return true;
+
     CheckDrawCall(cmd_list, Rendering::MATCH_PS | Rendering::MATCH_VS);
 
     return false;
@@ -613,9 +678,13 @@ static bool onDrawOrDispatchIndirect(command_list* cmd_list, indirect_command ty
             break;
         case indirect_command::draw:
         case indirect_command::draw_indexed:
+            if (ShouldSuppressVulkanHuntedCall(cmd_list, Rendering::MATCH_PS | Rendering::MATCH_VS))
+                return true;
             CheckDrawCall(cmd_list, Rendering::MATCH_PS | Rendering::MATCH_VS);
             break;
         case indirect_command::dispatch:
+            if (ShouldSuppressVulkanHuntedCall(cmd_list, Rendering::MATCH_CS))
+                return true;
             CheckDrawCall(cmd_list, Rendering::MATCH_CS);
             break;
     }
