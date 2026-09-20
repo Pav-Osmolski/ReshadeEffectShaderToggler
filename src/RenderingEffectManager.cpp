@@ -420,45 +420,55 @@ void RenderingEffectManager::RenderDeferredVulkanAutoEffects(command_list* cmd_l
     }
 
     if (!safeTargets.empty())
-        _RenderDeferredVulkanAutoEffects(cmd_list, safeTargets);
+        _RenderDeferredVulkanAutoEffects(cmd_list, safeTargets, "same-target LOAD pass");
 }
 
 void RenderingEffectManager::RenderDeferredVulkanAutoEffectsAfterBarrier(command_list* cmd_list,
                                                                           uint32_t barrierCount,
                                                                           const resource* resources,
+                                                                          const resource_usage* oldStates,
                                                                           const resource_usage* newStates) {
     if (cmd_list == nullptr || cmd_list->get_device() == nullptr ||
         cmd_list->get_device()->get_api() != device_api::vulkan ||
-        barrierCount == 0 || resources == nullptr || newStates == nullptr) {
+        barrierCount == 0 || resources == nullptr || oldStates == nullptr || newStates == nullptr) {
         return;
     }
 
     CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
-    if (commandListData.vulkanAutoInjectionActive)
+    if (commandListData.vulkanAutoInjectionActive || commandListData.vulkanInsideRenderPass)
         return;
 
     unordered_map<uint64_t, resource_usage> safeTargets;
     safeTargets.reserve(barrierCount);
 
     for (uint32_t i = 0; i < barrierCount; ++i) {
-        if (resources[i] == 0 || newStates[i] == resource_usage::undefined ||
-            newStates[i] == resource_usage::render_target) {
+        if (resources[i] == 0 || oldStates[i] == resource_usage::undefined ||
+            newStates[i] == resource_usage::undefined) {
             continue;
         }
 
-        // ReShade raises the barrier event after Vulkan recorded the transition.
-        // A pending scene target that has just left render-target usage is therefore
-        // outside the render pass and can be processed before the game's next consumer.
+        const uint32_t oldUsage = static_cast<uint32_t>(oldStates[i]);
+        const uint32_t newUsage = static_cast<uint32_t>(newStates[i]);
+        const uint32_t renderTargetUsage = static_cast<uint32_t>(resource_usage::render_target);
+
+        // Only use the fallback after the render pass has ended and the exact scene
+        // target is explicitly leaving render-target usage. This avoids firing on
+        // unrelated or in-pass barriers, which can cause intermittent double/early
+        // application and visible flicker.
+        if ((oldUsage & renderTargetUsage) == 0 || (newUsage & renderTargetUsage) != 0)
+            continue;
+
         safeTargets.insert_or_assign(resources[i].handle, newStates[i]);
     }
 
     if (!safeTargets.empty())
-        _RenderDeferredVulkanAutoEffects(cmd_list, safeTargets);
+        _RenderDeferredVulkanAutoEffects(cmd_list, safeTargets, "post-pass RT transition");
 }
 
 void RenderingEffectManager::_RenderDeferredVulkanAutoEffects(
   command_list* cmd_list,
-  const unordered_map<uint64_t, resource_usage>& safeTargets) {
+  const unordered_map<uint64_t, resource_usage>& safeTargets,
+  const char* boundaryName) {
     if (cmd_list == nullptr || cmd_list->get_device() == nullptr || safeTargets.empty())
         return;
 
@@ -510,8 +520,14 @@ void RenderingEffectManager::_RenderDeferredVulkanAutoEffects(
                    &safeTargets);
     techLock.unlock();
 
-    for (auto* effect : removalList)
+    for (auto* effect : removalList) {
+        const auto pendingIt = deviceData.vulkanAutoPendingEffects.find(effect);
+        if (pendingIt != deviceData.vulkanAutoPendingEffects.end() &&
+            pendingIt->second.group != nullptr && boundaryName != nullptr) {
+            pendingIt->second.group->setDebugLastVulkanBoundary(boundaryName);
+        }
         deviceData.vulkanAutoPendingEffects.erase(effect);
+    }
 
     commandListData.vulkanAutoInjectionActive = false;
 }
