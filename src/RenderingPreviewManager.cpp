@@ -139,6 +139,21 @@ void RenderingPreviewManager::CaptureDeferredVulkanPreview(command_list* cmd_lis
     preview.status = "Captured at safe Vulkan render-pass boundary";
 }
 
+void RenderingPreviewManager::CancelDeferredVulkanPreview(device* device) {
+    if (device == nullptr || device->get_api() != device_api::vulkan)
+        return;
+
+    DeviceDataContainer& deviceData = device->get_private_data<DeviceDataContainer>();
+    HuntPreview& preview = deviceData.huntPreview;
+
+    if (preview.vulkan_capture_pending && preview.target != 0 && preview.vulkan_command_list != nullptr) {
+        preview.vulkan_command_list->get_private_data<state_tracking>().stop_resource_barrier_tracking(preview.target);
+    }
+
+    preview.vulkan_capture_pending = false;
+    preview.vulkan_command_list = nullptr;
+}
+
 void RenderingPreviewManager::UpdatePreview(command_list* cmd_list, uint64_t callLocation, uint64_t invocation) {
     if (cmd_list == nullptr || cmd_list->get_device() == nullptr) {
         return;
