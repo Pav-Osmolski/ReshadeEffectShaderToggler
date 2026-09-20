@@ -30,6 +30,19 @@ void RenderingQueueManager::_CheckCallForCommandList(ShaderData& sData,
             if (group->isActive()) {
                 const device_api runtimeApi =
                   deviceData.current_runtime != nullptr ? deviceData.current_runtime->get_device()->get_api() : device_api::d3d9;
+
+                if (runtimeApi == device_api::vulkan &&
+                    group->getId() == uiData.GetToggleGroupIdShaderEditing() &&
+                    (uiData.GetPixelShaderManager()->isInHuntingMode() ||
+                     uiData.GetVertexShaderManager()->isInHuntingMode() ||
+                     uiData.GetComputeShaderManager()->isInHuntingMode())) {
+                    // Vulkan hunting is visualised by suppressing the matching draw/dispatch.
+                    // Do not queue the legacy preview copy/effect work here: that path copies
+                    // the live target from inside the active Vulkan render pass and can cause
+                    // invalid command-buffer state/device loss.
+                    continue;
+                }
+
                 const bool autoSceneColour = group->isAutoSceneColourActive(runtimeApi);
                 if (group->getExtractConstants() && !deviceData.constantsUpdated.contains(group)) {
                     if (!sData.constantBuffersToUpdate.contains(group)) {
