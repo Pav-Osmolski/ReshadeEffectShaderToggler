@@ -188,6 +188,11 @@ static void onReshadeReloadedEffects(effect_runtime* runtime) {
     RuntimeDataContainer& runtimeData = runtime->get_private_data<RuntimeDataContainer>();
     DeviceDataContainer& deviceData = runtime->get_device()->get_private_data<DeviceDataContainer>();
 
+    {
+        unique_lock<shared_mutex> renderLock(deviceData.render_mutex);
+        deviceData.vulkanAutoPendingEffects.clear();
+    }
+
     techniqueManager.OnReshadeReloadedEffects(runtime);
 
     if (deviceData.current_runtime == runtime) {
@@ -487,6 +492,11 @@ static void onReshadePresent(effect_runtime* runtime) {
     device* dev = runtime->get_device();
     DeviceDataContainer& deviceData = dev->get_private_data<DeviceDataContainer>();
     command_queue* queue = runtime->get_command_queue();
+
+    {
+        unique_lock<shared_mutex> renderLock(deviceData.render_mutex);
+        deviceData.vulkanAutoPendingEffects.clear();
+    }
 
     deviceData.rendered_effects = false;
 
