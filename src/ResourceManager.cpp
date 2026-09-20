@@ -95,28 +95,10 @@ void ResourceManager::OnDestroySwapchain(reshade::api::swapchain* swapchain) {
 bool ResourceManager::OnCreateResource(device* device, resource_desc& desc, subresource_data* initial_data, resource_usage initial_state) {
     bool ret = false;
 
-    if (static_cast<uint32_t>(desc.usage & resource_usage::render_target) && desc.type == resource_type::texture_2d) {
-        if (device->get_api() == device_api::vulkan) {
-            // Vulkan Auto Scene Colour uses ReShade's generic image-blit path for
-            // native-resolution staging. VkImage usage flags are immutable, so
-            // opt compatible colour render targets into transfer usage at creation.
-            if (!static_cast<uint32_t>(desc.usage & resource_usage::shader_resource) &&
-                device->check_format_support(desc.texture.format, resource_usage::shader_resource)) {
-                desc.usage |= resource_usage::shader_resource;
-                ret = true;
-            }
-
-            const resource_usage transferUsage = resource_usage::copy_source | resource_usage::copy_dest;
-            if (device->check_format_support(desc.texture.format, transferUsage) &&
-                (!static_cast<uint32_t>(desc.usage & resource_usage::copy_source) ||
-                 !static_cast<uint32_t>(desc.usage & resource_usage::copy_dest))) {
-                desc.usage |= transferUsage;
-                ret = true;
-            }
-        } else if (!static_cast<uint32_t>(desc.usage & resource_usage::shader_resource)) {
-            desc.usage |= resource_usage::shader_resource;
-            ret = true;
-        }
+    if (static_cast<uint32_t>(desc.usage & resource_usage::render_target) && !static_cast<uint32_t>(desc.usage & resource_usage::shader_resource) &&
+        desc.type == resource_type::texture_2d) {
+        desc.usage |= resource_usage::shader_resource;
+        ret = true;
     }
 
     if (rShim != nullptr) {
