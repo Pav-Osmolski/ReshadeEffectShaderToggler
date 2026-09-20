@@ -61,6 +61,7 @@ void RenderingPreviewManager::RecordVulkanHuntedTarget(command_list* cmd_list, u
     preview.hunted_stage = stageIndex;
     preview.vulkan_command_list = cmd_list;
     preview.vulkan_capture_pending = true;
+    deviceData.vulkanPreviewWorkPending.store(true, std::memory_order_release);
     preview.matched = false;
     preview.status = "Waiting for safe Vulkan preview boundary...";
 
@@ -86,6 +87,7 @@ void RenderingPreviewManager::CaptureDeferredVulkanPreview(command_list* cmd_lis
     // Consume the pending capture exactly once. If preview resources still need to
     // be recreated, CheckPreview does that at present and the next frame retries.
     preview.vulkan_capture_pending = false;
+    deviceData.vulkanPreviewWorkPending.store(false, std::memory_order_release);
 
     state_tracking& trackedState = cmd_list->get_private_data<state_tracking>();
     resource_usage sourceUsage = trackedState.stop_resource_barrier_tracking(preview.target);
@@ -151,6 +153,7 @@ void RenderingPreviewManager::CancelDeferredVulkanPreview(device* device) {
     }
 
     preview.vulkan_capture_pending = false;
+    deviceData.vulkanPreviewWorkPending.store(false, std::memory_order_release);
     preview.vulkan_command_list = nullptr;
 }
 
