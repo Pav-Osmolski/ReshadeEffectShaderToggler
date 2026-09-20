@@ -10,7 +10,7 @@ Release tags must use:
 
 Example:
 
-`v1.5.0.633`
+`v1.6.0.633`
 
 The final component preserves the upstream convention used for the ReShade baseline.
 
@@ -34,7 +34,7 @@ The primary release gate is **Baldur's Gate 3 launched through `bg3_dx11.exe`**.
 
 1. **DX11 + DLSS enabled**
    - Auto scene colour is clickable.
-   - The editor reports `D3D11 (BG3 validated)`.
+   - The editor reports `D3D11`.
    - The matched scene resolution follows the DLSS internal resolution.
    - The effect resolution follows the ReShade/output resolution and reports native staging when the dimensions differ.
    - A multi-pass chain such as `Lumenite_Kernel -> Lumenite_LSAO` updates every frame while the camera moves.
@@ -56,10 +56,30 @@ The primary release gate is **Baldur's Gate 3 launched through `bg3_dx11.exe`**.
    - Change DLSS/output resolution while Auto is active.
    - One matching frame may be skipped while native staging is recreated; subsequent frames must update normally.
 6. **Unsupported API safety**
-   - Auto Scene Colour must not activate on Vulkan.
    - A saved Auto preference must not suppress or overwrite the group's manual render-target configuration on an unsupported API.
 
-D3D10, D3D11 and D3D12 are supported on x86 and x64. BG3 DX11 remains the primary runtime regression reference because it exercises the full dynamic-resolution/native-staging path.
+D3D10, D3D11, D3D12 and Vulkan are supported on x86 and x64. BG3 DX11 remains the primary D3D regression reference because it exercises the full dynamic-resolution/native-staging path.
+
+### Vulkan Auto Scene Colour regression matrix
+
+Before releasing Vulkan support, validate a representative Vulkan title with Auto Scene Colour enabled:
+
+1. **Same-resolution path**
+   - Auto Scene Colour is clickable and reports `Vulkan`.
+   - Scene and effect resolutions match.
+   - Selected effects update every frame at the marked shader boundary.
+2. **Native-staging/upscaling path**
+   - Use a Vulkan title/configuration where the live scene resolution differs from the ReShade/output resolution.
+   - Confirm **Native staging: Active**.
+   - Confirm the image remains live while moving the camera and that the effect is not frozen or one frame behind.
+   - Confirm later game UI/post-processing remains above the injected effect when the chosen shader boundary is before those passes.
+3. **Resolution changes**
+   - Change the internal/output resolution while Auto is active.
+   - Allow one frame for staging recreation, then confirm continuous updates resume.
+4. **Fallback safety**
+   - Confirm unsupported/multisampled transfer cases skip Auto staging rather than corrupting the render target or device state.
+5. **D3D regression**
+   - Re-run the BG3 DX11 + DLSS matrix after Vulkan changes to prove the D3D staging path is unchanged.
 
 For API-specific changes, verify in a representative title that Auto Scene Colour is clickable, the live scene/effect resolutions are reported correctly, native staging activates only when needed, and the effect remains at the intended shader boundary.
 
@@ -73,7 +93,7 @@ CI must validate both release binaries after every x86/x64 build:
 - both export the required REST add-on metadata;
 - ReShade resource/resource-view handles remain 64-bit in both builds.
 
-The D3D10/D3D11/D3D12 Auto Scene Colour code path itself does not contain architecture-specific branches; API behaviour is supplied by the corresponding ReShade backend. REST Release builds treat compiler warnings as errors on both architectures.
+The D3D10/D3D11/D3D12 Auto Scene Colour path retains the existing shader-based staging copy on both architectures. Vulkan uses ReShade's generic image-blit path for native staging. REST Release builds treat compiler warnings as errors on both architectures.
 
 Legacy game-specific hooks may be architecture-specific. The FFXIV constant-copy hook is x64-only and is excluded from Win32 builds because its signatures target 64-bit game code.
 
@@ -81,7 +101,7 @@ Legacy game-specific hooks may be architecture-specific. The FFXIV constant-copy
 
 Create and push a tag from the desired `main` commit:
 
-`v1.5.0.633`
+`v1.6.0.633`
 
 The **Release** workflow will then:
 
