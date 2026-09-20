@@ -189,12 +189,40 @@ class ToggleGroup {
     uint32_t getDebugEffectHeight() const { return _debugEffectHeight; }
     bool getDebugNativeStaging() const { return _debugNativeStaging; }
     const std::string& getDebugLastTechniqueOrder() const { return _debugLastTechniqueOrder; }
+
     const std::string& getDebugAutoStatus() const { return _debugAutoStatus; }
     void setDebugAutoStatus(const std::string& status) { _debugAutoStatus = status; }
-    void recordDebugAutoTarget(uint64_t targetHandle, uint32_t sceneWidth, uint32_t sceneHeight) {
-        _debugLastRenderTarget = targetHandle;
-        _debugSceneWidth = sceneWidth;
-        _debugSceneHeight = sceneHeight;
+    uint64_t getDebugCurrentTarget() const { return _debugCurrentTarget; }
+    uint32_t getDebugCurrentSceneWidth() const { return _debugCurrentSceneWidth; }
+    uint32_t getDebugCurrentSceneHeight() const { return _debugCurrentSceneHeight; }
+    const std::string& getDebugCurrentFormat() const { return _debugCurrentFormat; }
+
+    void recordDebugAutoTarget(uint64_t targetHandle,
+                               uint32_t sceneWidth,
+                               uint32_t sceneHeight,
+                               const std::string& formatName) {
+        _debugCurrentTarget = targetHandle;
+        _debugCurrentSceneWidth = sceneWidth;
+        _debugCurrentSceneHeight = sceneHeight;
+        _debugCurrentFormat = formatName;
+    }
+
+    void resetDebugAutoDiagnostics() {
+        _debugAutoStatus.clear();
+        _debugCurrentTarget = 0;
+        _debugCurrentSceneWidth = 0;
+        _debugCurrentSceneHeight = 0;
+        _debugCurrentFormat.clear();
+
+        _debugEffectRenderCalls = 0;
+        _debugLastRenderedTechniqueCount = 0;
+        _debugLastRenderTarget = 0;
+        _debugLastTechniqueOrder.clear();
+        _debugSceneWidth = 0;
+        _debugSceneHeight = 0;
+        _debugEffectWidth = 0;
+        _debugEffectHeight = 0;
+        _debugNativeStaging = false;
     }
     void recordDebugEffectRender(uint32_t techniqueCount,
                                  uint64_t targetHandle,
@@ -318,7 +346,12 @@ class ToggleGroup {
     uint32_t _debugEffectHeight = 0;
     bool _debugNativeStaging = false;
     std::string _debugLastTechniqueOrder;
+
     std::string _debugAutoStatus;
+    uint64_t _debugCurrentTarget = 0;
+    uint32_t _debugCurrentSceneWidth = 0;
+    uint32_t _debugCurrentSceneHeight = 0;
+    std::string _debugCurrentFormat;
     bool _extractConstants;
     bool _extractResourceViews;
     volatile bool _clearBindings;
