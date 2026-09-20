@@ -106,13 +106,14 @@ For setup details, limitations and troubleshooting, see [Automatic Scene Colour]
 
 Make the element that defines your desired injection boundary visible before starting shader hunting. A debug-heavy effect such as AO can make it easier to see whether a UI, fog or other game pass is being drawn before or after the current shader.
 
-Click **Settings** on the group. REST first collects active shaders for the configured number of frames, then lets you browse them. The shader pane provides:
+Click **Settings** on the group, then **Start shader hunting**. REST first collects active shaders for the configured number of frames, then lets you browse them. The shader pane provides:
 
 - case-insensitive hash search;
 - **All / Marked / Unmarked** filtering;
 - **Prev**, **Next**, **Prev marked**, **Mark / unmark** and **Next marked** mouse controls;
-- collected and marked shader counts;
-- **Recollect**, which starts a fresh collection for pixel, vertex and compute shaders while preserving the current marked hashes.
+- collected and marked shader counts plus **Clear marked** for the current shader stage;
+- **Recollect**, which starts a fresh collection for pixel, vertex and compute shaders while preserving the current marked hashes;
+- a render-target preview below the settings pane. On Vulkan the hunted draw is still suppressed safely, while the preview copy is deferred to a legal render-pass boundary rather than copied from inside the active draw pass. The preview reports the selected hash, shader stage, target dimensions/format and an explicit reason when the image cannot be copied safely.
 
 The traditional defaults remain available for pixel and vertex shader hunting:
 
