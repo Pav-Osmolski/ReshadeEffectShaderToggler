@@ -1382,8 +1382,21 @@ static void CheckHotkeys(AddonImGui::AddonUIData& instance, reshade::api::effect
                              AddonImGui::Keybind next,
                              AddonImGui::Keybind mark,
                              AddonImGui::Keybind previousMarked,
-                             AddonImGui::Keybind nextMarked) {
+                             AddonImGui::Keybind nextMarked,
+                             AddonImGui::Keybind markPrevious,
+                             AddonImGui::Keybind markNext) {
         bool changed = false;
+
+        if (pressed(markPrevious)) {
+            manager->toggleMarkOnHuntedShader();
+            manager->huntPreviousShader(false);
+            return true;
+        }
+        if (pressed(markNext)) {
+            manager->toggleMarkOnHuntedShader();
+            manager->huntNextShader(false);
+            return true;
+        }
 
         if (pressed(previousMarked)) {
             manager->huntPreviousShader(true);
@@ -1414,19 +1427,25 @@ static void CheckHotkeys(AddonImGui::AddonUIData& instance, reshade::api::effect
                                  AddonImGui::PIXEL_SHADER_UP,
                                  AddonImGui::PIXEL_SHADER_MARK,
                                  AddonImGui::PIXEL_SHADER_MARKED_DOWN,
-                                 AddonImGui::PIXEL_SHADER_MARKED_UP);
+                                 AddonImGui::PIXEL_SHADER_MARKED_UP,
+                                 AddonImGui::PIXEL_SHADER_MARK_PREV,
+                                 AddonImGui::PIXEL_SHADER_MARK_NEXT);
         changed |= handleHunting(instance.GetVertexShaderManager(),
                                  AddonImGui::VERTEX_SHADER_DOWN,
                                  AddonImGui::VERTEX_SHADER_UP,
                                  AddonImGui::VERTEX_SHADER_MARK,
                                  AddonImGui::VERTEX_SHADER_MARKED_DOWN,
-                                 AddonImGui::VERTEX_SHADER_MARKED_UP);
+                                 AddonImGui::VERTEX_SHADER_MARKED_UP,
+                                 AddonImGui::VERTEX_SHADER_MARK_PREV,
+                                 AddonImGui::VERTEX_SHADER_MARK_NEXT);
         changed |= handleHunting(instance.GetComputeShaderManager(),
                                  AddonImGui::COMPUTE_SHADER_DOWN,
                                  AddonImGui::COMPUTE_SHADER_UP,
                                  AddonImGui::COMPUTE_SHADER_MARK,
                                  AddonImGui::COMPUTE_SHADER_MARKED_DOWN,
-                                 AddonImGui::COMPUTE_SHADER_MARKED_UP);
+                                 AddonImGui::COMPUTE_SHADER_MARKED_UP,
+                                 AddonImGui::COMPUTE_SHADER_MARK_PREV,
+                                 AddonImGui::COMPUTE_SHADER_MARK_NEXT);
 
         if (changed)
             instance.UpdateToggleGroupsForShaderHashes();
