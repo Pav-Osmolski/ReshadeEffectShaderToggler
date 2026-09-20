@@ -116,6 +116,22 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
         const bool vulkanAutoSceneColour = autoSceneColour && deviceApi == device_api::vulkan;
         const bool vulkanNativeStaging = vulkanAutoSceneColour && wantsNativeStaging;
 
+        if (vulkanAutoSceneColour) {
+            // ReShade's Vulkan render_technique path always copies the supplied colour
+            // target into its effect-colour texture before the first pass, so the live
+            // image must already have transfer-source usage. Native staging additionally
+            // needs transfer-destination usage for the processed result to be blitted back.
+            const bool hasCopySource = static_cast<uint32_t>(desc.usage & resource_usage::copy_source) != 0;
+            const bool hasCopyDest = static_cast<uint32_t>(desc.usage & resource_usage::copy_dest) != 0;
+            if (!hasCopySource || (wantsNativeStaging && !hasCopyDest))
+                continue;
+
+            if (!runtime->get_device()->check_format_support(desc.texture.format, resource_usage::copy_source) ||
+                (wantsNativeStaging && !runtime->get_device()->check_format_support(desc.texture.format, resource_usage::copy_dest))) {
+                continue;
+            }
+        }
+
         // Vulkan draw callbacks execute inside the game's active render pass.
         // ReShade effect rendering and transfer/blit commands would be invalid there,
         // so defer Auto Scene Colour until a later begin_render_pass callback, which
@@ -147,10 +163,8 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
             if (vulkanNativeStaging) {
                 // Vulkan image blits require single-sample transfer-capable images.
                 // The live render target was opted into transfer usage at resource creation.
-                const resource_usage transferUsage = resource_usage::copy_source | resource_usage::copy_dest;
                 if (desc.texture.samples != 1 ||
-                    !runtime->get_device()->check_capability(device_caps::blit) ||
-                    !runtime->get_device()->check_format_support(desc.texture.format, transferUsage)) {
+                    !runtime->get_device()->check_capability(device_caps::blit)) {
                     continue;
                 }
             }
