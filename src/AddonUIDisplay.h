@@ -385,6 +385,9 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
             }
 
             const bool autoSceneColourActive = autoSceneColour && autoSceneColourSupported;
+            const bool pendingVulkanShaderEdits =
+              deviceApi == reshade::api::device_api::vulkan &&
+              instance.GetToggleGroupIdShaderEditing().load() == group->getId();
 
             ImGui::TableNextRow();
 
@@ -414,7 +417,9 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
                 ImGui::TableNextColumn();
                 ImGui::Text("Scene resolution");
                 ImGui::TableNextColumn();
-                if (group->getDebugSceneWidth() > 0 && group->getDebugSceneHeight() > 0)
+                if (pendingVulkanShaderEdits)
+                    ImGui::TextUnformatted("Finish shader hunting (Done) to apply marks");
+                else if (group->getDebugSceneWidth() > 0 && group->getDebugSceneHeight() > 0)
                     ImGui::Text("%ux%u", group->getDebugSceneWidth(), group->getDebugSceneHeight());
                 else
                     ImGui::TextUnformatted("Waiting for matching render target...");
@@ -423,7 +428,9 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
                 ImGui::TableNextColumn();
                 ImGui::Text("Effect resolution");
                 ImGui::TableNextColumn();
-                if (group->getDebugEffectWidth() > 0 && group->getDebugEffectHeight() > 0) {
+                if (pendingVulkanShaderEdits) {
+                    ImGui::TextUnformatted("Waiting until shader hunting is finished...");
+                } else if (group->getDebugEffectWidth() > 0 && group->getDebugEffectHeight() > 0) {
                     ImGui::Text("%ux%u%s",
                                 group->getDebugEffectWidth(),
                                 group->getDebugEffectHeight(),
@@ -442,7 +449,9 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
                 ImGui::TableNextColumn();
                 ImGui::Text("Injection");
                 ImGui::TableNextColumn();
-                if (deviceApi == reshade::api::device_api::vulkan && !group->getDebugAutoStatus().empty()) {
+                if (pendingVulkanShaderEdits) {
+                    ImGui::TextUnformatted("Finish shader hunting (Done) to test Auto");
+                } else if (deviceApi == reshade::api::device_api::vulkan && !group->getDebugAutoStatus().empty()) {
                     if (group->getDebugAutoStatus() == "Successful")
                         ImGui::Text("Successful (%u technique%s)", group->getDebugLastRenderedTechniqueCount(), group->getDebugLastRenderedTechniqueCount() == 1 ? "" : "s");
                     else
@@ -750,7 +759,19 @@ static void DisplayGroupView(AddonImGui::AddonUIData& instance,
     if (navigationChanged)
         instance.UpdateToggleGroupsForShaderHashes();
 
-    ImGui::TextDisabled("%zu collected | %zu marked", shaderManager->getAmountShaderHashesCollected(), shaderManager->getMarkedShaderCount());
+    const size_t markedCount = shaderManager->getMarkedShaderCount();
+    ImGui::TextDisabled("%zu collected | %zu marked", shaderManager->getAmountShaderHashesCollected(), markedCount);
+    ImGui::SameLine();
+    if (markedCount == 0)
+        ImGui::BeginDisabled();
+    if (ImGui::Button("Clear marked")) {
+        shaderManager->clearMarkedShaderHashes();
+        instance.UpdateToggleGroupsForShaderHashes();
+    }
+    if (markedCount == 0)
+        ImGui::EndDisabled();
+
+    ImGui::TextDisabled("Pending shader marks are applied to the group when you click Done.");
     ImGui::Separator();
 
     const std::unordered_set<uint32_t>& hashes = shaderManager->getCollectedShaderHashes();
@@ -1484,17 +1505,19 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, reshade::api::eff
             else
                 ImGui::Text("%s", group.getName().c_str());
 
-            const size_t psCount = group.getPixelShaderHashCount();
-            const size_t vsCount = group.getVertexShaderHashCount();
-            const size_t csCount = group.getComputeShaderHashCount();
+            const bool shaderEditingThisGroup = instance.GetToggleGroupIdShaderEditing().load() == group.getId();
+            const size_t psCount = shaderEditingThisGroup ? instance.GetPixelShaderManager()->getMarkedShaderCount() : group.getPixelShaderHashCount();
+            const size_t vsCount = shaderEditingThisGroup ? instance.GetVertexShaderManager()->getMarkedShaderCount() : group.getVertexShaderHashCount();
+            const size_t csCount = shaderEditingThisGroup ? instance.GetComputeShaderManager()->getMarkedShaderCount() : group.getComputeShaderHashCount();
             const size_t fxCount = group.preferredTechniques().size();
 
-            ImGui::TextDisabled("PS: %zu | VS: %zu | CS: %zu | FX: %zu%s",
+            ImGui::TextDisabled("PS: %zu | VS: %zu | CS: %zu | FX: %zu%s%s",
                                 psCount,
                                 vsCount,
                                 csCount,
                                 fxCount,
-                                group.getAutoRenderSRV() ? " | Auto Scene Colour" : "");
+                                group.getAutoRenderSRV() ? " | Auto Scene Colour" : "",
+                                shaderEditingThisGroup ? " | pending" : "");
 
             if (group.getToggleKey() != 0) {
                 bool conflictShown = false;
