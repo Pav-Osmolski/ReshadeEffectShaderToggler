@@ -59,7 +59,7 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
                                             vector<EffectData*>& removalList,
                                             const unordered_set<EffectData*>& toRenderNames,
                                             bool vulkanSafeBoundary,
-                                            const unordered_set<uint64_t>* allowedVulkanTargets) {
+                                            const unordered_map<uint64_t, resource_usage>* allowedVulkanTargets) {
     bool rendered = false;
     CommandListDataContainer& cmdData = cmd_list->get_private_data<CommandListDataContainer>();
     effect_runtime* runtime = deviceData.current_runtime;
@@ -115,6 +115,7 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
           (desc.texture.width != runtimeWidth || desc.texture.height != runtimeHeight);
         const bool vulkanAutoSceneColour = autoSceneColour && deviceApi == device_api::vulkan;
         const bool vulkanNativeStaging = vulkanAutoSceneColour && wantsNativeStaging;
+        resource_usage vulkanTargetUsage = resource_usage::render_target;
 
         if (vulkanAutoSceneColour) {
             // ReShade's Vulkan render_technique path always copies the supplied colour
@@ -152,7 +153,7 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
                 // continuation pass may be recorded on a different command buffer, so
                 // pending work is tracked at device scope. Preserve the first applicable
                 // group/target for a technique, matching REST's first-render-wins model.
-                group->setDebugAutoStatus("Waiting for safe render-pass continuation");
+                group->setDebugAutoStatus("Waiting for safe Vulkan continuation or target transition");
                 for (EffectData* effect : effectList) {
                     deviceData.vulkanAutoPendingEffects.try_emplace(effect, active_resource);
                     removalList.push_back(effect);
@@ -160,8 +161,12 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
                 continue;
             }
 
-            if (allowedVulkanTargets != nullptr && !allowedVulkanTargets->contains(active_resource.resource.handle))
-                continue;
+            if (allowedVulkanTargets != nullptr) {
+                const auto targetIt = allowedVulkanTargets->find(active_resource.resource.handle);
+                if (targetIt == allowedVulkanTargets->end())
+                    continue;
+                vulkanTargetUsage = targetIt->second;
+            }
         }
 
         bool useNativeStaging = false;
@@ -225,7 +230,8 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
                 // Vulkan uses the generic ReShade blit API rather than REST's embedded
                 // DXBC fullscreen-copy pipeline. Keep the live image in copy-source state
                 // until the processed native-size result is blitted back.
-                cmd_list->barrier(active_resource.resource, resource_usage::render_target, resource_usage::copy_source);
+                if (vulkanTargetUsage != resource_usage::copy_source)
+                    cmd_list->barrier(active_resource.resource, vulkanTargetUsage, resource_usage::copy_source);
                 cmd_list->barrier(nativeStageRes, resource_usage::render_target, resource_usage::copy_dest);
                 cmd_list->copy_texture_region(active_resource.resource,
                                               0,
@@ -290,6 +296,12 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
         if (view_non_srgb == 0) {
             continue;
         }
+
+        const bool restoreVulkanDirectTarget =
+          vulkanAutoSceneColour && vulkanSafeBoundary && !useNativeStaging &&
+          vulkanTargetUsage != resource_usage::render_target;
+        if (restoreVulkanDirectTarget)
+            cmd_list->barrier(active_resource.resource, vulkanTargetUsage, resource_usage::render_target);
 
         if (group->getFlipBuffer() && runtimeData.specialEffects[REST_FLIP].technique != 0) {
             runtime->render_technique(runtimeData.specialEffects[REST_FLIP].technique, cmd_list, view_non_srgb, view_srgb);
@@ -364,7 +376,8 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
                                               nullptr,
                                               filter_mode::min_mag_mip_point);
                 cmd_list->barrier(nativeStageRes, resource_usage::copy_source, resource_usage::render_target);
-                cmd_list->barrier(active_resource.resource, resource_usage::copy_dest, resource_usage::render_target);
+                if (vulkanTargetUsage != resource_usage::copy_dest)
+                    cmd_list->barrier(active_resource.resource, resource_usage::copy_dest, vulkanTargetUsage);
             } else {
                 cmd_list->barrier(nativeStageRes, resource_usage::render_target, resource_usage::shader_resource);
                 cmd_list->barrier(active_resource.resource, resource_usage::shader_resource, resource_usage::render_target);
@@ -377,6 +390,8 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
             }
         } else if (transitionManualSRV) {
             cmd_list->barrier(active_resource.resource, resource_usage::render_target, resource_usage::shader_resource);
+        } else if (restoreVulkanDirectTarget) {
+            cmd_list->barrier(active_resource.resource, resource_usage::render_target, vulkanTargetUsage);
         }
     }
 
@@ -391,11 +406,7 @@ void RenderingEffectManager::RenderDeferredVulkanAutoEffects(command_list* cmd_l
         return;
     }
 
-    DeviceDataContainer& deviceData = cmd_list->get_device()->get_private_data<DeviceDataContainer>();
-    if (deviceData.current_runtime == nullptr)
-        return;
-
-    unordered_set<uint64_t> safeTargets;
+    unordered_map<uint64_t, resource_usage> safeTargets;
     safeTargets.reserve(renderTargetCount);
     for (uint32_t i = 0; i < renderTargetCount; ++i) {
         if (renderTargets[i].view == 0 || renderTargets[i].load_op != render_pass_load_op::load)
@@ -405,10 +416,54 @@ void RenderingEffectManager::RenderDeferredVulkanAutoEffects(command_list* cmd_l
         // CLEAR/DISCARD would immediately overwrite the injected result.
         const resource target = cmd_list->get_device()->get_resource_from_view(renderTargets[i].view);
         if (target != 0)
-            safeTargets.insert(target.handle);
+            safeTargets.try_emplace(target.handle, resource_usage::render_target);
     }
 
-    if (safeTargets.empty())
+    if (!safeTargets.empty())
+        _RenderDeferredVulkanAutoEffects(cmd_list, safeTargets);
+}
+
+void RenderingEffectManager::RenderDeferredVulkanAutoEffectsAfterBarrier(command_list* cmd_list,
+                                                                          uint32_t barrierCount,
+                                                                          const resource* resources,
+                                                                          const resource_usage* newStates) {
+    if (cmd_list == nullptr || cmd_list->get_device() == nullptr ||
+        cmd_list->get_device()->get_api() != device_api::vulkan ||
+        barrierCount == 0 || resources == nullptr || newStates == nullptr) {
+        return;
+    }
+
+    CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
+    if (commandListData.vulkanAutoInjectionActive)
+        return;
+
+    unordered_map<uint64_t, resource_usage> safeTargets;
+    safeTargets.reserve(barrierCount);
+
+    for (uint32_t i = 0; i < barrierCount; ++i) {
+        if (resources[i] == 0 || newStates[i] == resource_usage::undefined ||
+            newStates[i] == resource_usage::render_target) {
+            continue;
+        }
+
+        // ReShade raises the barrier event after Vulkan recorded the transition.
+        // A pending scene target that has just left render-target usage is therefore
+        // outside the render pass and can be processed before the game's next consumer.
+        safeTargets.insert_or_assign(resources[i].handle, newStates[i]);
+    }
+
+    if (!safeTargets.empty())
+        _RenderDeferredVulkanAutoEffects(cmd_list, safeTargets);
+}
+
+void RenderingEffectManager::_RenderDeferredVulkanAutoEffects(
+  command_list* cmd_list,
+  const unordered_map<uint64_t, resource_usage>& safeTargets) {
+    if (cmd_list == nullptr || cmd_list->get_device() == nullptr || safeTargets.empty())
+        return;
+
+    DeviceDataContainer& deviceData = cmd_list->get_device()->get_private_data<DeviceDataContainer>();
+    if (deviceData.current_runtime == nullptr)
         return;
 
     unique_lock<shared_mutex> renderLock(deviceData.render_mutex);
@@ -434,6 +489,9 @@ void RenderingEffectManager::RenderDeferredVulkanAutoEffects(command_list* cmd_l
     if (toRenderNames.empty())
         return;
 
+    CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
+    commandListData.vulkanAutoInjectionActive = true;
+
     if (!deviceData.rendered_effects) {
         deviceData.current_runtime->render_effects(cmd_list, resource_view{ 0 }, resource_view{ 0 });
         deviceData.rendered_effects = true;
@@ -454,6 +512,8 @@ void RenderingEffectManager::RenderDeferredVulkanAutoEffects(command_list* cmd_l
 
     for (auto* effect : removalList)
         deviceData.vulkanAutoPendingEffects.erase(effect);
+
+    commandListData.vulkanAutoInjectionActive = false;
 }
 
 void RenderingEffectManager::RenderEffects(command_list* cmd_list, uint64_t callLocation, uint64_t invocation) {
