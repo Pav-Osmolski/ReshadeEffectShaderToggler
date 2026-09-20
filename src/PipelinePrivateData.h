@@ -124,6 +124,12 @@ struct __declspec(novtable) HuntPreview final {
     }
 };
 
+struct TechniqueUIEntry {
+    std::string name;
+    std::string upperName;
+    EffectData* effect = nullptr;
+};
+
 struct __declspec(novtable) SpecialEffect final {
     std::string name;
     reshade::api::effect_technique technique;
@@ -179,6 +185,7 @@ struct __declspec(uuid("838BAF1D-95C0-4A7E-A517-052642879986")) RuntimeDataConta
     std::unordered_map<std::string, EffectData> allTechniques;
     std::unordered_set<EffectData*> allEnabledTechniques;
     std::vector<EffectData*> allSortedTechniques;
+    std::vector<TechniqueUIEntry> techniqueUiCache;
 
     SpecialEffect specialEffects[4] = {
         SpecialEffect{ "REST_TONEMAP_TO_SDR", reshade::api::effect_technique{ 0 } },
