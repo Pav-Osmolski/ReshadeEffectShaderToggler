@@ -97,10 +97,10 @@ For Vulkan changes, validate a representative Vulkan title with Auto Scene Colou
    - End/begin callbacks for subpass transitions must not trigger effects or preview copies. A real later barrier must establish pass completion.
 9. **Rapid hunting navigation**
    - Alternate Prev/Next rapidly for a sustained period across targets with different dimensions/formats.
-   - Exercise marked navigation, Recollect, Done and reopening Settings.
+   - Exercise marked navigation, Rescan, Done and reopening Settings.
    - Confirm no crash/device loss, valid preview status and stable committed Auto injection afterward.
 
-For v1.6.0.633 the user confirmed BG3 Vulkan native staging, the post-pass Before Fog boundary without flicker, and stability after the rapid-navigation fixes. This release task does not claim a fresh DX11, same-resolution Vulkan or x86 in-game test. Automated architecture checks cover both x86 and x64 binaries.
+For v1.6.1.633 the user confirmed BG3 Vulkan native staging and post-pass Before Fog injection remained correct while exercising the updated hunting UI, deterministic Prev/Next ordering, repeated held navigation across many shaders and preview targets, with no observed crash/device loss after the Vulkan preview-lifetime fix. This release task does not claim a fresh DX11, same-resolution Vulkan or x86 in-game test. Automated architecture checks cover both x86 and x64 binaries.
 
 For API-specific changes, verify in a representative title that Auto Scene Colour is clickable, the live scene/effect resolutions are reported correctly, native staging activates only when needed, and the effect remains at the intended shader boundary.
 
