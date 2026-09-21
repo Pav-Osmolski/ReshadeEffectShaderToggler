@@ -4,6 +4,8 @@
 
 ### QoL and configuration safety
 
+- Keeps committed shader hashes intact while hunting so finishing an unchanged hunt is a true no-op and does not falsely mark the configuration dirty.
+
 - Saves configuration through a verified temporary file, refreshes `ReshadeEffectShaderToggler.ini.bak` and atomically replaces the live INI; adds `ConfigVersion` for future migrations.
 - Replaces per-overlay full configuration signature generation with cached dirty-state tracking.
 - Adds clipboard **Copy group / Import group** using REST's existing INI group serializer.
