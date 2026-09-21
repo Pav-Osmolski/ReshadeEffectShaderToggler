@@ -31,6 +31,7 @@
 /////////////////////////////////////////////////////////////////////////
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <deque>
