@@ -809,7 +809,7 @@ static void DisplayGroupView(AddonImGui::AddonUIData& instance,
     if (ImGui::BeginTable("ShaderHuntSearch", 3, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoBordersInBody)) {
         ImGui::TableSetupColumn("Search", ImGuiTableColumnFlags_WidthStretch);
         ImGui::TableSetupColumn("Filter", ImGuiTableColumnFlags_WidthFixed, 120.0f);
-        ImGui::TableSetupColumn("Recollect", ImGuiTableColumnFlags_WidthFixed, 86.0f);
+        ImGui::TableSetupColumn("Rescan", ImGuiTableColumnFlags_WidthFixed, 72.0f);
 
         ImGui::TableNextColumn();
         ImGui::SetNextItemWidth(-1.0f);
@@ -820,7 +820,7 @@ static void DisplayGroupView(AddonImGui::AddonUIData& instance,
         ImGui::Combo("##shaderFilter", &filterMode, filterItems, IM_ARRAYSIZE(filterItems));
 
         ImGui::TableNextColumn();
-        if (ImGui::Button("Recollect", ImVec2(-1.0f, 0))) {
+        if (ImGui::Button("Rescan", ImVec2(-1.0f, 0))) {
             auto* pixelManager = instance.GetPixelShaderManager();
             auto* vertexManager = instance.GetVertexShaderManager();
             auto* computeManager = instance.GetComputeShaderManager();
@@ -832,6 +832,8 @@ static void DisplayGroupView(AddonImGui::AddonUIData& instance,
             ImGui::EndTable();
             return;
         }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Recollect active shaders for the configured number of frames.");
 
         ImGui::EndTable();
     }
