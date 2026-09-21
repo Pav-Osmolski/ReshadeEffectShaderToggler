@@ -938,9 +938,9 @@ static void DisplayGroupView(AddonImGui::AddonUIData& instance,
     std::string needle(shaderSearch);
     std::transform(needle.begin(), needle.end(), needle.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
 
-    // Keep the UI list hash-based. A copied unordered_set is allowed to use a
-    // different iteration order from the live set, so converting a displayed row
-    // back to an index can select the wrong shader.
+    // The UI uses ShaderManager's stable first-seen order, matching Prev/Next and
+    // marked navigation exactly. Selection remains hash-based so filtering and
+    // column layout never change which shader a row represents.
     std::vector<uint32_t> visibleHashes;
     visibleHashes.reserve(hashes.size());
 
