@@ -4,6 +4,8 @@
 
 ### QoL and configuration safety
 
+- Uses one stable first-seen shader order for the hunting list, Prev/Next, marked navigation and direct selection; the two-column view now runs top-to-bottom down the left column before continuing in the right column.
+
 - Fixes hash-list clicks selecting a different shader when the responsive two-column view is active by resolving UI selections directly by hash rather than copied unordered-set index.
 
 - Keeps committed shader hashes intact while hunting so finishing an unchanged hunt is a true no-op and does not falsely mark the configuration dirty.
