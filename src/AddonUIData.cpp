@@ -1,6 +1,6 @@
 ///////////////////////////////////////////////////////////////////////
 //
-// Part of ShaderToggler, a shader toggler add on for Reshade 5+ which allows you
+// Part of ShaderToggler, a shader toggler add on for ReShade 5+ which allows you
 // to define groups of shaders to toggle them on/off with one key press
 // 
 // (c) Frans 'Otis_Inf' Bouma.
@@ -36,8 +36,12 @@
 #include "RenderingManager.h"
 #include <algorithm>
 #include <cfloat>
+#include <filesystem>
+#include <fstream>
 #include <sstream>
+#include <system_error>
 #include <vector>
+#include <windows.h>
 
 using namespace AddonImGui;
 using namespace reshade::api;
@@ -57,22 +61,28 @@ AddonUIData::AddonUIData(ShaderManager* pixelShaderManager, ShaderManager* verte
     _keyBindings[Keybind::PIXEL_SHADER_MARK] = VK_NUMPAD3;
     _keyBindings[Keybind::PIXEL_SHADER_MARKED_DOWN] = VK_NUMPAD1 | (VK_CONTROL << 8);
     _keyBindings[Keybind::PIXEL_SHADER_MARKED_UP] = VK_NUMPAD2 | (VK_CONTROL << 8);
+    _keyBindings[Keybind::PIXEL_SHADER_MARK_PREV] = 0;
+    _keyBindings[Keybind::PIXEL_SHADER_MARK_NEXT] = 0;
     _keyBindings[Keybind::VERTEX_SHADER_DOWN] = VK_NUMPAD4;
     _keyBindings[Keybind::VERTEX_SHADER_UP] = VK_NUMPAD5;
     _keyBindings[Keybind::VERTEX_SHADER_MARK] = VK_NUMPAD6;
     _keyBindings[Keybind::VERTEX_SHADER_MARKED_DOWN] = VK_NUMPAD4 | (VK_CONTROL << 8);
     _keyBindings[Keybind::VERTEX_SHADER_MARKED_UP] = VK_NUMPAD5 | (VK_CONTROL << 8);
+    _keyBindings[Keybind::VERTEX_SHADER_MARK_PREV] = 0;
+    _keyBindings[Keybind::VERTEX_SHADER_MARK_NEXT] = 0;
     _keyBindings[Keybind::COMPUTE_SHADER_DOWN] = 0;
     _keyBindings[Keybind::COMPUTE_SHADER_UP] = 0;
     _keyBindings[Keybind::COMPUTE_SHADER_MARK] = 0;
     _keyBindings[Keybind::COMPUTE_SHADER_MARKED_DOWN] = 0;
     _keyBindings[Keybind::COMPUTE_SHADER_MARKED_UP] = 0;
+    _keyBindings[Keybind::COMPUTE_SHADER_MARK_PREV] = 0;
+    _keyBindings[Keybind::COMPUTE_SHADER_MARK_NEXT] = 0;
     _keyBindings[Keybind::INVOCATION_DOWN] = VK_NUMPAD7;
     _keyBindings[Keybind::INVOCATION_UP] = VK_NUMPAD8;
     _keyBindings[Keybind::DESCRIPTOR_DOWN] = VK_SUBTRACT;
     _keyBindings[Keybind::DESCRIPTOR_UP] = VK_ADD;
 
-    _savedConfigSignature = BuildConfigSignature();
+    MarkConfigClean();
 }
 
 
@@ -191,38 +201,9 @@ void AddonUIData::AddDefaultGroup()
 {
     ToggleGroup toAdd("Default", ToggleGroup::getNewGroupId());
     toAdd.setToggleKey(0);
+    toAdd.SetConfigDirtyFlag(&_configDirty);
     _toggleGroups.emplace(toAdd.getId(), toAdd);
-}
-
-
-std::string AddonUIData::BuildConfigSignature() const
-{
-    std::ostringstream ss;
-    ss << _resourceShim.size() << ':' << _resourceShim << ';'
-       << _constHookType.size() << ':' << _constHookType << ';'
-       << _constHookCopyType.size() << ':' << _constHookCopyType << ';'
-       << _trackDescriptors << ';' << _preventRuntimeReload << ';'
-       << _startValueFramecountCollectionPhase << ';' << _overlayOpacity << ';';
-
-    for (uint32_t i = 0; i < ARRAYSIZE(KeybindNames); ++i)
-        ss << _keyBindings[i] << ',';
-    ss << ';';
-
-    std::vector<int> groupIds;
-    groupIds.reserve(_toggleGroups.size());
-    for (const auto& [id, _] : _toggleGroups)
-        groupIds.push_back(id);
-    std::sort(groupIds.begin(), groupIds.end());
-
-    for (const int id : groupIds)
-        ss << _toggleGroups.at(id).configurationSignature() << "\n";
-
-    return ss.str();
-}
-
-bool AddonUIData::IsConfigDirty() const
-{
-    return BuildConfigSignature() != _savedConfigSignature;
+    MarkConfigDirty();
 }
 
 ToggleGroup* AddonUIData::CloneToggleGroup(int sourceGroupId)
@@ -233,8 +214,10 @@ ToggleGroup* AddonUIData::CloneToggleGroup(int sourceGroupId)
 
     const int newId = ToggleGroup::getNewGroupId();
     ToggleGroup clone = source->second.cloneForNewId(newId);
+    clone.SetConfigDirtyFlag(&_configDirty);
     _toggleGroups.emplace(newId, std::move(clone));
     UpdateToggleGroupsForShaderHashes();
+    MarkConfigDirty();
     return &_toggleGroups.at(newId);
 }
 
@@ -252,9 +235,15 @@ void AddonUIData::LoadShaderTogglerIniFile(const string& fileName)
     if (!iniFile.Load((_basePath / fileName).string()))
     {
         reshade::log::message(reshade::log::level::info, std::format("Could not find config file at \"{}\"", (_basePath / fileName).string()).c_str());
-        _savedConfigSignature = BuildConfigSignature();
+        MarkConfigClean();
         // not there
         return;
+    }
+
+    const int configVersion = iniFile.GetInt("ConfigVersion", "General");
+    if (configVersion != INT_MIN && configVersion > REST_CONFIG_VERSION) {
+        reshade::log::message(reshade::log::level::warning,
+          std::format("Configuration version {} is newer than supported version {}.", configVersion, REST_CONFIG_VERSION).c_str());
     }
 
     _trackDescriptors = iniFile.GetBoolOrDefault("TrackDescriptors", "General", true);
@@ -314,7 +303,8 @@ void AddonUIData::LoadShaderTogglerIniFile(const string& fileName)
     }
     for (auto& [_,group] : _toggleGroups)
     {
-        group.loadState(iniFile, groupCounter);		// groupCounter is normally 0 or greater. For when the old format is detected, it's -1 (and there's 1 group).
+        group.loadState(iniFile, groupCounter);
+        group.SetConfigDirtyFlag(&_configDirty);		// groupCounter is normally 0 or greater. For when the old format is detected, it's -1 (and there's 1 group).
         groupCounter++;
 
         for (const auto& h : group.getPixelShaderHashes())
@@ -333,7 +323,7 @@ void AddonUIData::LoadShaderTogglerIniFile(const string& fileName)
         }
     }
 
-    _savedConfigSignature = BuildConfigSignature();
+    MarkConfigClean();
 }
 
 /// <summary>
@@ -341,12 +331,10 @@ void AddonUIData::LoadShaderTogglerIniFile(const string& fileName)
 /// </summary>
 void AddonUIData::SaveShaderTogglerIniFile(const string& fileName)
 {
-    // format: first section with # of groups, then per group a section with pixel and vertex shaders, as well as their name and key value.
-    // groups are stored with "Group" + group counter, starting with 0.
     CDataFile iniFile;
 
+    iniFile.SetInt("ConfigVersion", REST_CONFIG_VERSION, "", "General");
     iniFile.SetValue("ResourceShim", _resourceShim, "", "General");
-
     iniFile.SetValue("ConstantBufferHookType", _constHookType, "", "General");
     iniFile.SetValue("ConstantBufferHookCopyType", _constHookCopyType, "", "General");
     iniFile.SetBool("TrackDescriptors", _trackDescriptors, "", "General");
@@ -355,25 +343,93 @@ void AddonUIData::SaveShaderTogglerIniFile(const string& fileName)
     iniFile.SetBool("PreventRuntimeReload", _preventRuntimeReload, "", "General");
 
     for (uint32_t i = 0; i < ARRAYSIZE(KeybindNames); i++)
-    {
-        uint32_t keybinding = iniFile.SetUInt(KeybindNames[i], _keyBindings[i], "", "Keybindings");
-    }
+        iniFile.SetUInt(KeybindNames[i], _keyBindings[i], "", "Keybindings");
 
     iniFile.SetInt("AmountGroups", static_cast<int>(_toggleGroups.size()), "", "General");
 
     int groupCounter = 0;
-    for (const auto& [_,group] : _toggleGroups)
-    {
-        group.saveState(iniFile, groupCounter);
-        groupCounter++;
-    }
-    reshade::log::message(reshade::log::level::info, std::format("Creating config file at \"{}\"", (_basePath / fileName).string()).c_str());
+    for (const auto& [_, group] : _toggleGroups)
+        group.saveState(iniFile, groupCounter++);
 
-    iniFile.SetFileName((_basePath / fileName).string());
-    iniFile.Save();
-    _savedConfigSignature = BuildConfigSignature();
+    const std::filesystem::path targetPath = _basePath / fileName;
+    const std::filesystem::path tempPath = targetPath.string() + ".tmp";
+    const std::filesystem::path backupPath = targetPath.string() + ".bak";
+    std::error_code ec;
+    std::filesystem::remove(tempPath, ec);
+
+    iniFile.SetFileName(tempPath.string());
+    if (!iniFile.Save() || !std::filesystem::exists(tempPath, ec) || std::filesystem::file_size(tempPath, ec) == 0) {
+        reshade::log::message(reshade::log::level::error,
+          std::format("Failed to write temporary configuration file \"{}\"", tempPath.string()).c_str());
+        std::filesystem::remove(tempPath, ec);
+        return;
+    }
+
+    CDataFile verifier;
+    const int expectedGroupCount = static_cast<int>(_toggleGroups.size());
+    if (!verifier.Load(tempPath.string()) ||
+        verifier.GetInt("ConfigVersion", "General") != REST_CONFIG_VERSION ||
+        verifier.GetInt("AmountGroups", "General") != expectedGroupCount) {
+        reshade::log::message(reshade::log::level::error,
+          std::format("Temporary configuration verification failed for \"{}\"", tempPath.string()).c_str());
+        std::filesystem::remove(tempPath, ec);
+        return;
+    }
+
+    if (std::filesystem::exists(targetPath, ec)) {
+        ec.clear();
+        std::filesystem::copy_file(targetPath, backupPath, std::filesystem::copy_options::overwrite_existing, ec);
+        if (ec) {
+            reshade::log::message(reshade::log::level::warning,
+              std::format("Could not refresh configuration backup \"{}\": {}", backupPath.string(), ec.message()).c_str());
+        }
+    }
+
+    if (!MoveFileExW(tempPath.c_str(), targetPath.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+        reshade::log::message(reshade::log::level::error,
+          std::format("Failed to atomically replace configuration file \"{}\" (Win32 error {}).",
+                      targetPath.string(), GetLastError()).c_str());
+        std::filesystem::remove(tempPath, ec);
+        return;
+    }
+
+    reshade::log::message(reshade::log::level::info,
+      std::format("Saved configuration to \"{}\" (backup: \"{}\")", targetPath.string(), backupPath.string()).c_str());
+    MarkConfigClean();
 }
 
+std::string AddonUIData::ExportToggleGroup(const ToggleGroup& group) const
+{
+    CDataFile data;
+    data.SetInt("FormatVersion", 1, "", "RESTGroupExport");
+    group.saveState(data, 0);
+    return data.Serialize();
+}
+
+ToggleGroup* AddonUIData::ImportToggleGroup(const std::string& serialized)
+{
+    CDataFile data;
+    if (!data.LoadFromString(serialized) || data.GetValue("Name", "Group0").empty())
+        return nullptr;
+
+    const int newId = ToggleGroup::getNewGroupId();
+    ToggleGroup imported("", newId);
+    imported.loadState(data, 0);
+
+    // Shared/imported groups should not immediately alter rendering or collide with
+    // the recipient's shortcuts. Preserve the portable rendering configuration,
+    // but require the user to opt in to activation and choose a local hotkey.
+    if (imported.isActive())
+        imported.toggleActive();
+    imported.setToggleKey(0);
+    imported.SetConfigDirtyFlag(&_configDirty);
+    imported.setEditing(false);
+
+    _toggleGroups.emplace(newId, std::move(imported));
+    UpdateToggleGroupsForShaderHashes();
+    MarkConfigDirty();
+    return &_toggleGroups.at(newId);
+}
 
 /// <summary>
 /// Function which marks the end of a shader editing cycle for a given toggle group
@@ -434,9 +490,9 @@ void AddonUIData::StartShaderEditing(ToggleGroup& groupEditing)
     _vertexShaderManager->startHuntingMode(groupEditing.getVertexShaderHashes());
     _computeShaderManager->startHuntingMode(groupEditing.getComputeShaderHashes());
 
-    // after copying them to the managers, we can now clear the group's shader.
-    groupEditing.clearHashes();
-
+    // Keep the committed group hashes intact while hunting. UpdateToggleGroupsForShaderHashes()
+    // already substitutes the currently hunted shader for this group, so clearing the
+    // committed hashes is unnecessary and would make an unchanged Done operation appear dirty.
     UpdateToggleGroupsForShaderHashes();
 }
 
@@ -484,5 +540,8 @@ uint32_t AddonUIData::GetKeybinding(Keybind keybind) const
 
 void AddonUIData::SetKeybinding(Keybind keybind, uint32_t keys)
 {
-    _keyBindings[keybind] = keys;
+    if (_keyBindings[keybind] != keys) {
+        _keyBindings[keybind] = keys;
+        MarkConfigDirty();
+    }
 }

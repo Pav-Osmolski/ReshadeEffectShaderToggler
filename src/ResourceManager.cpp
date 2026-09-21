@@ -259,6 +259,24 @@ void ResourceManager::CheckPreview(reshade::api::command_list* cmd_list, reshade
     DeviceDataContainer& deviceData = device->get_private_data<DeviceDataContainer>();
 
     if (deviceData.huntPreview.recreate_preview) {
+        // ReShade's destroy_resource() is immediate. Vulkan preview images may still
+        // be referenced by a previously submitted game command list, so destroying
+        // them during rapid shader hunting can invalidate in-flight GPU work and
+        // eventually cause VK_ERROR_DEVICE_LOST. Synchronize only when the preview
+        // allocation actually needs to be replaced.
+        if (device->get_api() == device_api::vulkan &&
+            (deviceData.resourceManagerData.preview_res[0] != 0 || deviceData.resourceManagerData.preview_res[1] != 0) &&
+            deviceData.current_runtime != nullptr &&
+            deviceData.current_runtime->get_command_queue() != nullptr) {
+            // The ReShade overlay is drawn before the reshade_present event and may
+            // have already recorded sampling commands for the current preview image
+            // on the immediate command list. Submit those first, then wait for all
+            // GPU references to retire before destroying the image.
+            command_queue* queue = deviceData.current_runtime->get_command_queue();
+            queue->flush_immediate_command_list();
+            queue->wait_idle();
+        }
+
         DisposePreview(device);
         resource_desc desc = deviceData.huntPreview.target_desc;
 

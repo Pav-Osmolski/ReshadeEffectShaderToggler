@@ -1,4 +1,6 @@
 #include "TechniqueManager.h"
+#include <algorithm>
+#include <cctype>
 
 using namespace reshade::api;
 using namespace ShaderToggler;
@@ -30,13 +32,14 @@ void TechniqueManager::SignalEffectsReloaded(reshade::api::effect_runtime* runti
     }
 }
 
-void TechniqueManager::OnReshadeReloadedEffects(reshade::api::effect_runtime* runtime) {
+void TechniqueManager::OnReShadeReloadedEffects(reshade::api::effect_runtime* runtime) {
     RuntimeDataContainer& data = runtime->get_private_data<RuntimeDataContainer>();
     unique_lock<shared_mutex> lock(data.technique_mutex);
 
     data.allEnabledTechniques.clear();
     data.allTechniques.clear();
     data.allSortedTechniques.clear();
+    data.techniqueUiCache.clear();
 
     Rendering::RenderingManager::EnumerateTechniques(
       runtime, [&data, this](effect_runtime* runtime, effect_technique technique, string& name, string& eff_name) {
@@ -64,6 +67,16 @@ void TechniqueManager::OnReshadeReloadedEffects(reshade::api::effect_runtime* ru
           }
       });
 
+    data.techniqueUiCache.reserve(data.allTechniques.size());
+    for (auto& [name, effect] : data.allTechniques) {
+        std::string upper = name;
+        std::transform(upper.begin(), upper.end(), upper.begin(),
+                       [](unsigned char ch) { return static_cast<char>(std::toupper(ch)); });
+        data.techniqueUiCache.push_back({ name, std::move(upper), &effect });
+    }
+    std::sort(data.techniqueUiCache.begin(), data.techniqueUiCache.end(),
+              [](const auto& lhs, const auto& rhs) { return lhs.name < rhs.name; });
+
     int32_t enabledCount = static_cast<int32_t>(data.allTechniques.size());
 
     if (enabledCount == 0 || enabledCount < data.previousEnableCount) {
@@ -75,7 +88,7 @@ void TechniqueManager::OnReshadeReloadedEffects(reshade::api::effect_runtime* ru
     data.previousEnableCount = enabledCount;
 }
 
-bool TechniqueManager::OnReshadeSetTechniqueState(reshade::api::effect_runtime* runtime, reshade::api::effect_technique technique, bool enabled) {
+bool TechniqueManager::OnReShadeSetTechniqueState(reshade::api::effect_runtime* runtime, reshade::api::effect_technique technique, bool enabled) {
     RuntimeDataContainer& data = runtime->get_private_data<RuntimeDataContainer>();
     unique_lock<shared_mutex> lock(data.technique_mutex);
 
@@ -117,13 +130,14 @@ bool TechniqueManager::OnReshadeSetTechniqueState(reshade::api::effect_runtime* 
     return false;
 }
 
-bool TechniqueManager::OnReshadeReorderTechniques(reshade::api::effect_runtime* runtime, size_t count, reshade::api::effect_technique* techniques) {
+bool TechniqueManager::OnReShadeReorderTechniques(reshade::api::effect_runtime* runtime, size_t count, reshade::api::effect_technique* techniques) {
     RuntimeDataContainer& data = runtime->get_private_data<RuntimeDataContainer>();
     unique_lock<shared_mutex> lock(data.technique_mutex);
 
     data.allEnabledTechniques.clear();
     data.allTechniques.clear();
     data.allSortedTechniques.clear();
+    data.techniqueUiCache.clear();
 
     for (uint32_t i = 0; i < count; i++) {
         effect_technique technique = techniques[i];
@@ -162,10 +176,20 @@ bool TechniqueManager::OnReshadeReorderTechniques(reshade::api::effect_runtime* 
         }
     }
 
+    data.techniqueUiCache.reserve(data.allTechniques.size());
+    for (auto& [name, effect] : data.allTechniques) {
+        std::string upper = name;
+        std::transform(upper.begin(), upper.end(), upper.begin(),
+                       [](unsigned char ch) { return static_cast<char>(std::toupper(ch)); });
+        data.techniqueUiCache.push_back({ name, std::move(upper), &effect });
+    }
+    std::sort(data.techniqueUiCache.begin(), data.techniqueUiCache.end(),
+              [](const auto& lhs, const auto& rhs) { return lhs.name < rhs.name; });
+
     return false;
 }
 
-void TechniqueManager::OnReshadePresent(reshade::api::effect_runtime* runtime) {
+void TechniqueManager::OnReShadePresent(reshade::api::effect_runtime* runtime) {
     RuntimeDataContainer& deviceData = runtime->get_private_data<RuntimeDataContainer>();
     unique_lock<shared_mutex> lock(deviceData.technique_mutex);
 

@@ -1,6 +1,6 @@
 ///////////////////////////////////////////////////////////////////////
 //
-// Part of ShaderToggler, a shader toggler add on for Reshade 5+ which allows you
+// Part of ShaderToggler, a shader toggler add on for ReShade 5+ which allows you
 // to define groups of shaders to toggle them on/off with one key press
 //
 // (c) Frans 'Otis_Inf' Bouma.
@@ -31,6 +31,7 @@
 /////////////////////////////////////////////////////////////////////////
 
 #include "ShaderManager.h"
+#include <algorithm>
 
 using namespace reshade::api;
 using namespace std;
@@ -61,7 +62,11 @@ void ShaderManager::removeHandle(uint64_t handle) {
 
     {
         unique_lock lock(_collectedActiveHandlesMutex);
-        _collectedActiveShaderHashes.erase(shaderHash);
+        if (_collectedActiveShaderHashes.erase(shaderHash) > 0) {
+            const auto orderIt = std::find(_collectedActiveShaderOrder.begin(), _collectedActiveShaderOrder.end(), shaderHash);
+            if (orderIt != _collectedActiveShaderOrder.end())
+                _collectedActiveShaderOrder.erase(orderIt);
+        }
     }
 }
 
@@ -82,6 +87,7 @@ void ShaderManager::startHuntingMode(const unordered_set<uint32_t> currentMarked
     {
         unique_lock lock(_collectedActiveHandlesMutex);
         _collectedActiveShaderHashes.clear(); // clear it so we start with a clean slate
+        _collectedActiveShaderOrder.clear();
     }
 }
 
@@ -198,6 +204,20 @@ void ShaderManager::setActivedHuntedShaderIndex(uint32_t index) {
     setActiveHuntedShaderHandle();
 }
 
+bool ShaderManager::setActiveHuntedShaderHash(uint32_t hash) {
+    if (!_isInHuntingMode.load(memory_order_acquire) || hash == 0)
+        return false;
+
+    std::shared_lock lock(_collectedActiveHandlesMutex);
+    const auto it = std::find(_collectedActiveShaderOrder.begin(), _collectedActiveShaderOrder.end(), hash);
+    if (it == _collectedActiveShaderOrder.end())
+        return false;
+
+    _activeHuntedShaderIndex = static_cast<int32_t>(std::distance(_collectedActiveShaderOrder.begin(), it));
+    _activeHuntedShaderHash.store(hash, memory_order_release);
+    return true;
+}
+
 bool ShaderManager::isBlockedShader(uint32_t shaderHash) {
     bool toReturn = false;
     if (_isInHuntingMode.load(memory_order_acquire)) {
@@ -217,7 +237,9 @@ void ShaderManager::addActivePipelineHandle(uint64_t handle) {
     const auto shaderHash = getShaderHash(handle);
     if (shaderHash > 0) {
         unique_lock lock(_collectedActiveHandlesMutex);
-        _collectedActiveShaderHashes.emplace(shaderHash);
+        const auto [_, inserted] = _collectedActiveShaderHashes.emplace(shaderHash);
+        if (inserted)
+            _collectedActiveShaderOrder.push_back(shaderHash);
     }
 }
 

@@ -1,0 +1,66 @@
+name: Tag Release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "src/version.h"
+      - "docs/releases/**"
+
+permissions:
+  actions: write
+  contents: write
+
+jobs:
+  tag:
+    if: startsWith(github.event.head_commit.message, 'Release v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Create release tag
+        shell: bash
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          version="$(sed -n 's/^#define REST_VERSION_STRING "\([^"]*\)"/\1/p' src/version.h)"
+          if [[ -z "$version" ]]; then
+            echo "Could not read REST_VERSION_STRING from src/version.h" >&2
+            exit 1
+          fi
+
+          tag="v${version}"
+          if [[ "$COMMIT_MESSAGE" != "Release $tag"* ]]; then
+            echo "Merge commit requests a different release than source version $tag" >&2
+            exit 1
+          fi
+
+          if [[ ! -f "docs/releases/${tag}.md" ]]; then
+            echo "Missing docs/releases/${tag}.md" >&2
+            exit 1
+          fi
+
+          if ! git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null 2>&1; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag "${tag}" "${GITHUB_SHA}"
+            git push origin "${tag}"
+          else
+            echo "${tag} already exists."
+          fi
+
+          if gh release view "${tag}" >/dev/null 2>&1; then
+            echo "Release ${tag} already exists; nothing to publish."
+            exit 0
+          fi
+
+          # Tag pushes made with GITHUB_TOKEN do not start another workflow run,
+          # so explicitly dispatch the validated tag-driven publisher at this tag.
+          gh workflow run release.yml --ref "${tag}"

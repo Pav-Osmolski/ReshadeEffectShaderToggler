@@ -221,6 +221,17 @@ const ResourceViewData RenderingManager::GetCurrentResourceView(command_list* cm
     const device_api deviceApi = device->get_api();
     const bool autoSceneColour = group->isAutoSceneColourActive(deviceApi);
 
+    if (autoSceneColour) {
+        const uint32_t currentShaderHash =
+          descIndex == 0 ? commandListData.ps.activeShaderHash :
+          descIndex == 1 ? commandListData.vs.activeShaderHash :
+                           commandListData.cs.activeShaderHash;
+        group->setDebugCurrentShaderHash(currentShaderHash);
+        // Clear the previous target before resolving this draw so a no-target
+        // diagnostic cannot be grouped under stale dimensions/handles.
+        group->recordDebugAutoTarget(0, 0, 0, {});
+    }
+
     // Automatic scene colour targets the primary live render target bound at the
     // matched draw. This keeps the effect on the scene that subsequent game passes
     // actually consume instead of relying on descriptor/SRV discovery.

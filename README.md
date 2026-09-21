@@ -17,7 +17,8 @@ Both 64-bit and 32-bit are first-class build targets. CI builds and validates bo
 - **Automatic scene-colour injection for D3D10/D3D11/D3D12 and Vulkan games using DLSS or other dynamic-resolution/upscaling paths.**
 - Preserve technique selections reliably across ReShade effect reloads and ordering changes.
 - Search, filter and recollect shaders with mouse controls or configurable keyboard shortcuts.
-- Track unsaved configuration changes, clone groups safely, confirm deletions and flag shortcut conflicts.
+- Track unsaved configuration changes, clone/import/export groups safely, confirm deletions and flag shortcut conflicts.
+- Use crash-safe configuration saves with an automatic `ReshadeEffectShaderToggler.ini.bak` backup.
 
 ## Compatibility
 
@@ -56,11 +57,12 @@ Start the game and open the ReShade overlay. The **Add-ons** tab should list **R
 6. In the **Effects** tab, select the ReShade techniques the group should apply and enable **Auto scene colour** when appropriate.
 7. Click **Done**, test the group, then click **Save changes** when the unsaved-changes indicator is shown.
 
-The saved configuration is written to `ReshadeEffectShaderToggler.ini` beside the add-on. REST also persists the shader-collection frame count, overlay opacity and configurable hunting shortcuts.
+The saved configuration is written to `ReshadeEffectShaderToggler.ini` beside the add-on. Saves are first written to a verified temporary file, the previous configuration is refreshed as `ReshadeEffectShaderToggler.ini.bak`, and the live INI is then replaced atomically. REST also persists the shader-collection frame count, overlay opacity and configurable hunting shortcuts.
 
 ### Group management
 
 - **Clone** copies a group's shader hashes, effects and settings into a new inactive group with no hotkey, so it can be adjusted safely.
+- **Copy group** places a self-contained REST group INI block on the clipboard; **Import group** restores one without replacing the rest of the configuration. Imported groups start inactive with no hotkey to avoid unexpected rendering changes or shortcut conflicts.
 - **Delete** requires confirmation and is not written to disk until **Save changes** is used.
 - Each group shows compact pixel/vertex/compute shader counts, selected-effect count and an **Auto Scene Colour** indicator when enabled.
 - REST warns when group hotkeys conflict with another group or with a configured REST action.
@@ -102,7 +104,7 @@ This is why effects such as AO can remain **under the UI** while still using the
 
 Auto mode intentionally ignores manual render-target index, SRV slot/binding, swapchain-match and alpha-preservation settings while it is active. Those manual settings are preserved unchanged underneath Auto mode and become effective again when Auto is disabled. You do not need to choose a shader stage, SRV slot or descriptor binding.
 
-The group editor reports the live **scene resolution**, **effect resolution**, technique order, injection status and native-staging state. **Copy diagnostics** places the relevant REST version, API, resolutions, technique information, render-call count and target handle on the clipboard for support reports.
+The group editor reports the live **scene resolution**, **effect resolution**, technique order, injection status and native-staging state, and keeps the eight most recent distinct Auto Scene Colour attempts in an expandable diagnostic history. **Copy diagnostics** places the relevant REST version, API, resolutions, technique information, render-call count and target handle on the clipboard for support reports.
 
 For setup details, limitations and troubleshooting, see [Automatic Scene Colour](docs/automatic-scene-colour.md).
 
@@ -114,9 +116,11 @@ Click **Settings** on the group, then **Start shader hunting**. REST first colle
 
 - case-insensitive hash search;
 - **All / Marked / Unmarked** filtering;
-- **Prev**, **Next**, **Prev marked**, **Mark / unmark** and **Next marked** mouse controls;
+- **Prev**, **Next**, **Prev marked**, **Mark / unmark** and **Next marked** mouse controls, with press-and-hold repeat for navigation;
+- **Mark + Prev / Mark + Next** controls and optional shortcuts for rapidly classifying candidates;
+- **Copy hash** for the currently selected candidate;
 - collected and marked shader counts plus **Clear marked** for the current shader stage;
-- **Recollect**, which starts a fresh collection for pixel, vertex and compute shaders while preserving the current marked hashes;
+- **Rescan**, which starts a fresh collection for pixel, vertex and compute shaders while preserving the current marked hashes;
 - a render-target preview below the settings pane. On Vulkan the hunted draw is still suppressed safely, while the preview copy is deferred to a legal render-pass boundary rather than copied from inside the active draw pass. The preview reports the selected hash, shader stage, target dimensions/format and an explicit reason when the image cannot be copied safely.
 
 The traditional defaults remain available for pixel and vertex shader hunting:
@@ -128,7 +132,7 @@ The traditional defaults remain available for pixel and vertex shader hunting:
 - `Numpad 6`: add/remove the current vertex shader from the group.
 - `Ctrl + Numpad 4` / `Ctrl + Numpad 5`: browse marked vertex shaders.
 
-All hunting shortcuts are configurable under **Shader hunting keybindings**, making shader hunting practical on laptops and compact keyboards. Compute-shader hunting is also configurable but deliberately has no default shortcut. Shortcut matching uses the exact configured Ctrl/Shift/Alt modifiers, so a plain key does not also fire when a modified version is pressed.
+All hunting shortcuts are configurable under **Shader hunting keybindings**, including optional Mark + Previous/Next bindings, making shader hunting practical on laptops and compact keyboards. The hunting pane is responsive with a 540 px preferred width, uses a second hash column automatically for large filtered result sets when space permits, and retains its width together with search text, filter mode, selected shader stage and preview channel while the current REST session remains open. Compute-shader hunting is also configurable but deliberately has no default shortcut. Shortcut matching uses the exact configured Ctrl/Shift/Alt modifiers, so a plain key does not also fire when a modified version is pressed.
 
 Use the group's **Active** checkbox or assigned hotkey while testing. When finished, click **Done** and **Save changes**.
 
@@ -154,7 +158,7 @@ See [Release Process](docs/RELEASING.md) for the release checklist and packaging
 
 ## Credits
 
-- [alex / 4lex4nder](https://github.com/4lex4nder) - ReshadeEffectShaderToggler development.
+- [alex / 4lex4nder](https://github.com/4lex4nder) - ReShade Effect Shader Toggler development.
 - **DeViLhoOD** - Automatic Scene Colour, Vulkan safe-boundary injection and previews, shader-hunting stability improvements, DLSS/upscaled rendering support, x86/x64 hardening, QoL workflow improvements, documentation and testing.
 - [Frans Bouma](https://github.com/FransBouma) - original ShaderToggler.
 - [Sinom](https://github.com/sinomsinom) - contributor.

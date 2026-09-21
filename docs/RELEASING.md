@@ -97,10 +97,10 @@ For Vulkan changes, validate a representative Vulkan title with Auto Scene Colou
    - End/begin callbacks for subpass transitions must not trigger effects or preview copies. A real later barrier must establish pass completion.
 9. **Rapid hunting navigation**
    - Alternate Prev/Next rapidly for a sustained period across targets with different dimensions/formats.
-   - Exercise marked navigation, Recollect, Done and reopening Settings.
+   - Exercise marked navigation, Rescan, Done and reopening Settings.
    - Confirm no crash/device loss, valid preview status and stable committed Auto injection afterward.
 
-For v1.6.0.633 the user confirmed BG3 Vulkan native staging, the post-pass Before Fog boundary without flicker, and stability after the rapid-navigation fixes. This release task does not claim a fresh DX11, same-resolution Vulkan or x86 in-game test. Automated architecture checks cover both x86 and x64 binaries.
+For v1.6.1.633 the user confirmed BG3 Vulkan native staging and post-pass Before Fog injection remained correct while exercising the updated hunting UI, deterministic Prev/Next ordering, repeated held navigation across many shaders and preview targets, with no observed crash/device loss after the Vulkan preview-lifetime fix. This release task does not claim a fresh DX11, same-resolution Vulkan or x86 in-game test. Automated architecture checks cover both x86 and x64 binaries.
 
 For API-specific changes, verify in a representative title that Auto Scene Colour is clickable, the live scene/effect resolutions are reported correctly, native staging activates only when needed, and the effect remains at the intended shader boundary.
 
@@ -120,11 +120,15 @@ Legacy game-specific hooks may be architecture-specific. The FFXIV constant-copy
 
 ## Creating a release
 
-Create and push a tag from the desired `main` commit:
+For a release PR, commit the matching `src/version.h`, changelog entry and `docs/releases/vMAJOR.MINOR.PATCH.RESHADE.md`, then merge it into `main` with the merge commit title:
 
-`v1.6.0.633`
+`Release vMAJOR.MINOR.PATCH.RESHADE`
 
-The **Release** workflow will then:
+The guarded **Tag Release** workflow reads the committed source version, verifies the matching release-notes file, creates that tag on the merge commit and explicitly dispatches the **Release** workflow at that tag. Ordinary pushes do not create tags.
+
+A tag may still be created manually from the desired `main` commit when needed.
+
+The tag-driven **Release** workflow will then:
 
 1. validate the tag format;
 2. stamp `src/version.h` from the tag inside the build runner;

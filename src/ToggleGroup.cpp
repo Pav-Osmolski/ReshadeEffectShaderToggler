@@ -1,6 +1,6 @@
 ///////////////////////////////////////////////////////////////////////
 //
-// Part of ShaderToggler, a shader toggler add on for Reshade 5+ which allows you
+// Part of ShaderToggler, a shader toggler add on for ReShade 5+ which allows you
 // to define groups of shaders to toggle them on/off with one key press
 //
 // (c) Frans 'Otis_Inf' Bouma.
@@ -150,6 +150,7 @@ ToggleGroup::ToggleGroup(const ToggleGroup& other)
     _renderSrvDescIndex = other._renderSrvDescIndex;
     _renderSrvShaderStage = other._renderSrvShaderStage;
     _renderSrvSlotIndex = other._renderSrvSlotIndex;
+    _configDirtyFlag = other._configDirtyFlag;
 }
 
 
@@ -251,19 +252,15 @@ GroupResource& ToggleGroup::GetGroupResource(GroupResourceType type) {
 void ToggleGroup::storeCollectedHashes(const unordered_set<uint32_t> pixelShaderHashes,
                                        const unordered_set<uint32_t> vertexShaderHashes,
                                        const unordered_set<uint32_t> computeShaderHashes) {
-    _vertexShaderHashes.clear();
-    _pixelShaderHashes.clear();
-    _computeShaderHashes.clear();
+    if (_pixelShaderHashes == pixelShaderHashes &&
+        _vertexShaderHashes == vertexShaderHashes &&
+        _computeShaderHashes == computeShaderHashes)
+        return;
 
-    for (const auto hash : vertexShaderHashes) {
-        _vertexShaderHashes.emplace(hash);
-    }
-    for (const auto hash : pixelShaderHashes) {
-        _pixelShaderHashes.emplace(hash);
-    }
-    for (const auto hash : computeShaderHashes) {
-        _computeShaderHashes.emplace(hash);
-    }
+    _pixelShaderHashes = pixelShaderHashes;
+    _vertexShaderHashes = vertexShaderHashes;
+    _computeShaderHashes = computeShaderHashes;
+    markConfigDirty();
 }
 
 bool ToggleGroup::isBlockedVertexShader(uint32_t shaderHash) const {
@@ -285,22 +282,22 @@ void ToggleGroup::clearHashes() {
 }
 
 void ToggleGroup::setName(string newName) {
-    if (newName.size() <= 0) {
+    if (newName.empty() || _name == newName)
         return;
-    }
-    _name = newName;
+    _name = std::move(newName);
+    markConfigDirty();
 }
 
 bool ToggleGroup::SetVarMapping(uintptr_t offset, string& variable, bool prev) {
-    _varOffsetMapping.emplace(variable, make_tuple(offset, prev));
-
-    return true; // do some sanity checking?
+    const auto [it, inserted] = _varOffsetMapping.insert_or_assign(variable, make_tuple(offset, prev));
+    markConfigDirty();
+    return true;
 }
 
 bool ToggleGroup::RemoveVarMapping(string& variable) {
-    _varOffsetMapping.erase(variable);
-
-    return true; // do some sanity checking?
+    if (_varOffsetMapping.erase(variable) > 0)
+        markConfigDirty();
+    return true;
 }
 
 void ToggleGroup::saveState(CDataFile& iniFile, int groupCounter) const {

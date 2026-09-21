@@ -1,6 +1,6 @@
 ///////////////////////////////////////////////////////////////////////
 //
-// Part of ShaderToggler, a shader toggler add on for Reshade 5+ which allows you
+// Part of ShaderToggler, a shader toggler add on for ReShade 5+ which allows you
 // to define groups of shaders to toggle them on/off with one key press
 //
 // (c) Frans 'Otis_Inf' Bouma.
@@ -31,8 +31,12 @@
 /////////////////////////////////////////////////////////////////////////
 #pragma once
 
+#include <algorithm>
 #include <array>
+#include <atomic>
+#include <deque>
 #include <functional>
+#include <mutex>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -83,6 +87,18 @@ enum class GroupResourceState : uint32_t {
 
 constexpr uint32_t GroupResourceTypeCount = 4;
 
+struct AutoDiagnosticEntry {
+    uint64_t candidateId = 0;
+    uint32_t shaderHash = 0;
+    std::string status;
+    uint64_t target = 0;
+    uint32_t sceneWidth = 0;
+    uint32_t sceneHeight = 0;
+    std::string format;
+    std::string boundary;
+    uint64_t successfulRenders = 0;
+};
+
 struct __declspec(novtable) GroupResource final {
     reshade::api::resource res;
     reshade::api::format view_format;
@@ -107,7 +123,7 @@ class ToggleGroup {
 
     static int getNewGroupId();
 
-    void setToggleKey(uint32_t keybind) { _keybind = keybind; }
+    void setToggleKey(uint32_t keybind) { if (_keybind != keybind) { _keybind = keybind; markConfigDirty(); } }
     void setName(std::string newName);
     /// <summary>
     /// Writes the shader hashes, name and toggle key to the ini file specified, using a Group + groupCounter section.
@@ -129,7 +145,7 @@ class ToggleGroup {
     bool isBlockedComputeShader(uint32_t shaderHash) const;
     void clearHashes();
 
-    void toggleActive() { _isActive = !_isActive; }
+    void toggleActive() { _isActive = !_isActive; markConfigDirty(); }
     void setEditing(bool isEditing) { _isEditing = isEditing; }
 
     uint32_t getToggleKey() const { return _keybind; }
@@ -139,43 +155,43 @@ class ToggleGroup {
     bool isEmpty() const { return _vertexShaderHashes.size() <= 0 && _pixelShaderHashes.size() <= 0; }
     int getId() const { return _id; }
     const std::unordered_set<std::string>& preferredTechniques() const { return _preferredTechniques; }
-    void setPreferredTechniques(std::unordered_set<std::string>& techniques) { _preferredTechniques = techniques; }
-    std::unordered_set<uint32_t> getPixelShaderHashes() const { return _pixelShaderHashes; }
-    std::unordered_set<uint32_t> getVertexShaderHashes() const { return _vertexShaderHashes; }
-    std::unordered_set<uint32_t> getComputeShaderHashes() const { return _computeShaderHashes; }
+    void setPreferredTechniques(const std::unordered_set<std::string>& techniques) { if (_preferredTechniques != techniques) { _preferredTechniques = techniques; markConfigDirty(); } }
+    const std::unordered_set<uint32_t>& getPixelShaderHashes() const { return _pixelShaderHashes; }
+    const std::unordered_set<uint32_t>& getVertexShaderHashes() const { return _vertexShaderHashes; }
+    const std::unordered_set<uint32_t>& getComputeShaderHashes() const { return _computeShaderHashes; }
     size_t getPixelShaderHashCount() const { return _pixelShaderHashes.size(); }
     size_t getVertexShaderHashCount() const { return _vertexShaderHashes.size(); }
     size_t getComputeShaderHashCount() const { return _computeShaderHashes.size(); }
-    void setInvocationLocation(uint32_t location) { _invocationLocation = location; }
+    void setInvocationLocation(uint32_t location) { if (_invocationLocation != location) { _invocationLocation = location; markConfigDirty(); } }
     uint32_t getInvocationLocation() const { return _invocationLocation; }
-    void setBindingInvocationLocation(uint32_t location) { _bindingInvocationLocation = location; }
+    void setBindingInvocationLocation(uint32_t location) { if (_bindingInvocationLocation != location) { _bindingInvocationLocation = location; markConfigDirty(); } }
     uint32_t getBindingInvocationLocation() const { return _bindingInvocationLocation; }
-    void setCBSlotIndex(uint32_t index) { _cbSlotIndex = index; }
+    void setCBSlotIndex(uint32_t index) { if (_cbSlotIndex != index) { _cbSlotIndex = index; markConfigDirty(); } }
     uint32_t getCBSlotIndex() const { return _cbSlotIndex; }
-    void setCBDescriptorIndex(uint32_t index) { _cbDescIndex = index; }
+    void setCBDescriptorIndex(uint32_t index) { if (_cbDescIndex != index) { _cbDescIndex = index; markConfigDirty(); } }
     uint32_t getCBDescriptorIndex() const { return _cbDescIndex; }
     bool getCBIsPushMode() const { return _cbModePush; }
-    void setCBIsPushMode(bool isPushMode) { _cbModePush = isPushMode; }
-    void setRenderTargetIndex(uint32_t index) { _rtIndex = index; }
+    void setCBIsPushMode(bool isPushMode) { if (_cbModePush != isPushMode) { _cbModePush = isPushMode; markConfigDirty(); } }
+    void setRenderTargetIndex(uint32_t index) { if (_rtIndex != index) { _rtIndex = index; markConfigDirty(); } }
     uint32_t getRenderTargetIndex() const { return _rtIndex; }
     bool isProvidingTextureBinding() const { return _isProvidingTextureBinding; }
-    void setProvidingTextureBinding(bool isProvidingTextureBinding) { _isProvidingTextureBinding = isProvidingTextureBinding; }
+    void setProvidingTextureBinding(bool value) { if (_isProvidingTextureBinding != value) { _isProvidingTextureBinding = value; markConfigDirty(); } }
     const std::string& getTextureBindingName() const { return _textureBindingName; }
-    void setTextureBindingName(std::string textureBindingName) { _textureBindingName = textureBindingName; }
+    void setTextureBindingName(std::string value) { if (_textureBindingName != value) { _textureBindingName = std::move(value); markConfigDirty(); } }
     bool getClearBindings() { return _clearBindings; }
-    void setClearBindings(bool clear) { _clearBindings = clear; }
+    void setClearBindings(bool clear) { if (_clearBindings != clear) { _clearBindings = clear; markConfigDirty(); } }
     bool getAllowAllTechniques() const { return _allowAllTechniques; }
-    void setAllowAllTechniques(bool allowAllTechniques) { _allowAllTechniques = allowAllTechniques; }
+    void setAllowAllTechniques(bool value) { if (_allowAllTechniques != value) { _allowAllTechniques = value; markConfigDirty(); } }
     bool getExtractConstants() const { return _extractConstants; }
-    void setExtractConstant(bool extract) { _extractConstants = extract; }
+    void setExtractConstant(bool extract) { if (_extractConstants != extract) { _extractConstants = extract; markConfigDirty(); } }
     uint32_t getCBShaderStage() const { return _cbShaderStage; }
-    void setCBShaderStage(uint32_t shaderStage) { _cbShaderStage = shaderStage; }
+    void setCBShaderStage(uint32_t value) { if (_cbShaderStage != value) { _cbShaderStage = value; markConfigDirty(); } }
     bool getExtractResourceViews() const { return _extractResourceViews; }
-    void setExtractResourceViews(bool extract) { _extractResourceViews = extract; }
+    void setExtractResourceViews(bool extract) { if (_extractResourceViews != extract) { _extractResourceViews = extract; markConfigDirty(); } }
     bool getRenderToResourceViews() const { return _renderToResourceViews; }
-    void setRenderToResourceViews(bool render) { _renderToResourceViews = render; }
+    void setRenderToResourceViews(bool render) { if (_renderToResourceViews != render) { _renderToResourceViews = render; markConfigDirty(); } }
     bool getAutoRenderSRV() const { return _autoRenderSRV; }
-    void setAutoRenderSRV(bool autoRender) { _autoRenderSRV = autoRender; }
+    void setAutoRenderSRV(bool value) { if (_autoRenderSRV != value) { _autoRenderSRV = value; markConfigDirty(); } }
     bool isAutoSceneColourActive(reshade::api::device_api api) const {
         return _autoRenderSRV && IsAutoSceneColourSupported(api);
     }
@@ -190,10 +206,16 @@ class ToggleGroup {
     bool getDebugNativeStaging() const { return _debugNativeStaging; }
     const std::string& getDebugLastTechniqueOrder() const { return _debugLastTechniqueOrder; }
     const std::string& getDebugLastVulkanBoundary() const { return _debugLastVulkanBoundary; }
-    void setDebugLastVulkanBoundary(const std::string& boundary) { _debugLastVulkanBoundary = boundary; }
+    void setDebugLastVulkanBoundary(const std::string& boundary) {
+        _debugLastVulkanBoundary = boundary;
+        updateDebugCandidate(_debugAutoStatus, boundary);
+    }
 
     const std::string& getDebugAutoStatus() const { return _debugAutoStatus; }
-    void setDebugAutoStatus(const std::string& status) { _debugAutoStatus = status; }
+    void setDebugAutoStatus(const std::string& status) {
+        _debugAutoStatus = status;
+        updateDebugCandidate(status);
+    }
     uint64_t getDebugCurrentTarget() const { return _debugCurrentTarget; }
     uint32_t getDebugCurrentSceneWidth() const { return _debugCurrentSceneWidth; }
     uint32_t getDebugCurrentSceneHeight() const { return _debugCurrentSceneHeight; }
@@ -215,6 +237,12 @@ class ToggleGroup {
         _debugCurrentSceneWidth = 0;
         _debugCurrentSceneHeight = 0;
         _debugCurrentFormat.clear();
+        _debugCurrentShaderHash = 0;
+        {
+            std::lock_guard lock(*_debugHistoryMutex);
+            _debugAutoHistory.clear();
+            _debugHistorySequence = 0;
+        }
 
         _debugEffectRenderCalls = 0;
         _debugLastRenderedTechniqueCount = 0;
@@ -245,44 +273,45 @@ class ToggleGroup {
         _debugEffectHeight = effectHeight;
         _debugNativeStaging = nativeStaging;
         _debugAutoStatus = "Successful";
+        updateDebugCandidate("Successful", {}, true);
     }
-    void setBindingSRVSlotIndex(uint32_t index) { _bindingSrvSlotIndex = index; }
+    void setBindingSRVSlotIndex(uint32_t index) { if (_bindingSrvSlotIndex != index) { _bindingSrvSlotIndex = index; markConfigDirty(); } }
     uint32_t getBindingSRVSlotIndex() const { return _bindingSrvSlotIndex; }
-    void setRenderSRVSlotIndex(uint32_t index) { _renderSrvSlotIndex = index; }
+    void setRenderSRVSlotIndex(uint32_t index) { if (_renderSrvSlotIndex != index) { _renderSrvSlotIndex = index; markConfigDirty(); } }
     uint32_t getRenderSRVSlotIndex() const { return _renderSrvSlotIndex; }
-    void setBindingSRVDescriptorIndex(uint32_t index) { _bindingSrvDescIndex = index; }
+    void setBindingSRVDescriptorIndex(uint32_t index) { if (_bindingSrvDescIndex != index) { _bindingSrvDescIndex = index; markConfigDirty(); } }
     uint32_t getBindingSRVDescriptorIndex() const { return _bindingSrvDescIndex; }
-    void setRenderSRVDescriptorIndex(uint32_t index) { _renderSrvDescIndex = index; }
+    void setRenderSRVDescriptorIndex(uint32_t index) { if (_renderSrvDescIndex != index) { _renderSrvDescIndex = index; markConfigDirty(); } }
     uint32_t getRenderSRVDescriptorIndex() const { return _renderSrvDescIndex; }
     uint32_t getSRVShaderStage() const { return _bindingSrvShaderStage; }
-    void setSRVShaderStage(uint32_t shaderStage) { _bindingSrvShaderStage = shaderStage; }
+    void setSRVShaderStage(uint32_t value) { if (_bindingSrvShaderStage != value) { _bindingSrvShaderStage = value; markConfigDirty(); } }
     uint32_t getRenderSRVShaderStage() const { return _renderSrvShaderStage; }
-    void setRenderSRVShaderStage(uint32_t shaderStage) { _renderSrvShaderStage = shaderStage; }
-    void setBindingRenderTargetIndex(uint32_t index) { _bindingRTIndex = index; }
+    void setRenderSRVShaderStage(uint32_t value) { if (_renderSrvShaderStage != value) { _renderSrvShaderStage = value; markConfigDirty(); } }
+    void setBindingRenderTargetIndex(uint32_t index) { if (_bindingRTIndex != index) { _bindingRTIndex = index; markConfigDirty(); } }
     uint32_t getBindingRenderTargetIndex() const { return _bindingRTIndex; }
     bool getHasTechniqueExceptions() const { return _hasTechniqueExceptions; }
-    void setHasTechniqueExceptions(bool exceptions) { _hasTechniqueExceptions = exceptions; }
+    void setHasTechniqueExceptions(bool value) { if (_hasTechniqueExceptions != value) { _hasTechniqueExceptions = value; markConfigDirty(); } }
     uint32_t getMatchSwapchainResolution() const { return _matchSwapchainResolution; }
-    void setMatchSwapchainResolution(uint32_t match) { _matchSwapchainResolution = match; }
+    void setMatchSwapchainResolution(uint32_t value) { if (_matchSwapchainResolution != value) { _matchSwapchainResolution = value; markConfigDirty(); } }
     uint32_t getBindingMatchSwapchainResolution() const { return _bindingMatchSwapchainResolution; }
-    void setBindingMatchSwapchainResolution(uint32_t match) { _bindingMatchSwapchainResolution = match; }
+    void setBindingMatchSwapchainResolution(uint32_t value) { if (_bindingMatchSwapchainResolution != value) { _bindingMatchSwapchainResolution = value; markConfigDirty(); } }
     bool getRequeueAfterRTMatchingFailure() const { return _requeueAfterRTMatchingFailure; }
-    void setRequeueAfterRTMatchingFailure(bool requeue) { _requeueAfterRTMatchingFailure = requeue; }
+    void setRequeueAfterRTMatchingFailure(bool value) { if (_requeueAfterRTMatchingFailure != value) { _requeueAfterRTMatchingFailure = value; markConfigDirty(); } }
     bool getCopyTextureBinding() const { return _copyTextureBinding; }
-    void setCopyTextureBinding(bool copy) { _copyTextureBinding = copy; }
+    void setCopyTextureBinding(bool value) { if (_copyTextureBinding != value) { _copyTextureBinding = value; markConfigDirty(); } }
     const std::unordered_map<std::string, std::tuple<uintptr_t, bool>>& GetVarOffsetMapping() const { return _varOffsetMapping; }
     bool SetVarMapping(uintptr_t, std::string&, bool);
     bool RemoveVarMapping(std::string&);
     bool getClearPreviewAlpha() const { return _previewClearAlpha; }
-    void setClearPreviewAlpha(bool previewClearAlpha) { _previewClearAlpha = previewClearAlpha; }
+    void setClearPreviewAlpha(bool value) { if (_previewClearAlpha != value) { _previewClearAlpha = value; markConfigDirty(); } }
     bool getToneMap() const { return _tonemapHDRtoSDRtoHDR; }
-    void setToneMap(bool tonemap) { _tonemapHDRtoSDRtoHDR = tonemap; }
+    void setToneMap(bool value) { if (_tonemapHDRtoSDRtoHDR != value) { _tonemapHDRtoSDRtoHDR = value; markConfigDirty(); } }
     bool getPreserveAlpha() const { return _preserveAlpha; }
-    void setPreserveAlpha(bool alpha) { _preserveAlpha = alpha; }
+    void setPreserveAlpha(bool value) { if (_preserveAlpha != value) { _preserveAlpha = value; markConfigDirty(); } }
     bool getFlipBuffer() const { return _flipBuffer; }
-    void setFlipBuffer(bool flip) { _flipBuffer = flip; }
+    void setFlipBuffer(bool value) { if (_flipBuffer != value) { _flipBuffer = value; markConfigDirty(); } }
     bool getFlipBufferBinding() const { return _flipBufferBinding; }
-    void setFlipBufferBinding(bool flip) { _flipBufferBinding = flip; }
+    void setFlipBufferBinding(bool value) { if (_flipBufferBinding != value) { _flipBufferBinding = value; markConfigDirty(); } }
     void dispatchCBCycle(DescriptorCycle cycle) { _cbCycle = cycle; }
     DescriptorCycle consumeCBCycle() {
         DescriptorCycle ret = _cbCycle;
@@ -306,6 +335,13 @@ class ToggleGroup {
 
     bool operator==(const ToggleGroup& rhs) { return getId() == rhs.getId(); }
 
+    void SetConfigDirtyFlag(std::atomic_bool* flag) { _configDirtyFlag = flag; }
+    void setDebugCurrentShaderHash(uint32_t hash) { _debugCurrentShaderHash = hash; }
+    std::vector<AutoDiagnosticEntry> getDebugAutoHistory() const {
+        std::lock_guard lock(*_debugHistoryMutex);
+        return { _debugAutoHistory.begin(), _debugAutoHistory.end() };
+    }
+
     bool AlphaEnabled() { return _preserveAlpha; }
     bool AlphaClear() { return false; }
     bool BindingEnabled() { return _isProvidingTextureBinding && _copyTextureBinding; }
@@ -314,6 +350,55 @@ class ToggleGroup {
     const std::unordered_set<EffectData*>& GetPreferredTechniqueData();
 
   private:
+    void markConfigDirty() const {
+        if (_configDirtyFlag != nullptr)
+            _configDirtyFlag->store(true, std::memory_order_release);
+    }
+    void updateDebugCandidate(const std::string& status,
+                              const std::string& boundary = {},
+                              bool successfulRender = false) {
+        std::lock_guard lock(*_debugHistoryMutex);
+
+        auto it = std::find_if(_debugAutoHistory.begin(), _debugAutoHistory.end(), [this](const AutoDiagnosticEntry& entry) {
+            return entry.shaderHash == _debugCurrentShaderHash &&
+                   entry.target == _debugCurrentTarget &&
+                   entry.sceneWidth == _debugCurrentSceneWidth &&
+                   entry.sceneHeight == _debugCurrentSceneHeight &&
+                   entry.format == _debugCurrentFormat;
+        });
+
+        if (it != _debugAutoHistory.end()) {
+            AutoDiagnosticEntry updated = *it;
+            updated.status = status;
+            if (!boundary.empty())
+                updated.boundary = boundary;
+            if (successfulRender)
+                ++updated.successfulRenders;
+
+            // Keep the most recently active candidate at the back without changing
+            // its candidate number.
+            _debugAutoHistory.erase(it);
+            _debugAutoHistory.push_back(std::move(updated));
+            return;
+        }
+
+        AutoDiagnosticEntry entry;
+        entry.candidateId = ++_debugHistorySequence;
+        entry.shaderHash = _debugCurrentShaderHash;
+        entry.status = status;
+        entry.target = _debugCurrentTarget;
+        entry.sceneWidth = _debugCurrentSceneWidth;
+        entry.sceneHeight = _debugCurrentSceneHeight;
+        entry.format = _debugCurrentFormat;
+        entry.boundary = boundary;
+        entry.successfulRenders = successfulRender ? 1 : 0;
+        _debugAutoHistory.push_back(std::move(entry));
+
+        while (_debugAutoHistory.size() > 8)
+            _debugAutoHistory.pop_front();
+    }
+
+    std::atomic_bool* _configDirtyFlag = nullptr;
     int _id;
     std::string _name;
     uint32_t _keybind;
@@ -356,6 +441,10 @@ class ToggleGroup {
     uint32_t _debugCurrentSceneWidth = 0;
     uint32_t _debugCurrentSceneHeight = 0;
     std::string _debugCurrentFormat;
+    uint32_t _debugCurrentShaderHash = 0;
+    mutable std::shared_ptr<std::mutex> _debugHistoryMutex = std::make_shared<std::mutex>();
+    std::deque<AutoDiagnosticEntry> _debugAutoHistory;
+    uint64_t _debugHistorySequence = 0;
     bool _extractConstants;
     bool _extractResourceViews;
     volatile bool _clearBindings;

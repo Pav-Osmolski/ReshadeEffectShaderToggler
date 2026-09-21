@@ -77,13 +77,13 @@ BEGIN
     BEGIN
         BLOCK "040004b0"
         BEGIN
-            VALUE "CompanyName", "alex"
-            VALUE "FileDescription", "ReshadeEffectShaderToggler Addon for ReShade"
+            VALUE "CompanyName", "alex / DeViLhoOD"
+            VALUE "FileDescription", "ReShade Effect Shader Toggler add-on for ReShade"
             VALUE "FileVersion", REST_VERSION_STRING
             VALUE "InternalName", "ShaderTo.dll"
             VALUE "LegalCopyright", "Copyright (C) 2022 Frans Bouma, Copyright (C) 2024 alex"
             VALUE "OriginalFilename", "ShaderTo.dll"
-            VALUE "ProductName", "Reshade Effect Shader Toggler addon for ReShade"
+            VALUE "ProductName", "ReShade Effect Shader Toggler add-on for ReShade"
             VALUE "ProductVersion", REST_VERSION_STRING
         END
     END
