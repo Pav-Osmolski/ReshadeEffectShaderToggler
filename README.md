@@ -120,7 +120,7 @@ Click **Settings** on the group, then **Start shader hunting**. REST first colle
 - **Mark + Prev / Mark + Next** controls and optional shortcuts for rapidly classifying candidates;
 - **Copy hash** for the currently selected candidate;
 - collected and marked shader counts plus **Clear marked** for the current shader stage;
-- **Recollect**, which starts a fresh collection for pixel, vertex and compute shaders while preserving the current marked hashes;
+- **Rescan**, which starts a fresh collection for pixel, vertex and compute shaders while preserving the current marked hashes;
 - a render-target preview below the settings pane. On Vulkan the hunted draw is still suppressed safely, while the preview copy is deferred to a legal render-pass boundary rather than copied from inside the active draw pass. The preview reports the selected hash, shader stage, target dimensions/format and an explicit reason when the image cannot be copied safely.
 
 The traditional defaults remain available for pixel and vertex shader hunting:
