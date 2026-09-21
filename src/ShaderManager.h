@@ -100,6 +100,7 @@ class ShaderManager {
         return _collectedActiveShaderHashes;
     }
     void setActivedHuntedShaderIndex(uint32_t index);
+    bool setActiveHuntedShaderHash(uint32_t hash);
     size_t getAmountShaderHashesCollected() const {
         std::shared_lock lock(_collectedActiveHandlesMutex);
         return _collectedActiveShaderHashes.size();
