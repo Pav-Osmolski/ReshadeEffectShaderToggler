@@ -227,6 +227,9 @@ const ResourceViewData RenderingManager::GetCurrentResourceView(command_list* cm
           descIndex == 1 ? commandListData.vs.activeShaderHash :
                            commandListData.cs.activeShaderHash;
         group->setDebugCurrentShaderHash(currentShaderHash);
+        // Clear the previous target before resolving this draw so a no-target
+        // diagnostic cannot be grouped under stale dimensions/handles.
+        group->recordDebugAutoTarget(0, 0, 0, {});
     }
 
     // Automatic scene colour targets the primary live render target bound at the
