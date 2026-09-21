@@ -31,6 +31,7 @@
 /////////////////////////////////////////////////////////////////////////
 
 #include "ShaderManager.h"
+#include <algorithm>
 
 using namespace reshade::api;
 using namespace std;
