@@ -490,9 +490,9 @@ void AddonUIData::StartShaderEditing(ToggleGroup& groupEditing)
     _vertexShaderManager->startHuntingMode(groupEditing.getVertexShaderHashes());
     _computeShaderManager->startHuntingMode(groupEditing.getComputeShaderHashes());
 
-    // after copying them to the managers, we can now clear the group's shader.
-    groupEditing.clearHashes();
-
+    // Keep the committed group hashes intact while hunting. UpdateToggleGroupsForShaderHashes()
+    // already substitutes the currently hunted shader for this group, so clearing the
+    // committed hashes is unnecessary and would make an unchanged Done operation appear dirty.
     UpdateToggleGroupsForShaderHashes();
 }
 
