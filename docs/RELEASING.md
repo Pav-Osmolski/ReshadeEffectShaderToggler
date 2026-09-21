@@ -124,7 +124,7 @@ For a release PR, commit the matching `src/version.h`, changelog entry and `docs
 
 `Release vMAJOR.MINOR.PATCH.RESHADE`
 
-The guarded **Tag Release** workflow reads the committed source version, verifies the matching release-notes file and creates that tag on the merge commit. Ordinary pushes do not create tags.
+The guarded **Tag Release** workflow reads the committed source version, verifies the matching release-notes file, creates that tag on the merge commit and explicitly dispatches the **Release** workflow at that tag. Ordinary pushes do not create tags.
 
 A tag may still be created manually from the desired `main` commit when needed.
 
