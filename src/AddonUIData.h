@@ -50,6 +50,7 @@ struct HuntingUIState {
     int filterMode = 0;
     uint32_t selectedShaderType = 0;
     int previewChannel = 0;
+    float shaderPaneWidth = 540.0f;
 };
 
 namespace AddonImGui {
