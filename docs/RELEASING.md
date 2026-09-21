@@ -120,11 +120,15 @@ Legacy game-specific hooks may be architecture-specific. The FFXIV constant-copy
 
 ## Creating a release
 
-Create and push a tag from the desired `main` commit:
+For a release PR, commit the matching `src/version.h`, changelog entry and `docs/releases/vMAJOR.MINOR.PATCH.RESHADE.md`, then merge it into `main` with the merge commit title:
 
-`v1.6.0.633`
+`Release vMAJOR.MINOR.PATCH.RESHADE`
 
-The **Release** workflow will then:
+The guarded **Tag Release** workflow reads the committed source version, verifies the matching release-notes file and creates that tag on the merge commit. Ordinary pushes do not create tags.
+
+A tag may still be created manually from the desired `main` commit when needed.
+
+The tag-driven **Release** workflow will then:
 
 1. validate the tag format;
 2. stamp `src/version.h` from the tag inside the build runner;
