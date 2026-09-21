@@ -61,7 +61,11 @@ void ShaderManager::removeHandle(uint64_t handle) {
 
     {
         unique_lock lock(_collectedActiveHandlesMutex);
-        _collectedActiveShaderHashes.erase(shaderHash);
+        if (_collectedActiveShaderHashes.erase(shaderHash) > 0) {
+            const auto orderIt = std::find(_collectedActiveShaderOrder.begin(), _collectedActiveShaderOrder.end(), shaderHash);
+            if (orderIt != _collectedActiveShaderOrder.end())
+                _collectedActiveShaderOrder.erase(orderIt);
+        }
     }
 }
 
@@ -82,6 +86,7 @@ void ShaderManager::startHuntingMode(const unordered_set<uint32_t> currentMarked
     {
         unique_lock lock(_collectedActiveHandlesMutex);
         _collectedActiveShaderHashes.clear(); // clear it so we start with a clean slate
+        _collectedActiveShaderOrder.clear();
     }
 }
 
@@ -203,17 +208,13 @@ bool ShaderManager::setActiveHuntedShaderHash(uint32_t hash) {
         return false;
 
     std::shared_lock lock(_collectedActiveHandlesMutex);
-    int32_t index = 0;
-    for (const uint32_t collectedHash : _collectedActiveShaderHashes) {
-        if (collectedHash == hash) {
-            _activeHuntedShaderIndex = index;
-            _activeHuntedShaderHash.store(hash, memory_order_release);
-            return true;
-        }
-        ++index;
-    }
+    const auto it = std::find(_collectedActiveShaderOrder.begin(), _collectedActiveShaderOrder.end(), hash);
+    if (it == _collectedActiveShaderOrder.end())
+        return false;
 
-    return false;
+    _activeHuntedShaderIndex = static_cast<int32_t>(std::distance(_collectedActiveShaderOrder.begin(), it));
+    _activeHuntedShaderHash.store(hash, memory_order_release);
+    return true;
 }
 
 bool ShaderManager::isBlockedShader(uint32_t shaderHash) {
@@ -235,7 +236,9 @@ void ShaderManager::addActivePipelineHandle(uint64_t handle) {
     const auto shaderHash = getShaderHash(handle);
     if (shaderHash > 0) {
         unique_lock lock(_collectedActiveHandlesMutex);
-        _collectedActiveShaderHashes.emplace(shaderHash);
+        const auto [_, inserted] = _collectedActiveShaderHashes.emplace(shaderHash);
+        if (inserted)
+            _collectedActiveShaderOrder.push_back(shaderHash);
     }
 }
 
