@@ -9,6 +9,7 @@ on:
       - "docs/releases/**"
 
 permissions:
+  actions: write
   contents: write
 
 jobs:
@@ -25,6 +26,7 @@ jobs:
         shell: bash
         env:
           COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
 
@@ -45,12 +47,20 @@ jobs:
             exit 1
           fi
 
-          if git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null 2>&1; then
-            echo "${tag} already exists; nothing to do."
+          if ! git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null 2>&1; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag "${tag}" "${GITHUB_SHA}"
+            git push origin "${tag}"
+          else
+            echo "${tag} already exists."
+          fi
+
+          if gh release view "${tag}" >/dev/null 2>&1; then
+            echo "Release ${tag} already exists; nothing to publish."
             exit 0
           fi
 
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag "${tag}" "${GITHUB_SHA}"
-          git push origin "${tag}"
+          # Tag pushes made with GITHUB_TOKEN do not start another workflow run,
+          # so explicitly dispatch the validated tag-driven publisher at this tag.
+          gh workflow run release.yml --ref "${tag}"
