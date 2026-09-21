@@ -4,6 +4,8 @@
 
 ### QoL and configuration safety
 
+- Fixes hash-list clicks selecting a different shader when the responsive two-column view is active by resolving UI selections directly by hash rather than copied unordered-set index.
+
 - Keeps committed shader hashes intact while hunting so finishing an unchanged hunt is a true no-op and does not falsely mark the configuration dirty.
 
 - Saves configuration through a verified temporary file, refreshes `ReshadeEffectShaderToggler.ini.bak` and atomically replaces the live INI; adds `ConfigVersion` for future migrations.
