@@ -198,6 +198,24 @@ void ShaderManager::setActivedHuntedShaderIndex(uint32_t index) {
     setActiveHuntedShaderHandle();
 }
 
+bool ShaderManager::setActiveHuntedShaderHash(uint32_t hash) {
+    if (!_isInHuntingMode.load(memory_order_acquire) || hash == 0)
+        return false;
+
+    std::shared_lock lock(_collectedActiveHandlesMutex);
+    int32_t index = 0;
+    for (const uint32_t collectedHash : _collectedActiveShaderHashes) {
+        if (collectedHash == hash) {
+            _activeHuntedShaderIndex = index;
+            _activeHuntedShaderHash.store(hash, memory_order_release);
+            return true;
+        }
+        ++index;
+    }
+
+    return false;
+}
+
 bool ShaderManager::isBlockedShader(uint32_t shaderHash) {
     bool toReturn = false;
     if (_isInHuntingMode.load(memory_order_acquire)) {
