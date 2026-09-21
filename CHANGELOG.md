@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.6.1.633 — 2026-09-21
 
 ### QoL and configuration safety
 
