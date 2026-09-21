@@ -268,7 +268,13 @@ void ResourceManager::CheckPreview(reshade::api::command_list* cmd_list, reshade
             (deviceData.resourceManagerData.preview_res[0] != 0 || deviceData.resourceManagerData.preview_res[1] != 0) &&
             deviceData.current_runtime != nullptr &&
             deviceData.current_runtime->get_command_queue() != nullptr) {
-            deviceData.current_runtime->get_command_queue()->wait_idle();
+            // The ReShade overlay is drawn before the reshade_present event and may
+            // have already recorded sampling commands for the current preview image
+            // on the immediate command list. Submit those first, then wait for all
+            // GPU references to retire before destroying the image.
+            command_queue* queue = deviceData.current_runtime->get_command_queue();
+            queue->flush_immediate_command_list();
+            queue->wait_idle();
         }
 
         DisposePreview(device);
