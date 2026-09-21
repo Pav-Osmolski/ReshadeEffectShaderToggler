@@ -118,7 +118,7 @@ Last-success diagnostics include:
 - **Last successful techniques** - technique count and execution order.
 - **Successful renders** - successful effect-render count for the currently committed shader set.
 - **Copy diagnostics** - copies both sections in a support-ready block.
-- **Recent attempts** - keeps the eight most recent distinct target/status attempts in memory, including shader hash, target, resolution/format and the successful Vulkan boundary when available.
+- **Recent candidates** - keeps the eight most recently active distinct shader/target candidates in memory. Repeated Waiting/Matched/Successful transitions update the same candidate entry instead of creating a new numbered row, and successful renders are counted per candidate. Entries include shader hash, target, resolution/format and the successful Vulkan boundary when available.
 
 Committing a new shader set resets the diagnostic history, so values from a previous candidate are not carried into the next test.
 
