@@ -17,6 +17,10 @@
 - Makes the shader-hunting workspace responsive with a 540 px preferred pane, a wider default Group Settings window, structured two-row controls and an adaptive two-column hash list for large filtered result sets.
 - Adds a bounded **Recent candidates** Auto Scene Colour history that groups repeated status transitions by shader/target candidate and tracks successful render counts.
 
+### Stability
+
+- Synchronizes Vulkan preview resource replacement with the graphics queue before destroying old preview images, preventing rapid shader-hunting preview churn from invalidating in-flight GPU work and causing device loss.
+
 ### Optimisation
 
 - Returns committed shader-hash sets by const reference where snapshots are not required.
