@@ -932,7 +932,7 @@ static void DisplayGroupView(AddonImGui::AddonUIData& instance,
     ImGui::TextWrapped("Pending shader marks are applied to the group when you click Done.");
     ImGui::Separator();
 
-    const std::unordered_set<uint32_t> hashes = shaderManager->getCollectedShaderHashes();
+    const std::vector<uint32_t> hashes = shaderManager->getCollectedShaderHashesOrdered();
     const uint32_t selectedHash = shaderManager->getActiveHuntedShaderHash();
 
     std::string needle(shaderSearch);
@@ -968,9 +968,7 @@ static void DisplayGroupView(AddonImGui::AddonUIData& instance,
                           ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_ScrollY |
                             ImGuiTableFlags_NoBordersInBody,
                           ImVec2(0, listHeight))) {
-        for (const uint32_t hash : visibleHashes) {
-            ImGui::TableNextColumn();
-
+        auto drawHash = [&](uint32_t hash) {
             const bool marked = shaderManager->isHuntedShaderMarked(hash);
             const std::string hashText = std::format("{:#08x}", hash);
 
@@ -987,6 +985,30 @@ static void DisplayGroupView(AddonImGui::AddonUIData& instance,
 
             if (marked)
                 ImGui::PopStyleColor();
+        };
+
+        if (hashColumns == 1) {
+            for (const uint32_t hash : visibleHashes) {
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0);
+                drawHash(hash);
+            }
+        } else {
+            // Preserve hunting order visually: top-to-bottom in the left column,
+            // then continue at the top of the right column.
+            const size_t rows = (visibleHashes.size() + 1) / 2;
+            for (size_t row = 0; row < rows; ++row) {
+                ImGui::TableNextRow();
+
+                ImGui::TableSetColumnIndex(0);
+                drawHash(visibleHashes[row]);
+
+                const size_t rightIndex = row + rows;
+                if (rightIndex < visibleHashes.size()) {
+                    ImGui::TableSetColumnIndex(1);
+                    drawHash(visibleHashes[rightIndex]);
+                }
+            }
         }
 
         ImGui::EndTable();
