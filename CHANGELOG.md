@@ -19,7 +19,7 @@
 
 ### Stability
 
-- Synchronizes Vulkan preview resource replacement with the graphics queue before destroying old preview images, preventing rapid shader-hunting preview churn from invalidating in-flight GPU work and causing device loss.
+- Flushes ReShade's immediate command list and synchronizes the Vulkan graphics queue before replacing preview images, preventing rapid shader-hunting preview churn from destroying resources still referenced by recorded or in-flight GPU work.
 
 ### Optimisation
 
