@@ -554,16 +554,27 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
                     ImGui::SetClipboardText(diagnostics.c_str());
                 }
 
-                const auto recentAttempts = group->getDebugAutoHistory();
-                if (!recentAttempts.empty() && ImGui::TreeNode("Recent attempts")) {
-                    for (auto it = recentAttempts.rbegin(); it != recentAttempts.rend(); ++it) {
+                const auto recentCandidates = group->getDebugAutoHistory();
+                if (!recentCandidates.empty() && ImGui::TreeNode("Recent candidates")) {
+                    for (auto it = recentCandidates.rbegin(); it != recentCandidates.rend(); ++it) {
                         const auto& entry = *it;
-                        ImGui::Text("#%llu 0x%08x | %ux%u | %s",
-                                    static_cast<unsigned long long>(entry.sequence),
-                                    entry.shaderHash,
-                                    entry.sceneWidth,
-                                    entry.sceneHeight,
-                                    entry.status.empty() ? "(no status)" : entry.status.c_str());
+                        if (entry.successfulRenders > 0) {
+                            ImGui::Text("#%llu 0x%08x | %ux%u | %s | %llu renders",
+                                        static_cast<unsigned long long>(entry.candidateId),
+                                        entry.shaderHash,
+                                        entry.sceneWidth,
+                                        entry.sceneHeight,
+                                        entry.status.empty() ? "(no status)" : entry.status.c_str(),
+                                        static_cast<unsigned long long>(entry.successfulRenders));
+                        } else {
+                            ImGui::Text("#%llu 0x%08x | %ux%u | %s",
+                                        static_cast<unsigned long long>(entry.candidateId),
+                                        entry.shaderHash,
+                                        entry.sceneWidth,
+                                        entry.sceneHeight,
+                                        entry.status.empty() ? "(no status)" : entry.status.c_str());
+                        }
+
                         if (entry.target != 0) {
                             ImGui::TextDisabled("Target 0x%llx | %s%s%s",
                                                 static_cast<unsigned long long>(entry.target),
