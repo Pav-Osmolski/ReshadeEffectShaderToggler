@@ -938,12 +938,12 @@ static void DisplayGroupView(AddonImGui::AddonUIData& instance,
     std::string needle(shaderSearch);
     std::transform(needle.begin(), needle.end(), needle.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
 
-    // Keep each visible hash paired with its original collected-set index so clicking
-    // an entry still drives ShaderManager's existing index-based hunting state.
-    std::vector<std::pair<uint32_t, uint32_t>> visibleHashes;
+    // Keep the UI list hash-based. A copied unordered_set is allowed to use a
+    // different iteration order from the live set, so converting a displayed row
+    // back to an index can select the wrong shader.
+    std::vector<uint32_t> visibleHashes;
     visibleHashes.reserve(hashes.size());
 
-    uint32_t originalIndex = 0;
     for (const uint32_t hash : hashes) {
         const bool marked = shaderManager->isHuntedShaderMarked(hash);
         const std::string hashText = std::format("{:#08x}", hash);
@@ -956,9 +956,7 @@ static void DisplayGroupView(AddonImGui::AddonUIData& instance,
         }
 
         if (visible)
-            visibleHashes.emplace_back(hash, originalIndex);
-
-        ++originalIndex;
+            visibleHashes.push_back(hash);
     }
 
     const float listWidth = ImGui::GetContentRegionAvail().x;
@@ -970,7 +968,7 @@ static void DisplayGroupView(AddonImGui::AddonUIData& instance,
                           ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_ScrollY |
                             ImGuiTableFlags_NoBordersInBody,
                           ImVec2(0, listHeight))) {
-        for (const auto& [hash, collectedIndex] : visibleHashes) {
+        for (const uint32_t hash : visibleHashes) {
             ImGui::TableNextColumn();
 
             const bool marked = shaderManager->isHuntedShaderMarked(hash);
@@ -981,8 +979,7 @@ static void DisplayGroupView(AddonImGui::AddonUIData& instance,
 
             const bool clicked =
               ImGui::Selectable(hashText.c_str(), selectedHash == hash, ImGuiSelectableFlags_AllowDoubleClick);
-            if (clicked) {
-                shaderManager->setActivedHuntedShaderIndex(collectedIndex);
+            if (clicked && shaderManager->setActiveHuntedShaderHash(hash)) {
                 if (ImGui::IsMouseDoubleClicked(0))
                     shaderManager->toggleMarkOnHuntedShader();
                 instance.UpdateToggleGroupsForShaderHashes();
