@@ -132,7 +132,7 @@ The traditional defaults remain available for pixel and vertex shader hunting:
 - `Numpad 6`: add/remove the current vertex shader from the group.
 - `Ctrl + Numpad 4` / `Ctrl + Numpad 5`: browse marked vertex shaders.
 
-All hunting shortcuts are configurable under **Shader hunting keybindings**, including optional Mark + Previous/Next bindings, making shader hunting practical on laptops and compact keyboards. Search text, filter mode, selected shader stage and preview channel are retained while the current REST session remains open. Compute-shader hunting is also configurable but deliberately has no default shortcut. Shortcut matching uses the exact configured Ctrl/Shift/Alt modifiers, so a plain key does not also fire when a modified version is pressed.
+All hunting shortcuts are configurable under **Shader hunting keybindings**, including optional Mark + Previous/Next bindings, making shader hunting practical on laptops and compact keyboards. The hunting pane is responsive with a 540 px preferred width, uses a second hash column automatically for large filtered result sets when space permits, and retains its width together with search text, filter mode, selected shader stage and preview channel while the current REST session remains open. Compute-shader hunting is also configurable but deliberately has no default shortcut. Shortcut matching uses the exact configured Ctrl/Shift/Alt modifiers, so a plain key does not also fire when a modified version is pressed.
 
 Use the group's **Active** checkbox or assigned hotkey while testing. When finished, click **Done** and **Save changes**.
 
