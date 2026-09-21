@@ -87,7 +87,7 @@ enum class GroupResourceState : uint32_t {
 constexpr uint32_t GroupResourceTypeCount = 4;
 
 struct AutoDiagnosticEntry {
-    uint64_t sequence = 0;
+    uint64_t candidateId = 0;
     uint32_t shaderHash = 0;
     std::string status;
     uint64_t target = 0;
@@ -95,6 +95,7 @@ struct AutoDiagnosticEntry {
     uint32_t sceneHeight = 0;
     std::string format;
     std::string boundary;
+    uint64_t successfulRenders = 0;
 };
 
 struct __declspec(novtable) GroupResource final {
@@ -206,13 +207,13 @@ class ToggleGroup {
     const std::string& getDebugLastVulkanBoundary() const { return _debugLastVulkanBoundary; }
     void setDebugLastVulkanBoundary(const std::string& boundary) {
         _debugLastVulkanBoundary = boundary;
-        appendDebugHistory(_debugAutoStatus, boundary);
+        updateDebugCandidate(_debugAutoStatus, boundary);
     }
 
     const std::string& getDebugAutoStatus() const { return _debugAutoStatus; }
     void setDebugAutoStatus(const std::string& status) {
         _debugAutoStatus = status;
-        appendDebugHistory(status);
+        updateDebugCandidate(status);
     }
     uint64_t getDebugCurrentTarget() const { return _debugCurrentTarget; }
     uint32_t getDebugCurrentSceneWidth() const { return _debugCurrentSceneWidth; }
@@ -270,7 +271,8 @@ class ToggleGroup {
         _debugEffectWidth = effectWidth;
         _debugEffectHeight = effectHeight;
         _debugNativeStaging = nativeStaging;
-        setDebugAutoStatus("Successful");
+        _debugAutoStatus = "Successful";
+        updateDebugCandidate("Successful", {}, true);
     }
     void setBindingSRVSlotIndex(uint32_t index) { if (_bindingSrvSlotIndex != index) { _bindingSrvSlotIndex = index; markConfigDirty(); } }
     uint32_t getBindingSRVSlotIndex() const { return _bindingSrvSlotIndex; }
@@ -351,20 +353,36 @@ class ToggleGroup {
         if (_configDirtyFlag != nullptr)
             _configDirtyFlag->store(true, std::memory_order_release);
     }
-    void appendDebugHistory(const std::string& status, const std::string& boundary = {}) {
+    void updateDebugCandidate(const std::string& status,
+                              const std::string& boundary = {},
+                              bool successfulRender = false) {
         std::lock_guard lock(*_debugHistoryMutex);
-        if (!_debugAutoHistory.empty()) {
-            auto& last = _debugAutoHistory.back();
-            if (last.status == status && last.shaderHash == _debugCurrentShaderHash &&
-                last.target == _debugCurrentTarget &&
-                last.sceneWidth == _debugCurrentSceneWidth && last.sceneHeight == _debugCurrentSceneHeight) {
-                if (!boundary.empty())
-                    last.boundary = boundary;
-                return;
-            }
+
+        auto it = std::find_if(_debugAutoHistory.begin(), _debugAutoHistory.end(), [this](const AutoDiagnosticEntry& entry) {
+            return entry.shaderHash == _debugCurrentShaderHash &&
+                   entry.target == _debugCurrentTarget &&
+                   entry.sceneWidth == _debugCurrentSceneWidth &&
+                   entry.sceneHeight == _debugCurrentSceneHeight &&
+                   entry.format == _debugCurrentFormat;
+        });
+
+        if (it != _debugAutoHistory.end()) {
+            AutoDiagnosticEntry updated = *it;
+            updated.status = status;
+            if (!boundary.empty())
+                updated.boundary = boundary;
+            if (successfulRender)
+                ++updated.successfulRenders;
+
+            // Keep the most recently active candidate at the back without changing
+            // its candidate number.
+            _debugAutoHistory.erase(it);
+            _debugAutoHistory.push_back(std::move(updated));
+            return;
         }
+
         AutoDiagnosticEntry entry;
-        entry.sequence = ++_debugHistorySequence;
+        entry.candidateId = ++_debugHistorySequence;
         entry.shaderHash = _debugCurrentShaderHash;
         entry.status = status;
         entry.target = _debugCurrentTarget;
@@ -372,7 +390,9 @@ class ToggleGroup {
         entry.sceneHeight = _debugCurrentSceneHeight;
         entry.format = _debugCurrentFormat;
         entry.boundary = boundary;
+        entry.successfulRenders = successfulRender ? 1 : 0;
         _debugAutoHistory.push_back(std::move(entry));
+
         while (_debugAutoHistory.size() > 8)
             _debugAutoHistory.pop_front();
     }
