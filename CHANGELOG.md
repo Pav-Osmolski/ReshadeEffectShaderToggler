@@ -7,8 +7,9 @@
 - Saves configuration through a verified temporary file, refreshes `ReshadeEffectShaderToggler.ini.bak` and atomically replaces the live INI; adds `ConfigVersion` for future migrations.
 - Replaces per-overlay full configuration signature generation with cached dirty-state tracking.
 - Adds clipboard **Copy group / Import group** using REST's existing INI group serializer.
-- Adds press-and-hold shader browsing, **Mark + Prev / Mark + Next** controls and optional shortcuts, **Copy hash**, and retained hunting search/filter/stage/channel state for the current session.
-- Adds a bounded **Recent attempts** Auto Scene Colour diagnostic history.
+- Adds press-and-hold shader browsing, **Mark + Prev / Mark + Next** controls and optional shortcuts, **Copy hash**, and retained hunting search/filter/stage/channel/pane-width state for the current session.
+- Makes the shader-hunting workspace responsive with a 540 px preferred pane, a wider default Group Settings window, structured two-row controls and an adaptive two-column hash list for large filtered result sets.
+- Adds a bounded **Recent candidates** Auto Scene Colour history that groups repeated status transitions by shader/target candidate and tracks successful render counts.
 
 ### Optimisation
 
