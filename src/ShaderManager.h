@@ -41,6 +41,7 @@
 #include <shared_mutex>
 #include <tsl/robin_map.h>
 #include <unordered_set>
+#include <vector>
 
 namespace ShaderToggler {
 /// <summary>
@@ -99,6 +100,10 @@ class ShaderManager {
         std::shared_lock lock(_collectedActiveHandlesMutex);
         return _collectedActiveShaderHashes;
     }
+    std::vector<uint32_t> getCollectedShaderHashesOrdered() const {
+        std::shared_lock lock(_collectedActiveHandlesMutex);
+        return _collectedActiveShaderOrder;
+    }
     void setActivedHuntedShaderIndex(uint32_t index);
     bool setActiveHuntedShaderHash(uint32_t hash);
     size_t getAmountShaderHashesCollected() const {
@@ -127,12 +132,7 @@ class ShaderManager {
 
     uint32_t getCollectedShaderHash(uint32_t index) const {
         std::shared_lock lock(_collectedActiveHandlesMutex);
-        if (_collectedActiveShaderHashes.empty() || index >= _collectedActiveShaderHashes.size())
-            return 0;
-
-        auto it = _collectedActiveShaderHashes.begin();
-        std::advance(it, index);
-        return *it;
+        return index < _collectedActiveShaderOrder.size() ? _collectedActiveShaderOrder[index] : 0;
     }
 
     size_t getMarkedShaderCount() {
@@ -159,8 +159,8 @@ class ShaderManager {
     // std::unordered_map<uint64_t, uint32_t> _handleToShaderHash;		// pipeline handle per shader hash. Handle is removed when a pipeline is
     // destroyed.
     tsl::robin_map<uint64_t, uint32_t> _handleToShaderHash;
-    std::unordered_set<uint32_t> _collectedActiveShaderHashes; // shader hashes bound to pipeline handles which were collected during the collection phase after
-                                                               // hunting was enabled, which are the pipeline handles active during the last X frames
+    std::unordered_set<uint32_t> _collectedActiveShaderHashes; // membership lookup for shaders collected during the active collection phase
+    std::vector<uint32_t> _collectedActiveShaderOrder;          // stable first-seen order used by hunting navigation and UI
     std::unordered_set<uint32_t> _markedShaderHashes;          // the hashes for shaders which are currently marked.
 
     std::atomic_bool _isInHuntingMode{ false };
