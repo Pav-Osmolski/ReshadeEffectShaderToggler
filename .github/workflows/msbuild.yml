@@ -1,10 +1,28 @@
 name: MSBuild
 
+# CI is deliberately lifecycle-based rather than commit-based:
+# - validate a PR once when it is opened/marked ready;
+# - validate the merged result on main;
+# - use workflow_dispatch for any explicit WIP/test build.
+#
+# We intentionally do not run on pull_request "synchronize", because that
+# creates an Actions run for every WIP commit pushed to an open PR.
 on:
   push:
     branches: [ "main" ]
+    paths:
+      - "src/**"
+      - "deps/**"
+      - ".gitmodules"
+      - ".github/workflows/msbuild.yml"
   pull_request:
     branches: [ "main" ]
+    types: [opened, reopened, ready_for_review]
+    paths:
+      - "src/**"
+      - "deps/**"
+      - ".gitmodules"
+      - ".github/workflows/msbuild.yml"
   workflow_dispatch:
 
 env:
@@ -13,10 +31,6 @@ env:
 
 permissions:
   contents: read
-
-concurrency:
-  group: msbuild-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
 
 jobs:
   build:
