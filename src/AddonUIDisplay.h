@@ -231,7 +231,7 @@ static void DrawPreview(unsigned long long textureId,
     auto centralizedCursorpos = ImVec2((width - new_width) * 0.5f, (height - new_height) * 0.5f);
     ImGui::SetCursorPos(centralizedCursorpos);
 
-    ImGui::Image(textureId, ImVec2(new_width, new_height), ImVec2(0, 0), ImVec2(1, 1), tint);
+    ImGui::ImageWithBg(textureId, ImVec2(new_width, new_height), ImVec2(0, 0), ImVec2(1, 1), ImVec4(0, 0, 0, 0), tint);
 
     ImGui::PopStyleVar();
 }
