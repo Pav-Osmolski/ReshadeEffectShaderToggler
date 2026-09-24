@@ -3,6 +3,7 @@
 // REST Enhanced Legacy targets the ReShade 5.8.0 add-on API (API 7).
 // Keep legacy naming adaptations isolated here so the modern branch remains clean.
 
+#include <imgui.h>
 #include <reshade.hpp>
 
 #if RESHADE_API_VERSION == 7
