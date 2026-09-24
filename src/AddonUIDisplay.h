@@ -928,27 +928,47 @@ static void DisplayGroupView(AddonImGui::AddonUIData& instance,
     if (navigationChanged)
         instance.UpdateToggleGroupsForShaderHashes();
 
-    ImGui::TextDisabled("%zu collected | %zu marked", shaderManager->getAmountShaderHashesCollected(), markedCount);
+    const std::vector<uint32_t> hashes = shaderManager->getCollectedShaderHashesOrdered();
+    const std::unordered_set<uint32_t> collectedSet(hashes.begin(), hashes.end());
+    const std::unordered_set<uint32_t> markedHashes = shaderManager->getMarkedShaderHashes();
+
+    std::vector<uint32_t> missingMarkedHashes;
+    missingMarkedHashes.reserve(markedHashes.size());
+    for (const uint32_t hash : markedHashes) {
+        if (!collectedSet.contains(hash))
+            missingMarkedHashes.push_back(hash);
+    }
+    std::sort(missingMarkedHashes.begin(), missingMarkedHashes.end());
+
+    ImGui::TextDisabled("%zu collected | %zu marked | %zu not seen",
+                        hashes.size(),
+                        markedCount,
+                        missingMarkedHashes.size());
     ImGui::TextWrapped("Pending shader marks are applied to the group when you click Done.");
     ImGui::Separator();
 
-    const std::vector<uint32_t> hashes = shaderManager->getCollectedShaderHashesOrdered();
     const uint32_t selectedHash = shaderManager->getActiveHuntedShaderHash();
 
     std::string needle(shaderSearch);
     std::transform(needle.begin(), needle.end(), needle.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
 
-    // The UI uses ShaderManager's stable first-seen order, matching Prev/Next and
-    // marked navigation exactly. Selection remains hash-based so filtering and
-    // column layout never change which shader a row represents.
-    std::vector<uint32_t> visibleHashes;
-    visibleHashes.reserve(hashes.size());
+    struct ShaderListEntry {
+        uint32_t hash;
+        bool collected;
+    };
 
-    for (const uint32_t hash : hashes) {
+    // Collected hashes keep ShaderManager's stable first-seen order so the list,
+    // Prev/Next and marked navigation continue to agree. Marked hashes not seen in
+    // the latest collection are appended for visibility only and never enter
+    // hunting navigation or preview selection.
+    std::vector<ShaderListEntry> visibleHashes;
+    visibleHashes.reserve(hashes.size() + missingMarkedHashes.size());
+
+    auto addIfVisible = [&](uint32_t hash, bool collected) {
         const bool marked = shaderManager->isHuntedShaderMarked(hash);
         const std::string hashText = std::format("{:#08x}", hash);
 
-        bool visible = filterMode == 0 || (filterMode == 1 && marked) || (filterMode == 2 && !marked);
+        bool visible = filterMode == 0 || (filterMode == 1 && marked) || (filterMode == 2 && collected && !marked);
         if (visible && !needle.empty()) {
             std::string haystack = hashText;
             std::transform(haystack.begin(), haystack.end(), haystack.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
@@ -956,8 +976,13 @@ static void DisplayGroupView(AddonImGui::AddonUIData& instance,
         }
 
         if (visible)
-            visibleHashes.push_back(hash);
-    }
+            visibleHashes.push_back({ hash, collected });
+    };
+
+    for (const uint32_t hash : hashes)
+        addIfVisible(hash, true);
+    for (const uint32_t hash : missingMarkedHashes)
+        addIfVisible(hash, false);
 
     const float listWidth = ImGui::GetContentRegionAvail().x;
     const int hashColumns = visibleHashes.size() >= 50 && listWidth >= 500.0f ? 2 : 1;
@@ -968,34 +993,47 @@ static void DisplayGroupView(AddonImGui::AddonUIData& instance,
                           ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_ScrollY |
                             ImGuiTableFlags_NoBordersInBody,
                           ImVec2(0, listHeight))) {
-        auto drawHash = [&](uint32_t hash) {
+        auto drawHash = [&](const ShaderListEntry& entry) {
+            const uint32_t hash = entry.hash;
             const bool marked = shaderManager->isHuntedShaderMarked(hash);
+            const bool missing = marked && !entry.collected;
             const std::string hashText = std::format("{:#08x}", hash);
 
-            if (marked)
+            if (missing)
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.25f, 0.25f, 1.0f));
+            else if (marked)
                 ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 0.0f, 1.0f));
 
             const bool clicked =
-              ImGui::Selectable(hashText.c_str(), selectedHash == hash, ImGuiSelectableFlags_AllowDoubleClick);
-            if (clicked && shaderManager->setActiveHuntedShaderHash(hash)) {
-                if (ImGui::IsMouseDoubleClicked(0))
-                    shaderManager->toggleMarkOnHuntedShader();
-                instance.UpdateToggleGroupsForShaderHashes();
+              ImGui::Selectable(hashText.c_str(), entry.collected && selectedHash == hash, ImGuiSelectableFlags_AllowDoubleClick);
+
+            if (entry.collected) {
+                if (clicked && shaderManager->setActiveHuntedShaderHash(hash)) {
+                    if (ImGui::IsMouseDoubleClicked(0))
+                        shaderManager->toggleMarkOnHuntedShader();
+                    instance.UpdateToggleGroupsForShaderHashes();
+                }
+            } else {
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Marked shader not observed during the latest collection pass.\nIt may be scene/state dependent rather than invalid.\nDouble-click to unmark it.");
+                if (clicked && ImGui::IsMouseDoubleClicked(0) && shaderManager->removeMarkedShaderHash(hash))
+                    instance.UpdateToggleGroupsForShaderHashes();
             }
 
-            if (marked)
+            if (missing || marked)
                 ImGui::PopStyleColor();
         };
 
         if (hashColumns == 1) {
-            for (const uint32_t hash : visibleHashes) {
+            for (const ShaderListEntry& entry : visibleHashes) {
                 ImGui::TableNextRow();
                 ImGui::TableSetColumnIndex(0);
-                drawHash(hash);
+                drawHash(entry);
             }
         } else {
             // Preserve hunting order visually: top-to-bottom in the left column,
-            // then continue at the top of the right column.
+            // then continue at the top of the right column. Missing marked hashes
+            // are appended after collected hashes and are display-only.
             const size_t rows = (visibleHashes.size() + 1) / 2;
             for (size_t row = 0; row < rows; ++row) {
                 ImGui::TableNextRow();
