@@ -7,7 +7,6 @@
 [submodule "deps/reshade"]
 	path = deps/reshade
 	url = https://github.com/crosire/reshade.git
-	branch = addon
 [submodule "deps/robin-map"]
 	path = deps/robin-map
 	url = https://github.com/Tessil/robin-map.git
