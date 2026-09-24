@@ -342,7 +342,11 @@ static void on_bind_descriptor_tables(command_list* cmd_list,
                                       pipeline_layout layout,
                                       uint32_t first,
                                       uint32_t count,
-                                      const descriptor_table* tables) {
+                                      const descriptor_table* tables,
+                                      uint32_t dynamic_offset_count,
+                                      const uint32_t* dynamic_offsets) {
+    (void)dynamic_offset_count;
+    (void)dynamic_offsets;
     int32_t idx = get_shader_stage_index(stages);
 
     if (idx < 0)
@@ -405,7 +409,11 @@ static void on_bind_descriptor_tables_no_track(command_list* cmd_list,
                                                pipeline_layout layout,
                                                uint32_t first,
                                                uint32_t count,
-                                               const descriptor_table* tables) {
+                                               const descriptor_table* tables,
+                                               uint32_t dynamic_offset_count,
+                                               const uint32_t* dynamic_offsets) {
+    (void)dynamic_offset_count;
+    (void)dynamic_offsets;
     int32_t idx = get_shader_stage_index(stages);
 
     if (idx < 0)
