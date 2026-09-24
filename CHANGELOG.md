@@ -1,5 +1,28 @@
 # Changelog
 
+## v1.6.3.633 — 2026-09-24
+
+### Shader-hunting visibility
+
+- Shows saved/marked shader hashes that were not observed during the latest collection pass as **red** entries instead of hiding them.
+- Keeps collected + marked shaders yellow and collected + unmarked shaders in the normal text colour.
+- Adds `collected | marked | not seen` counts to make the current collection state explicit.
+- Includes not-seen hashes in the **Marked** filter and search while keeping **Unmarked** limited to collected unmarked shaders.
+- Adds an explanatory red legend and tooltip noting that a not-seen shader may be scene/state dependent rather than invalid.
+- Allows individual red/not-seen hashes to be removed by double-clicking them.
+
+### Navigation safety
+
+- Keeps not-seen hashes display-only: they are not added to the collected shader set and do not participate in Prev/Next, marked navigation or preview selection.
+- Preserves the stable first-seen order for all actually collected shaders.
+
+Runtime-tested successfully with a BG3 D3D11 UI group containing saved shaders absent from the current collection pass.
+
+No rendering, preview-resource, Auto Scene Colour, Direct3D or Vulkan execution paths are changed by this release.
+
+Improvements, documentation and testing by **DeViLhoOD**, building on the upstream contributors credited in README.md.
+
+
 ## v1.6.2.633 — 2026-09-24
 
 ### D3D shader-hunting stability
