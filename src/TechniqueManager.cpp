@@ -33,7 +33,7 @@ void TechniqueManager::SignalEffectsReloaded(reshade::api::effect_runtime* runti
 }
 
 void TechniqueManager::OnReShadeReloadedEffects(reshade::api::effect_runtime* runtime) {
-    RuntimeDataContainer& data = runtime->get_private_data<RuntimeDataContainer>();
+    RuntimeDataContainer& data = *runtime->get_private_data<RuntimeDataContainer>();
     unique_lock<shared_mutex> lock(data.technique_mutex);
 
     data.allEnabledTechniques.clear();
@@ -89,7 +89,7 @@ void TechniqueManager::OnReShadeReloadedEffects(reshade::api::effect_runtime* ru
 }
 
 bool TechniqueManager::OnReShadeSetTechniqueState(reshade::api::effect_runtime* runtime, reshade::api::effect_technique technique, bool enabled) {
-    RuntimeDataContainer& data = runtime->get_private_data<RuntimeDataContainer>();
+    RuntimeDataContainer& data = *runtime->get_private_data<RuntimeDataContainer>();
     unique_lock<shared_mutex> lock(data.technique_mutex);
 
     charBufferSize = CHAR_BUFFER_SIZE;
@@ -131,7 +131,7 @@ bool TechniqueManager::OnReShadeSetTechniqueState(reshade::api::effect_runtime* 
 }
 
 bool TechniqueManager::OnReShadeReorderTechniques(reshade::api::effect_runtime* runtime, size_t count, reshade::api::effect_technique* techniques) {
-    RuntimeDataContainer& data = runtime->get_private_data<RuntimeDataContainer>();
+    RuntimeDataContainer& data = *runtime->get_private_data<RuntimeDataContainer>();
     unique_lock<shared_mutex> lock(data.technique_mutex);
 
     data.allEnabledTechniques.clear();
@@ -190,7 +190,7 @@ bool TechniqueManager::OnReShadeReorderTechniques(reshade::api::effect_runtime* 
 }
 
 void TechniqueManager::OnReShadePresent(reshade::api::effect_runtime* runtime) {
-    RuntimeDataContainer& deviceData = runtime->get_private_data<RuntimeDataContainer>();
+    RuntimeDataContainer& deviceData = *runtime->get_private_data<RuntimeDataContainer>();
     unique_lock<shared_mutex> lock(deviceData.technique_mutex);
 
     // Always clear REST's per-frame rendered marker for every known technique.
