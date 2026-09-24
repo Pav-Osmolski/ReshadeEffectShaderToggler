@@ -122,7 +122,7 @@ static void onInitDevice(device* device) {
 }
 
 static void onDestroyDevice(device* device) {
-    DeviceDataContainer& data = device->get_private_data<DeviceDataContainer>();
+    DeviceDataContainer& data = *device->get_private_data<DeviceDataContainer>();
 
     groupResourceManager.DisposeGroupBuffers(device, g_addonUIData.GetToggleGroups());
     renderingBindingManager.DisposeTextureBindings(device, g_addonUIData.GetToggleGroups());
@@ -141,7 +141,7 @@ static void onDestroyCommandList(command_list* commandList) {
 }
 
 static void onResetCommandList(command_list* commandList) {
-    CommandListDataContainer& commandListData = commandList->get_private_data<CommandListDataContainer>();
+    CommandListDataContainer& commandListData = *commandList->get_private_data<CommandListDataContainer>();
     commandListData.Reset();
 }
 
@@ -191,8 +191,8 @@ static void onDestroyResourceView(device* device, resource_view view) {
 }
 
 static void onReShadeReloadedEffects(effect_runtime* runtime) {
-    RuntimeDataContainer& runtimeData = runtime->get_private_data<RuntimeDataContainer>();
-    DeviceDataContainer& deviceData = runtime->get_device()->get_private_data<DeviceDataContainer>();
+    RuntimeDataContainer& runtimeData = *runtime->get_private_data<RuntimeDataContainer>();
+    DeviceDataContainer& deviceData = *runtime->get_device()->get_private_data<DeviceDataContainer>();
 
     {
         unique_lock<shared_mutex> renderLock(deviceData.render_mutex);
@@ -209,7 +209,7 @@ static void onReShadeReloadedEffects(effect_runtime* runtime) {
 }
 
 static bool onReShadeSetTechniqueState(effect_runtime* runtime, effect_technique technique, bool enabled) {
-    RuntimeDataContainer& data = runtime->get_private_data<RuntimeDataContainer>();
+    RuntimeDataContainer& data = *runtime->get_private_data<RuntimeDataContainer>();
 
     bool ret = techniqueManager.OnReShadeSetTechniqueState(runtime, technique, enabled);
 
@@ -217,8 +217,8 @@ static bool onReShadeSetTechniqueState(effect_runtime* runtime, effect_technique
 }
 
 static bool onReShadeReorderTechniques(effect_runtime* runtime, size_t count, effect_technique* techniques) {
-    RuntimeDataContainer& runtimeData = runtime->get_private_data<RuntimeDataContainer>();
-    DeviceDataContainer& deviceData = runtime->get_device()->get_private_data<DeviceDataContainer>();
+    RuntimeDataContainer& runtimeData = *runtime->get_private_data<RuntimeDataContainer>();
+    DeviceDataContainer& deviceData = *runtime->get_device()->get_private_data<DeviceDataContainer>();
 
     bool ret = techniqueManager.OnReShadeReorderTechniques(runtime, count, techniques);
 
@@ -232,7 +232,7 @@ static bool onReShadeReorderTechniques(effect_runtime* runtime, size_t count, ef
 
 static void onInitEffectRuntime(effect_runtime* runtime) {
     runtime->create_private_data<RuntimeDataContainer>();
-    DeviceDataContainer& data = runtime->get_device()->get_private_data<DeviceDataContainer>();
+    DeviceDataContainer& data = *runtime->get_device()->get_private_data<DeviceDataContainer>();
 
     keyMonitor.Init(runtime);
     renderingShaderManager.InitShaders(runtime->get_device());
@@ -249,7 +249,7 @@ static void onInitEffectRuntime(effect_runtime* runtime) {
 }
 
 static void onDestroyEffectRuntime(effect_runtime* runtime) {
-    DeviceDataContainer& data = runtime->get_device()->get_private_data<DeviceDataContainer>();
+    DeviceDataContainer& data = *runtime->get_device()->get_private_data<DeviceDataContainer>();
 
     renderingBindingManager.DisposeTextureBindings(runtime->get_device(), g_addonUIData.GetToggleGroups());
 
@@ -324,8 +324,8 @@ static void onBindPipeline(command_list* commandList, pipeline_stage stages, pip
         // draw call with unknown handle, don't collect it
         return;
     }
-    CommandListDataContainer& commandListData = commandList->get_private_data<CommandListDataContainer>();
-    DeviceDataContainer& deviceData = commandList->get_device()->get_private_data<DeviceDataContainer>();
+    CommandListDataContainer& commandListData = *commandList->get_private_data<CommandListDataContainer>();
+    DeviceDataContainer& deviceData = *commandList->get_device()->get_private_data<DeviceDataContainer>();
 
     if (deviceData.current_runtime == nullptr || !deviceData.current_runtime->get_effects_state()) {
         return;
@@ -403,8 +403,8 @@ static void onBindRenderTargetsAndDepthStencil(command_list* cmd_list, uint32_t 
     }
 
     device* device = cmd_list->get_device();
-    CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
-    DeviceDataContainer& deviceData = device->get_private_data<DeviceDataContainer>();
+    CommandListDataContainer& commandListData = *cmd_list->get_private_data<CommandListDataContainer>();
+    DeviceDataContainer& deviceData = *device->get_private_data<DeviceDataContainer>();
 
     // if (count > 0)
     //{
@@ -437,7 +437,7 @@ static void onBarrier(command_list* cmd_list,
         return;
     }
 
-    CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
+    CommandListDataContainer& commandListData = *cmd_list->get_private_data<CommandListDataContainer>();
 
     // An end_render_pass callback may describe either a real render-pass end or the
     // first half of vkCmdNextSubpass. Seeing a subsequent barrier proves the actual
@@ -449,7 +449,7 @@ static void onBarrier(command_list* cmd_list,
     }
 
     if (commandListData.vulkanAutoInjectionActive || commandListData.vulkanInsideRenderPass ||
-        !cmd_list->get_device()->get_private_data<DeviceDataContainer>().vulkanAutoWorkPending.load(std::memory_order_acquire))
+        !cmd_list->get_device()->get_private_data<DeviceDataContainer>()->vulkanAutoWorkPending.load(std::memory_order_acquire))
         return;
 
     renderingEffectManager.RenderDeferredVulkanAutoEffectsAfterBarrier(cmd_list, count, resources, oldStates, newStates);
@@ -465,8 +465,8 @@ static bool onBeginRenderPass(command_list* cmd_list,
     }
 
     device* device = cmd_list->get_device();
-    CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
-    DeviceDataContainer& deviceData = device->get_private_data<DeviceDataContainer>();
+    CommandListDataContainer& commandListData = *cmd_list->get_private_data<CommandListDataContainer>();
+    DeviceDataContainer& deviceData = *device->get_private_data<DeviceDataContainer>();
 
     if (deviceData.current_runtime == nullptr || !deviceData.current_runtime->get_effects_state()) {
         if (device->get_api() == device_api::vulkan) {
@@ -494,7 +494,7 @@ static bool onBeginRenderPass(command_list* cmd_list,
         // Vulkan does not emit bind_render_targets_and_depth_stencil events for render
         // pass attachments. Mirror the begin_render_pass descriptors into REST's state
         // tracker so a marked draw can resolve the live primary colour target.
-        state_tracking& trackedState = cmd_list->get_private_data<state_tracking>();
+        state_tracking& trackedState = *cmd_list->get_private_data<state_tracking>();
         trackedState.render_targets.clear();
         trackedState.render_targets.reserve(count);
         for (uint32_t i = 0; i < count; ++i)
@@ -532,7 +532,7 @@ static bool onEndRenderPass(command_list* cmd_list) {
     // This event is also emitted immediately before vkCmdNextSubpass. Keep the
     // command list marked as inside the render pass until a later event proves that
     // vkCmdEndRenderPass/vkCmdEndRendering really occurred.
-    CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
+    CommandListDataContainer& commandListData = *cmd_list->get_private_data<CommandListDataContainer>();
     commandListData.vulkanInsideRenderPass = true;
     commandListData.vulkanRenderPassEndPending = true;
     return false;
@@ -549,7 +549,7 @@ static void onPresent(command_queue* queue,
                       uint32_t dirty_rect_count,
                       const rect* dirty_rects) {
     device* dev = queue->get_device();
-    DeviceDataContainer& deviceData = dev->get_private_data<DeviceDataContainer>();
+    DeviceDataContainer& deviceData = *dev->get_private_data<DeviceDataContainer>();
 
     if (deviceData.current_runtime == nullptr) {
         return;
@@ -569,7 +569,7 @@ static void onPresent(command_queue* queue,
 
 static void onReShadePresent(effect_runtime* runtime) {
     device* dev = runtime->get_device();
-    DeviceDataContainer& deviceData = dev->get_private_data<DeviceDataContainer>();
+    DeviceDataContainer& deviceData = *dev->get_private_data<DeviceDataContainer>();
     command_queue* queue = runtime->get_command_queue();
 
     {
@@ -642,7 +642,7 @@ static void UnInit() {
 }
 
 static void CheckDrawCall(command_list* cmd_list, const uint64_t match_modifier = Rendering::MATCH_ALL) {
-    CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
+    CommandListDataContainer& commandListData = *cmd_list->get_private_data<CommandListDataContainer>();
 
     if (commandListData.commandQueue & Rendering::MATCH_ALL & match_modifier) {
         if (constantHandler != nullptr && (commandListData.commandQueue & Rendering::MATCH_CONST & match_modifier)) {
@@ -668,7 +668,7 @@ static bool ShouldSuppressVulkanHuntedCall(command_list* cmd_list, uint64_t matc
     if (cmd_list == nullptr || cmd_list->get_device() == nullptr || cmd_list->get_device()->get_api() != device_api::vulkan)
         return false;
 
-    CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
+    CommandListDataContainer& commandListData = *cmd_list->get_private_data<CommandListDataContainer>();
 
     const bool huntingPS = g_pixelShaderManager.isInHuntingMode();
     const bool huntingVS = g_vertexShaderManager.isInHuntingMode();
