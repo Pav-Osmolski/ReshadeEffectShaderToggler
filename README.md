@@ -5,7 +5,7 @@
 
 A ReShade 6.8+ add-on for applying ReShade effects at specific points inside a game's rendering pipeline. REST groups user-selected shaders and can inject selected ReShade techniques immediately before those shaders are encountered.
 
-Users who need ReShade 5.x should use the [`legacy/reshade-5.x`](../../tree/legacy/reshade-5.x) maintenance line, targeting ReShade 5.8–5.9.2 (5.9.2 recommended). Versions older than ReShade 5.8 are unsupported.
+Users who need ReShade 5.x should use the [`legacy/reshade-5.x`](https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler/tree/legacy/reshade-5.x) maintenance line, targeting ReShade 5.8–5.9.2 (5.9.2 recommended). Versions older than ReShade 5.8 are unsupported.
 
 Both 64-bit and 32-bit are first-class build targets. CI builds and validates both architectures, including PE machine type, version metadata and required add-on exports. Auto Scene Colour supports D3D10/D3D11/D3D12 and Vulkan through ReShade's generic API, with a Vulkan-specific native-staging blit path. Legacy game-specific hooks may remain architecture-specific; the FFXIV constant-copy hook is x64-only because its signatures target 64-bit game code.
 
