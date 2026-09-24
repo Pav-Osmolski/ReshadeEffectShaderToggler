@@ -22,7 +22,7 @@ void RenderingPreviewManager::RecordVulkanHuntedTarget(command_list* cmd_list, u
         return;
 
     device* device = cmd_list->get_device();
-    DeviceDataContainer& deviceData = device->get_private_data<DeviceDataContainer>();
+    DeviceDataContainer& deviceData = *device->get_private_data<DeviceDataContainer>();
 
     if (deviceData.current_runtime == nullptr || uiData.GetToggleGroupIdShaderEditing() < 0)
         return;
@@ -36,7 +36,7 @@ void RenderingPreviewManager::RecordVulkanHuntedTarget(command_list* cmd_list, u
         return;
 
     ToggleGroup& group = groupIt->second;
-    CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
+    CommandListDataContainer& commandListData = *cmd_list->get_private_data<CommandListDataContainer>();
     const uint64_t previewAction = MATCH_PREVIEW_PS << stageIndex;
 
     const ResourceViewData activeTarget =
@@ -70,7 +70,7 @@ void RenderingPreviewManager::RecordVulkanHuntedTarget(command_list* cmd_list, u
 
     // Track explicit resource barriers between the suppressed draw and the next
     // render-pass boundary so the preview copy can restore the best-known usage.
-    cmd_list->get_private_data<state_tracking>().start_resource_barrier_tracking(activeTarget.resource, resource_usage::render_target);
+    cmd_list->get_private_data<state_tracking>()->start_resource_barrier_tracking(activeTarget.resource, resource_usage::render_target);
 }
 
 void RenderingPreviewManager::CaptureDeferredVulkanPreview(command_list* cmd_list) {
@@ -78,7 +78,7 @@ void RenderingPreviewManager::CaptureDeferredVulkanPreview(command_list* cmd_lis
         return;
 
     device* device = cmd_list->get_device();
-    DeviceDataContainer& deviceData = device->get_private_data<DeviceDataContainer>();
+    DeviceDataContainer& deviceData = *device->get_private_data<DeviceDataContainer>();
     HuntPreview& preview = deviceData.huntPreview;
 
     if (!preview.vulkan_capture_pending || preview.target == 0 || preview.vulkan_command_list != cmd_list)
@@ -89,7 +89,7 @@ void RenderingPreviewManager::CaptureDeferredVulkanPreview(command_list* cmd_lis
     preview.vulkan_capture_pending = false;
     deviceData.vulkanPreviewWorkPending.store(false, std::memory_order_release);
 
-    state_tracking& trackedState = cmd_list->get_private_data<state_tracking>();
+    state_tracking& trackedState = *cmd_list->get_private_data<state_tracking>();
     resource_usage sourceUsage = trackedState.stop_resource_barrier_tracking(preview.target);
     if (sourceUsage == resource_usage::undefined)
         sourceUsage = resource_usage::render_target;
@@ -145,11 +145,11 @@ void RenderingPreviewManager::CancelDeferredVulkanPreview(device* device) {
     if (device == nullptr || device->get_api() != device_api::vulkan)
         return;
 
-    DeviceDataContainer& deviceData = device->get_private_data<DeviceDataContainer>();
+    DeviceDataContainer& deviceData = *device->get_private_data<DeviceDataContainer>();
     HuntPreview& preview = deviceData.huntPreview;
 
     if (preview.vulkan_capture_pending && preview.target != 0 && preview.vulkan_command_list != nullptr) {
-        preview.vulkan_command_list->get_private_data<state_tracking>().stop_resource_barrier_tracking(preview.target);
+        preview.vulkan_command_list->get_private_data<state_tracking>()->stop_resource_barrier_tracking(preview.target);
     }
 
     preview.vulkan_capture_pending = false;
@@ -163,8 +163,8 @@ void RenderingPreviewManager::UpdatePreview(command_list* cmd_list, uint64_t cal
     }
 
     device* device = cmd_list->get_device();
-    CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
-    DeviceDataContainer& deviceData = device->get_private_data<DeviceDataContainer>();
+    CommandListDataContainer& commandListData = *cmd_list->get_private_data<CommandListDataContainer>();
+    DeviceDataContainer& deviceData = *device->get_private_data<DeviceDataContainer>();
 
     // Remove call location from queue
     commandListData.commandQueue &= ~(invocation << (callLocation * MATCH_DELIMITER));
@@ -173,7 +173,7 @@ void RenderingPreviewManager::UpdatePreview(command_list* cmd_list, uint64_t cal
         return;
     }
 
-    RuntimeDataContainer& runtimeData = deviceData.current_runtime->get_private_data<RuntimeDataContainer>();
+    RuntimeDataContainer& runtimeData = *deviceData.current_runtime->get_private_data<RuntimeDataContainer>();
 
     ToggleGroup& group = uiData.GetToggleGroups().at(uiData.GetToggleGroupIdShaderEditing());
 
@@ -191,7 +191,7 @@ void RenderingPreviewManager::UpdatePreview(command_list* cmd_list, uint64_t cal
 
         if (active_target.resource != 0) {
             resource_desc desc = device->get_resource_desc(active_target.resource);
-            // cmd_list->get_private_data<state_tracking>().start_resource_barrier_tracking(res, resource_usage::render_target);
+            // cmd_list->get_private_data<state_tracking>()->start_resource_barrier_tracking(res, resource_usage::render_target);
 
             deviceData.huntPreview.target = active_target.resource;
             deviceData.huntPreview.target_desc = desc;
@@ -211,7 +211,7 @@ void RenderingPreviewManager::UpdatePreview(command_list* cmd_list, uint64_t cal
 
     if (group.getId() == uiData.GetToggleGroupIdShaderEditing() && !deviceData.huntPreview.matched) {
         resource rs = deviceData.huntPreview.target;
-        // resource_usage rs_usage = cmd_list->get_private_data<state_tracking>().stop_resource_barrier_tracking(rs);
+        // resource_usage rs_usage = cmd_list->get_private_data<state_tracking>()->stop_resource_barrier_tracking(rs);
         // if (rs_usage == resource_usage::undefined)
         //{
         //     return;
