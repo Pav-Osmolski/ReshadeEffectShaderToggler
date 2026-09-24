@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.6.4.580 — 2026-09-24
+
+### ReShade 5.x legacy baseline
+
+- Establishes the permanent **REST Enhanced Legacy** maintenance line for ReShade 5.8 through 5.9.2, with ReShade 5.9.2 recommended.
+- Rebuilds the add-on against the actual ReShade 5.8.0 / API 7 headers instead of the previous ReShade 6.3.3 / API 14 development baseline.
+- Adapts descriptor tracking and state restoration to API 7's native descriptor-set/descriptor-pool terminology and event surface.
+- Restricts tracked shader/pipeline stages and dynamic stencil state to the capabilities exposed by API 7.
+- Adds an isolated legacy compatibility shim for ReShade 5.8 logging/config helpers and its Dear ImGui function-table bridge.
+- Keeps the modern ReShade 6.8+ / API 20 development line separate on `main`; this branch is maintenance-only.
+- Builds and validates both x64 and x86, including PE architecture, version metadata and required add-on exports.
+
+No REST rendering feature is intentionally changed relative to v1.6.3.633. Runtime validation on ReShade 5.8/5.9.2 remains required before publishing the Legacy release.
+
+Improvements, documentation and testing by **DeViLhoOD**, building on the upstream contributors credited in README.md.
+
+
 ## v1.6.3.633 — 2026-09-24
 
 ### Shader-hunting visibility
