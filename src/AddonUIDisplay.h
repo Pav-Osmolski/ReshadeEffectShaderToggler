@@ -45,6 +45,7 @@
 #include <imgui.h>
 #include <ranges>
 #include <reshade.hpp>
+#include <unordered_set>
 #include <vector>
 
 #define MAX_DESCRIPTOR_INDEX 10
@@ -944,6 +945,11 @@ static void DisplayGroupView(AddonImGui::AddonUIData& instance,
                         hashes.size(),
                         markedCount,
                         missingMarkedHashes.size());
+    if (!missingMarkedHashes.empty()) {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.25f, 0.25f, 1.0f));
+        ImGui::TextUnformatted("Red = marked but not observed during the latest collection pass.");
+        ImGui::PopStyleColor();
+    }
     ImGui::TextWrapped("Pending shader marks are applied to the group when you click Done.");
     ImGui::Separator();
 
