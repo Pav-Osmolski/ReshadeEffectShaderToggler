@@ -467,26 +467,29 @@ static bool onBeginRenderPass(command_list* cmd_list,
     device* device = cmd_list->get_device();
     CommandListDataContainer& commandListData = *cmd_list->get_private_data<CommandListDataContainer>();
     DeviceDataContainer& deviceData = *device->get_private_data<DeviceDataContainer>();
+    const bool vulkan = device->get_api() == device_api::vulkan;
+    const bool resuming = vulkan && (flags & render_pass_flags::resume) != render_pass_flags::none;
+    const bool suspending = vulkan && (flags & render_pass_flags::suspend) != render_pass_flags::none;
 
     if (deviceData.current_runtime == nullptr || !deviceData.current_runtime->get_effects_state()) {
-        if (device->get_api() == device_api::vulkan) {
+        if (vulkan) {
             commandListData.vulkanInsideRenderPass = true;
             commandListData.vulkanRenderPassEndPending = false;
+            commandListData.vulkanRenderPassSuspends = suspending;
         }
         return false;
     }
 
-    if (device->get_api() == device_api::vulkan) {
-        // API 20 supplies render-pass flags directly. Keep REST's existing boundary
-        // tracking for behavioural parity during the initial ReShade 6.8 migration;
-        // the flags are consumed in the subsequent Vulkan modernization pass.
-        (void)flags;
+    if (vulkan) {
+        // ReShade API 20 exposes suspended/resumed dynamic-rendering segments
+        // explicitly. A resumed segment is a continuation of the same logical pass,
+        // so it can never be used as a safe point for preview/effect transfer work.
 
         // ReShade also emits begin_render_pass around vkCmdNextSubpass. In that case
         // Vulkan is still inside the original render pass, so effect/preview transfer
         // work is not legal here. Only treat a begin callback as a safe boundary when
         // REST has positively tracked the command list as being outside a render pass.
-        const bool safeVulkanBoundary = !commandListData.vulkanInsideRenderPass;
+        const bool safeVulkanBoundary = !commandListData.vulkanInsideRenderPass && !resuming;
         if (safeVulkanBoundary &&
             deviceData.vulkanPreviewWorkPending.load(std::memory_order_acquire))
             renderingPreviewManager.CaptureDeferredVulkanPreview(cmd_list);
@@ -510,6 +513,7 @@ static bool onBeginRenderPass(command_list* cmd_list,
 
         commandListData.vulkanInsideRenderPass = true;
         commandListData.vulkanRenderPassEndPending = false;
+        commandListData.vulkanRenderPassSuspends = suspending;
     }
 
     if (commandListData.commandQueue & Rendering::CHECK_MATCH_DRAW_BINDING) {
@@ -529,10 +533,21 @@ static bool onEndRenderPass(command_list* cmd_list) {
         return false;
     }
 
-    // This event is also emitted immediately before vkCmdNextSubpass. Keep the
-    // command list marked as inside the render pass until a later event proves that
-    // vkCmdEndRenderPass/vkCmdEndRendering really occurred.
     CommandListDataContainer& commandListData = *cmd_list->get_private_data<CommandListDataContainer>();
+
+    if (commandListData.vulkanRenderPassSuspends) {
+        // API 20 tells us this dynamic-rendering segment is intentionally suspended.
+        // Its matching resume begins the same logical pass, so do not arm a false
+        // post-pass boundary between the two segments.
+        commandListData.vulkanInsideRenderPass = true;
+        commandListData.vulkanRenderPassEndPending = false;
+        commandListData.vulkanRenderPassSuspends = false;
+        return false;
+    }
+
+    // Traditional Vulkan subpass transitions still surface as end/begin event pairs
+    // without a dedicated subpass flag. Retain the proven conservative fallback:
+    // stay inside the pass until a later barrier proves that the render pass ended.
     commandListData.vulkanInsideRenderPass = true;
     commandListData.vulkanRenderPassEndPending = true;
     return false;
