@@ -47,9 +47,9 @@ jobs:
             throw "Missing committed release notes: docs/releases/$tag.md"
           }
 
-          git merge-base --is-ancestor HEAD origin/main
+          git merge-base --is-ancestor HEAD origin/legacy/reshade-5.x
           if ($LASTEXITCODE -ne 0) {
-            throw "Release tag must point to a commit merged into main."
+            throw "Release tag must point to a commit merged into legacy/reshade-5.x."
           }
 
           ./src/set_release_version.ps1 $tag
