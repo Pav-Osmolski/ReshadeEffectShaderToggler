@@ -1,5 +1,7 @@
 # REST Enhanced — ReShade Effect Shader Toggler
 
+> **Legacy ReShade 5.x maintenance branch.** This branch is retained for ReShade 5.8–5.9.2 users. New feature development targets ReShade 6.8+ on `main`. ReShade 5.9.2 is the recommended runtime for this legacy line; versions older than 5.8 are unsupported.
+
 [![MSBuild](https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler/actions/workflows/msbuild.yml/badge.svg)](https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler/actions/workflows/msbuild.yml)
 [![Release](https://img.shields.io/github/v/release/Pav-Osmolski/ReshadeEffectShaderToggler?label=release)](https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler/releases/latest)
 
@@ -146,7 +148,7 @@ When native staging is required, REST performs an additional scene copy to nativ
 
 The repository builds x64 and x86 Release configurations through GitHub Actions and Visual Studio/MSBuild.
 
-A normal pull request to `main` runs the full build. Tagged releases use the format:
+A normal pull request to `legacy/reshade-5.x` runs the full legacy build. Tagged releases use the format:
 
 `vMAJOR.MINOR.PATCH.RESHADE`
 
