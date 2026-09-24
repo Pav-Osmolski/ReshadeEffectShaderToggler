@@ -198,8 +198,8 @@ void RenderingShaderManager::ApplyShader(command_list* cmd_list,
 
     cmd_list->bind_pipeline(pipeline_stage::all_graphics, sh_pipeline);
 
-    cmd_list->push_descriptors(shader_stage::pixel, sh_layout, 0, descriptor_table_update{ {}, 0, 0, 1, descriptor_type::sampler, &sh_sampler });
-    cmd_list->push_descriptors(shader_stage::pixel, sh_layout, 1, descriptor_table_update{ {}, 0, 0, 1, descriptor_type::shader_resource_view, &srv_src });
+    cmd_list->push_descriptors(shader_stage::pixel, sh_layout, 0, descriptor_set_update{ {}, 0, 0, 1, descriptor_type::sampler, &sh_sampler });
+    cmd_list->push_descriptors(shader_stage::pixel, sh_layout, 1, descriptor_set_update{ {}, 0, 0, 1, descriptor_type::shader_resource_view, &srv_src });
 
     const viewport viewport = { 0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height), 0.0f, 1.0f };
     cmd_list->bind_viewports(0, 1, &viewport);
