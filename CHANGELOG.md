@@ -1,5 +1,26 @@
 # Changelog
 
+## v1.7.0.680 — 2026-09-24
+
+### ReShade 6.8 / API 20 modernization
+
+- Establishes ReShade **6.8+** as the active REST Enhanced development line.
+- Pins the ReShade dependency to the ReShade 6.8.0 / API 20 baseline.
+- Updates add-on metadata and callback signatures for the current ReShade API.
+- Updates swapchain lifecycle callbacks to the API 20 interface.
+- Updates render-pass callbacks to API 20 and uses Vulkan render-pass suspend/resume flags to avoid treating resumed dynamic-rendering segments as safe injection boundaries.
+- Retains the proven conservative Vulkan subpass fallback for traditional render-pass transitions.
+- Keeps the ReShade 5.x compatibility implementation isolated on `legacy/reshade-5.x`.
+- Builds and validates x64 and x86, including PE architecture, file version and required add-on exports.
+
+### Runtime validation
+
+Runtime-tested successfully with **ReShade 6.8.0** using Baldur's Gate 3. The tested v1.7.0.680 workflow behaved correctly with no reported regression.
+
+Improvements, modernization, documentation and testing by **DeViLhoOD**, building on the upstream contributors credited in README.md.
+
+
+
 ## v1.6.3.633 — 2026-09-24
 
 ### Shader-hunting visibility
