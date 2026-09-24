@@ -281,9 +281,10 @@ void ResourceManager::CheckPreview(reshade::api::command_list* cmd_list, reshade
         resource_desc desc = deviceData.huntPreview.target_desc;
 
         const bool vulkan = device->get_api() == device_api::vulkan;
-        const reshade::api::format previewFormat = vulkan ?
-          format_to_default_typed(deviceData.huntPreview.view_format != reshade::api::format::unknown ? deviceData.huntPreview.view_format : desc.texture.format, 0) :
-          format_to_typeless(desc.texture.format);
+        const reshade::api::format sourceViewFormat =
+          deviceData.huntPreview.view_format != reshade::api::format::unknown ? deviceData.huntPreview.view_format : desc.texture.format;
+        const reshade::api::format previewViewFormat = format_to_default_typed(sourceViewFormat, 0);
+        const reshade::api::format previewResourceFormat = vulkan ? previewViewFormat : format_to_typeless(desc.texture.format);
 
         const resource_usage vulkanUsage = resource_usage::copy_dest | resource_usage::shader_resource;
         const resource_usage d3dPingUsage =
@@ -296,7 +297,7 @@ void ResourceManager::CheckPreview(reshade::api::command_list* cmd_list, reshade
                         desc.texture.height,
                         1,
                         1,
-                        previewFormat,
+                        previewResourceFormat,
                         1,
                         memory_heap::gpu_only,
                         vulkan ? vulkanUsage : d3dPingUsage),
@@ -304,7 +305,7 @@ void ResourceManager::CheckPreview(reshade::api::command_list* cmd_list, reshade
                         desc.texture.height,
                         1,
                         1,
-                        previewFormat,
+                        previewResourceFormat,
                         1,
                         memory_heap::gpu_only,
                         vulkan ? vulkanUsage : d3dPongUsage)
@@ -317,9 +318,12 @@ void ResourceManager::CheckPreview(reshade::api::command_list* cmd_list, reshade
                 continue;
             }
 
+            // Direct3D permits typeless resources, but SRV/RTV descriptions must
+            // use a compatible typed format. Keeping the view typed also matches
+            // the original D3D preview path while Vulkan uses a typed image.
             if (!device->create_resource_view(deviceData.resourceManagerData.preview_res[i],
                                               resource_usage::shader_resource,
-                                              resource_view_desc(previewFormat),
+                                              resource_view_desc(previewViewFormat),
                                               &deviceData.resourceManagerData.preview_srv[i])) {
                 reshade::log::message(reshade::log::level::error, "Failed to create preview shader resource view!");
                 deviceData.huntPreview.status = "Preview unavailable: failed to create preview SRV";
@@ -328,7 +332,7 @@ void ResourceManager::CheckPreview(reshade::api::command_list* cmd_list, reshade
             if (!vulkan &&
                 !device->create_resource_view(deviceData.resourceManagerData.preview_res[i],
                                               resource_usage::render_target,
-                                              resource_view_desc(format_to_default_typed(deviceData.huntPreview.view_format, 0)),
+                                              resource_view_desc(previewViewFormat),
                                               &deviceData.resourceManagerData.preview_rtv[i])) {
                 reshade::log::message(reshade::log::level::error, "Failed to create preview render target view!");
             }
@@ -373,14 +377,22 @@ void ResourceManager::SetPongPreviewHandles(reshade::api::device* device,
 bool ResourceManager::IsCompatibleWithPreviewFormat(reshade::api::device* device, reshade::api::resource res, reshade::api::format view_format) {
     DeviceDataContainer& deviceData = device->get_private_data<DeviceDataContainer>();
 
-    if (deviceData.resourceManagerData.preview_res[0] == 0 || res == 0)
+    // Never query a view description for a failed/absent preview SRV. This can
+    // occur after an unsupported view creation and used to turn rapid D3D11
+    // hunting into a null-handle backend query on the following draw.
+    if (deviceData.resourceManagerData.preview_res[0] == 0 ||
+        deviceData.resourceManagerData.preview_srv[0] == 0 ||
+        res == 0)
         return false;
 
     resource_desc res_desc = device->get_resource_desc(res);
     resource_desc preview_desc = device->get_resource_desc(deviceData.resourceManagerData.preview_res[0]);
     resource_view_desc preview_view_desc = device->get_resource_view_desc(deviceData.resourceManagerData.preview_srv[0]);
+    const reshade::api::format sourceViewFormat =
+      view_format != reshade::api::format::unknown ? view_format : res_desc.texture.format;
 
-    if ((format_to_typeless(view_format) == format_to_typeless(preview_view_desc.format)) && res_desc.texture.width == preview_desc.texture.width &&
+    if ((format_to_typeless(sourceViewFormat) == format_to_typeless(preview_view_desc.format)) &&
+        res_desc.texture.width == preview_desc.texture.width &&
         res_desc.texture.height == preview_desc.texture.height) {
         return true;
     }
