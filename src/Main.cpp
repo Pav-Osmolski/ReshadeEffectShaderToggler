@@ -66,8 +66,11 @@ using namespace Shim::Constants;
 using namespace std;
 
 extern "C" __declspec(dllexport) const char* NAME = "REST Enhanced — ReShade Effect Shader Toggler";
+extern "C" __declspec(dllexport) const char* AUTHOR = "DeViLhoOD";
 extern "C" __declspec(dllexport) const char* DESCRIPTION =
   "ReShade add-on for applying selected effects at shader-defined points in the rendering pipeline, including automatic scene-colour injection for upscaled rendering.";
+extern "C" __declspec(dllexport) const char* WEBSITE = "https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler";
+extern "C" __declspec(dllexport) const char* ISSUES = "https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler/issues";
 
 constexpr auto MAX_EFFECT_HANDLES = 128;
 constexpr auto REST_VAR_ANNOTATION = "source";
@@ -142,15 +145,18 @@ static void onResetCommandList(command_list* commandList) {
     commandListData.Reset();
 }
 
-static bool onCreateSwapchain(swapchain_desc& desc, void* hwnd) {
+static bool onCreateSwapchain(device_api api, swapchain_desc& desc, void* hwnd) {
+    (void)api;
     return resourceManager.OnCreateSwapchain(desc, hwnd);
 }
 
-static void onInitSwapchain(reshade::api::swapchain* swapchain) {
+static void onInitSwapchain(reshade::api::swapchain* swapchain, bool resize) {
+    (void)resize;
     resourceManager.OnInitSwapchain(swapchain);
 }
 
-static void onDestroySwapchain(reshade::api::swapchain* swapchain) {
+static void onDestroySwapchain(reshade::api::swapchain* swapchain, bool resize) {
+    (void)resize;
     resourceManager.OnDestroySwapchain(swapchain);
 }
 
@@ -449,9 +455,13 @@ static void onBarrier(command_list* cmd_list,
     renderingEffectManager.RenderDeferredVulkanAutoEffectsAfterBarrier(cmd_list, count, resources, oldStates, newStates);
 }
 
-static void onBeginRenderPass(command_list* cmd_list, uint32_t count, const render_pass_render_target_desc* rts, const render_pass_depth_stencil_desc* ds) {
+static bool onBeginRenderPass(command_list* cmd_list,
+                              uint32_t count,
+                              const render_pass_render_target_desc* rts,
+                              const render_pass_depth_stencil_desc* ds,
+                              render_pass_flags flags) {
     if (cmd_list == nullptr || cmd_list->get_device() == nullptr) {
-        return;
+        return false;
     }
 
     device* device = cmd_list->get_device();
@@ -463,10 +473,15 @@ static void onBeginRenderPass(command_list* cmd_list, uint32_t count, const rend
             commandListData.vulkanInsideRenderPass = true;
             commandListData.vulkanRenderPassEndPending = false;
         }
-        return;
+        return false;
     }
 
     if (device->get_api() == device_api::vulkan) {
+        // API 20 supplies render-pass flags directly. Keep REST's existing boundary
+        // tracking for behavioural parity during the initial ReShade 6.8 migration;
+        // the flags are consumed in the subsequent Vulkan modernization pass.
+        (void)flags;
+
         // ReShade also emits begin_render_pass around vkCmdNextSubpass. In that case
         // Vulkan is still inside the original render pass, so effect/preview transfer
         // work is not legal here. Only treat a begin callback as a safe boundary when
@@ -505,12 +520,13 @@ static void onBeginRenderPass(command_list* cmd_list, uint32_t count, const rend
         renderingEffectManager.RenderEffects(cmd_list, Rendering::CALL_DRAW, Rendering::MATCH_EFFECT_PS | Rendering::MATCH_EFFECT_VS);
     }
 
+    return false;
 }
 
-static void onEndRenderPass(command_list* cmd_list) {
+static bool onEndRenderPass(command_list* cmd_list) {
     if (cmd_list == nullptr || cmd_list->get_device() == nullptr ||
         cmd_list->get_device()->get_api() != device_api::vulkan) {
-        return;
+        return false;
     }
 
     // This event is also emitted immediately before vkCmdNextSubpass. Keep the
@@ -519,6 +535,7 @@ static void onEndRenderPass(command_list* cmd_list) {
     CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
     commandListData.vulkanInsideRenderPass = true;
     commandListData.vulkanRenderPassEndPending = true;
+    return false;
 }
 
 static void onReShadeOverlay(effect_runtime* runtime) {
