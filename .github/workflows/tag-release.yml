@@ -3,7 +3,7 @@ name: Tag Release
 on:
   push:
     branches:
-      - main
+      - legacy/reshade-5.x
     paths:
       - "src/version.h"
       - "docs/releases/**"

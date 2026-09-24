@@ -12,7 +12,7 @@
 - Keeps the modern ReShade 6.8+ / API 20 development line separate on `main`; this branch is maintenance-only.
 - Builds and validates both x64 and x86, including PE architecture, version metadata and required add-on exports.
 
-No REST rendering feature is intentionally changed relative to v1.6.3.633. Runtime validation on ReShade 5.8/5.9.2 remains required before publishing the Legacy release.
+No REST rendering feature is intentionally changed relative to v1.6.3.633. Runtime validation completed successfully with **ReShade 5.9.2**; ReShade 5.8.0 remains the compile/API baseline.
 
 Improvements, documentation and testing by **DeViLhoOD**, building on the upstream contributors credited in README.md.
 
