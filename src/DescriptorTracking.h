@@ -46,17 +46,17 @@ class __declspec(uuid("33319e83-387c-448e-881c-7e68fc2e52c4")) descriptor_tracki
     /// <summary>
     /// Gets the sampler in a descriptor set at the specified offset.
     /// </summary>
-    reshade::api::sampler get_sampler(reshade::api::descriptor_heap heap, uint32_t offset) const;
+    reshade::api::sampler get_sampler(reshade::api::descriptor_pool heap, uint32_t offset) const;
     /// <summary>
     /// Gets the shader resource view in a descriptor set at the specified offset.
     /// </summary>
-    reshade::api::resource_view get_shader_resource_view(reshade::api::descriptor_heap heap, uint32_t offset) const;
+    reshade::api::resource_view get_shader_resource_view(reshade::api::descriptor_pool heap, uint32_t offset) const;
     /// <summary>
     /// Gets the buffer range in a descriptor set at the specified offset.
     /// </summary>
-    reshade::api::buffer_range get_buffer_range(reshade::api::descriptor_heap heap, uint32_t offset) const;
+    reshade::api::buffer_range get_buffer_range(reshade::api::descriptor_pool heap, uint32_t offset) const;
 
-    void set_all_descriptors(reshade::api::descriptor_heap heap,
+    void set_all_descriptors(reshade::api::descriptor_pool heap,
                              uint32_t offset,
                              uint32_t count,
                              std::vector<descriptor_tracking::descriptor_data>& descriptor_list,
@@ -77,14 +77,14 @@ class __declspec(uuid("33319e83-387c-448e-881c-7e68fc2e52c4")) descriptor_tracki
                                         reshade::api::pipeline_layout layout);
     static void on_destroy_pipeline_layout(reshade::api::device* device, reshade::api::pipeline_layout layout);
 
-    static bool on_copy_descriptor_tables(reshade::api::device* device, uint32_t count, const reshade::api::descriptor_table_copy* copies);
-    static bool on_update_descriptor_tables(reshade::api::device* device, uint32_t count, const reshade::api::descriptor_table_update* updates);
+    static bool on_copy_descriptor_sets(reshade::api::device* device, uint32_t count, const reshade::api::descriptor_set_copy* copies);
+    static bool on_update_descriptor_sets(reshade::api::device* device, uint32_t count, const reshade::api::descriptor_set_update* updates);
 
-    struct descriptor_heap_data {
+    struct descriptor_pool_data {
         concurrency::concurrent_vector<descriptor_data> descriptors;
     };
-    struct descriptor_heap_hash : std::hash<uint64_t> {
-        size_t operator()(reshade::api::descriptor_heap handle) const { return std::hash<uint64_t>::operator()(handle.handle); }
+    struct descriptor_pool_hash : std::hash<uint64_t> {
+        size_t operator()(reshade::api::descriptor_pool handle) const { return std::hash<uint64_t>::operator()(handle.handle); }
     };
 
     struct pipeline_layout_data {
@@ -99,7 +99,7 @@ class __declspec(uuid("33319e83-387c-448e-881c-7e68fc2e52c4")) descriptor_tracki
         size_t operator()(reshade::api::pipeline handle) const { return std::hash<uint64_t>::operator()(handle.handle); }
     };
 
-    concurrency::concurrent_unordered_map<reshade::api::descriptor_heap, descriptor_heap_data, descriptor_heap_hash> heaps;
+    concurrency::concurrent_unordered_map<reshade::api::descriptor_pool, descriptor_pool_data, descriptor_pool_hash> heaps;
     concurrency::concurrent_unordered_map<reshade::api::pipeline_layout, pipeline_layout_data, pipeline_layout_hash> layouts;
     concurrency::concurrent_unordered_map<reshade::api::pipeline, reshade::api::pipeline_layout, pipeline_hash> pipelines;
 };
