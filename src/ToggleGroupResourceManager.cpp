@@ -84,7 +84,6 @@ static bool isValidRenderTarget(reshade::api::format format) {
         case reshade::api::format::b5g5r5a1_unorm:
         case reshade::api::format::b5g5r5x1_unorm:
         case reshade::api::format::b4g4r4a4_unorm:
-        case reshade::api::format::a4b4g4r4_unorm:
             return true;
         default:
             return false;
