@@ -1,5 +1,26 @@
 # Changelog
 
+## v1.6.2.633 — 2026-09-24
+
+### D3D shader-hunting stability
+
+- Fixes a reproducible D3D11 crash-to-desktop when holding **Prev** or rapidly navigating shaders during shader hunting.
+- Restores typed SRV/RTV creation over typeless Direct3D preview resources after the Vulkan preview-resource refactor caused D3D11 shader-resource-view creation to fail.
+- Guards preview compatibility checks against missing SRV handles so failed preview-view creation cannot lead to a null backend view query on the next hunting step.
+- Falls back to the captured resource format when the source view format is unknown.
+- The corrected preview path is shared by D3D10, D3D11 and D3D12. BG3 D3D11 was runtime-tested successfully after the fix; D3D10/D3D12 were not separately game-tested.
+
+### CI and maintenance
+
+- Makes MSBuild validation lifecycle-based rather than commit-based: PRs validate when opened, reopened or marked ready, while build-affecting changes merged to `main` still validate normally.
+- Keeps manual workflow dispatch for deliberate WIP/test builds.
+- Removes the obsolete branch-specific Vulkan per-push test workflow, avoiding redundant Actions runs during development.
+
+Vulkan preview capture and Auto Scene Colour behaviour remain unchanged.
+
+Improvements, documentation and testing by **DeViLhoOD**, building on the upstream contributors credited in README.md.
+
+
 ## v1.6.1.633 — 2026-09-21
 
 ### QoL and configuration safety
