@@ -35,8 +35,8 @@ void state_block::apply_descriptors_dx12_vulkan(command_list* cmd_list) const {
         // Restore tables in first pass to assure heaps are restored, do constants in a second pass,
         // pushed descriptors should be restored along with the tables when the heap is restored to the game internal one
         for (uint32_t i = 0; i < root_table.size(); i++) {
-            if (root_table[i].type == root_entry_type::descriptor_table && root_table[i].descriptor_set.handle != 0) {
-                cmd_list->bind_descriptor_sets(stages, pipelinelayout, i, 1, &root_table[i].descriptor_set);
+            if (root_table[i].type == root_entry_type::descriptor_table && root_table[i].descriptor_table.handle != 0) {
+                cmd_list->bind_descriptor_sets(stages, pipelinelayout, i, 1, &root_table[i].descriptor_table);
             }
 
             if (root_table[i].type == root_entry_type::push_constants && root_table[i].buffer_index >= 0 &&
