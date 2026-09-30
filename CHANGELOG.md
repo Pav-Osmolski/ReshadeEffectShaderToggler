@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.7.1.680 — 2026-09-30
 
 ### Shader visibility
 
@@ -10,6 +10,14 @@
 - Keeps compute dispatch suppression out of the feature deliberately, avoiding unintended interference with compute-based lighting, simulation, upscaling or other game pipeline work.
 - Persists the setting through normal INI save/load, group clone, Copy group / Import group and configuration dirty-state tracking.
 - Adds a compact **Hide shaders** indicator to configured groups and documents HUD-free screenshot / photo-mode style usage.
+
+### Validation
+
+- Runtime-tested successfully with the existing UI group workflow: matching HUD/UI draws are suppressed immediately and remain suppressed across repeated draws using the same bound pipeline.
+- Existing group hotkeys correctly toggle the hidden UI state without a separate photo-mode hotkey system.
+- x64 and x86 builds pass PE architecture, version metadata and required export validation.
+
+Improvements, implementation, documentation and testing by **DeViLhoOD**, building on the upstream contributors credited in README.md.
 
 ## v1.7.0.680 — 2026-09-24
 
