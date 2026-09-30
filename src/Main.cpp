@@ -679,13 +679,14 @@ static void CheckDrawCall(command_list* cmd_list, const uint64_t match_modifier 
     }
 }
 
-static void ClearSuppressedCallState(CommandListDataContainer& commandListData, uint64_t matchModifier) {
-    auto clearStage = [](ShaderData& stage) {
+static void ClearSuppressedCallState(CommandListDataContainer& commandListData, uint64_t matchModifier, bool clearBlockedGroups = true) {
+    auto clearStage = [clearBlockedGroups](ShaderData& stage) {
         stage.bindingsToUpdate.clear();
         stage.constantBuffersToUpdate.clear();
         stage.techniquesToRender.clear();
         stage.srvToUpdate.clear();
-        stage.blockedShaderGroups.clear();
+        if (clearBlockedGroups)
+            stage.blockedShaderGroups.clear();
     };
 
     uint64_t clearMask = 0;
@@ -731,7 +732,10 @@ static bool ShouldSuppressMarkedGraphicsCall(command_list* cmd_list, uint64_t ma
     if (!suppressPS && !suppressVS)
         return false;
 
-    ClearSuppressedCallState(commandListData, matchModifier);
+    // Keep blockedShaderGroups intact here. The same pipeline may issue multiple
+    // draws without another bind_pipeline callback, and every matching draw must
+    // remain hidden until the game actually changes the bound shader.
+    ClearSuppressedCallState(commandListData, matchModifier, false);
     return true;
 }
 
