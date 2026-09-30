@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Shader visibility
+
+- Backports the per-group **Hide marked shaders** option from the ReShade 6.8+ line to the ReShade 5.8/API 7 Legacy branch.
+- Suppresses graphics draws matching the group's marked pixel or vertex shaders while the group is active.
+- Supports normal, indexed and typed indirect graphics draws.
+- Preserves matching group state across repeated draws that reuse the same bound pipeline.
+- Clears queued REST effect, binding, constant and preview work for skipped calls so it cannot leak into later draws.
+- Deliberately leaves compute dispatches untouched.
+- Persists the option through INI save/load, group cloning, Copy group / Import group and dirty-state tracking.
+- Adds the **Hide marked shaders** control and compact **Hide shaders** group indicator.
+- Does not change the Legacy branch's ReShade 5.8/API 7 baseline or introduce Modern/API 20 compatibility code.
+
 ## v1.6.4.580 — 2026-09-24
 
 ### ReShade 5.x legacy baseline

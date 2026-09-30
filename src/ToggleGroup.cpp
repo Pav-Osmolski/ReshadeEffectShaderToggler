@@ -60,6 +60,7 @@ ToggleGroup::ToggleGroup(string name, int id) {
     _preserveAlpha = false;
     _renderToResourceViews = false;
     _autoRenderSRV = false;
+    _hideMarkedShaders = false;
     _cbCycle = CYCLE_NONE;
     _srvCycle = CYCLE_NONE;
     _rtCycle = CYCLE_NONE;
@@ -147,6 +148,7 @@ ToggleGroup::ToggleGroup(const ToggleGroup& other)
     _rtCycle = other._rtCycle;
     _renderToResourceViews = other._renderToResourceViews;
     _autoRenderSRV = other._autoRenderSRV;
+    _hideMarkedShaders = other._hideMarkedShaders;
     _renderSrvDescIndex = other._renderSrvDescIndex;
     _renderSrvShaderStage = other._renderSrvShaderStage;
     _renderSrvSlotIndex = other._renderSrvSlotIndex;
@@ -199,7 +201,7 @@ std::string ToggleGroup::configurationSignature() const {
        << _bindingSrvShaderStage << ';' << _renderSrvShaderStage << ';'
        << _allowAllTechniques << ';' << _isProvidingTextureBinding << ';'
        << _copyTextureBinding << ';' << _renderToResourceViews << ';'
-       << _autoRenderSRV << ';' << _extractConstants << ';'
+       << _autoRenderSRV << ';' << _hideMarkedShaders << ';' << _extractConstants << ';'
        << _extractResourceViews << ';' << _clearBindings << ';'
        << _previewClearAlpha << ';' << _hasTechniqueExceptions << ';'
        << _tonemapHDRtoSDRtoHDR << ';' << _preserveAlpha << ';'
@@ -355,6 +357,7 @@ void ToggleGroup::saveState(CDataFile& iniFile, int groupCounter) const {
     }
     iniFile.SetBool("RenderToSRVs", _renderToResourceViews, "", sectionRoot);
     iniFile.SetBool("AutoRenderSRV", _autoRenderSRV, "", sectionRoot);
+    iniFile.SetBool("HideMarkedShaders", _hideMarkedShaders, "", sectionRoot);
     iniFile.SetUInt("RenderSRVPipelineSlot", _renderSrvSlotIndex, "", sectionRoot);
     iniFile.SetUInt("RenderSRVDescriptorIndex", _renderSrvDescIndex, "", sectionRoot);
     iniFile.SetUInt("RenderSRVShaderStage", _renderSrvShaderStage, "", sectionRoot);
@@ -571,6 +574,7 @@ void ToggleGroup::loadState(CDataFile& iniFile, int groupCounter) {
 
     _renderToResourceViews = iniFile.GetBoolOrDefault("RenderToSRVs", sectionRoot, false);
     _autoRenderSRV = iniFile.GetBoolOrDefault("AutoRenderSRV", sectionRoot, false);
+    _hideMarkedShaders = iniFile.GetBoolOrDefault("HideMarkedShaders", sectionRoot, false);
 
     uint32_t renderSrvSlotIndex = iniFile.GetUInt("RenderSRVPipelineSlot", sectionRoot);
     if (renderSrvSlotIndex != UINT_MAX) {
