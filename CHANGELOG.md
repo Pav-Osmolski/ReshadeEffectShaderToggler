@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Shader visibility
+
+- Adds a per-group **Hide marked shaders** option that suppresses graphics draws matching the group's marked pixel or vertex shaders while the group is active.
+- Reuses REST's existing draw-suppression cleanup so skipped calls cannot leave queued effect, binding, constant or preview work to leak into a later draw.
+- Supports normal, indexed and typed indirect graphics draws across ReShade's supported graphics APIs.
+- Keeps compute dispatch suppression out of the feature deliberately, avoiding unintended interference with compute-based lighting, simulation, upscaling or other game pipeline work.
+- Persists the setting through normal INI save/load, group clone, Copy group / Import group and configuration dirty-state tracking.
+- Adds a compact **Hide shaders** indicator to configured groups and documents HUD-free screenshot / photo-mode style usage.
+
 ## v1.7.0.680 — 2026-09-24
 
 ### ReShade 6.8 / API 20 modernization

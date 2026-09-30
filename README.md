@@ -14,6 +14,7 @@ Both 64-bit and 32-bit are first-class build targets. CI builds and validates bo
 - Create shader groups and toggle them on or off from the ReShade overlay.
 - Apply all globally enabled ReShade techniques, a selected subset, or all except selected techniques to a group.
 - Render effects at configurable render-target boundaries.
+- **Hide marked shaders** to suppress matching UI/HUD or other graphics draws, enabling configurable HUD-free screenshot workflows without a separate UI-mask add-on.
 - Preview and inspect render targets while hunting shaders.
 - Extract and reuse constant-buffer or texture-binding data where supported.
 - **Automatic scene-colour injection for D3D10/D3D11/D3D12 and Vulkan games using DLSS or other dynamic-resolution/upscaling paths.**
@@ -69,6 +70,14 @@ The saved configuration is written to `ReshadeEffectShaderToggler.ini` beside th
 - Each group shows compact pixel/vertex/compute shader counts, selected-effect count and an **Auto Scene Colour** indicator when enabled.
 - REST warns when group hotkeys conflict with another group or with a configured REST action.
 - The **Saved / Unsaved changes** indicator reflects the configuration that would be written to disk, including the group's persisted Active state.
+
+## Hiding marked shaders
+
+Enable **Hide marked shaders** in a group's settings to suppress graphics draws that match the group's marked pixel or vertex shaders while the group is active. This is useful for shader identification and configuration testing, and can provide a lightweight photo-mode style workflow in games that do not offer a native HUD toggle.
+
+A typical `UI` group can contain the shaders used by the HUD, minimap, subtitles or prompts. Assigning a hotkey to that group then provides a convenient way to toggle those elements for screenshots. Games may use several shaders or passes for their interface, so multiple hashes can be collected into the same group.
+
+The feature suppresses graphics draws only. Compute dispatches are deliberately not suppressed because compute shaders may perform lighting, simulation, upscaling or other non-visual pipeline work.
 
 ## Configuring effects
 
