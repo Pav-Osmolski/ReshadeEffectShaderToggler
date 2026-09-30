@@ -1452,6 +1452,17 @@ static void DisplayOverlay(AddonImGui::AddonUIData& instance, Rendering::Resourc
             if (ImGui::BeginChild("GroupSettings", { 0, 0 }, true, ImGuiChildFlags_AlwaysAutoResize)) {
                 ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(3, 3));
 
+                bool hideMarkedShaders = group->getHideMarkedShaders();
+                if (ImGui::Checkbox("Hide marked shaders", &hideMarkedShaders))
+                    group->setHideMarkedShaders(hideMarkedShaders);
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Suppress graphics draws matching this group's marked pixel or vertex shaders while the group is active.\nUseful for HUD-free screenshots, shader identification and configuration testing.\nCompute dispatches are not suppressed.");
+
+                if (hideMarkedShaders)
+                    ImGui::TextDisabled("Matching graphics draws are suppressed while this group is active.");
+
+                ImGui::Separator();
+
                 ImGuiTabBarFlags tab_bar_flags = ImGuiTabBarFlags_None;
                 if (ImGui::BeginTabBar("MyTabBar", tab_bar_flags)) {
                     if (ImGui::BeginTabItem("Effects")) {
@@ -1808,12 +1819,13 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, reshade::api::eff
             const size_t csCount = shaderEditingThisGroup ? instance.GetComputeShaderManager()->getMarkedShaderCount() : group.getComputeShaderHashCount();
             const size_t fxCount = group.preferredTechniques().size();
 
-            ImGui::TextDisabled("PS: %zu | VS: %zu | CS: %zu | FX: %zu%s%s",
+            ImGui::TextDisabled("PS: %zu | VS: %zu | CS: %zu | FX: %zu%s%s%s",
                                 psCount,
                                 vsCount,
                                 csCount,
                                 fxCount,
                                 group.getAutoRenderSRV() ? " | Auto Scene Colour" : "",
+                                group.getHideMarkedShaders() ? " | Hide shaders" : "",
                                 shaderEditingThisGroup ? " | pending" : "");
 
             if (group.getToggleKey() != 0) {

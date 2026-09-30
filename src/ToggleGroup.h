@@ -192,6 +192,8 @@ class ToggleGroup {
     void setRenderToResourceViews(bool render) { if (_renderToResourceViews != render) { _renderToResourceViews = render; markConfigDirty(); } }
     bool getAutoRenderSRV() const { return _autoRenderSRV; }
     void setAutoRenderSRV(bool value) { if (_autoRenderSRV != value) { _autoRenderSRV = value; markConfigDirty(); } }
+    bool getHideMarkedShaders() const { return _hideMarkedShaders; }
+    void setHideMarkedShaders(bool value) { if (_hideMarkedShaders != value) { _hideMarkedShaders = value; markConfigDirty(); } }
     bool isAutoSceneColourActive(reshade::api::device_api api) const {
         return _autoRenderSRV && IsAutoSceneColourSupported(api);
     }
@@ -418,13 +420,14 @@ class ToggleGroup {
     uint32_t _renderSrvDescIndex = 0;
     uint32_t _bindingSrvShaderStage = 0;
     uint32_t _renderSrvShaderStage = 0;
-    bool _isActive;           // true means the group is actively toggled (so the hashes have to be hidden.
+    bool _isActive;           // true means the group participates in its configured matching behaviour.
     bool _isEditing;          // true means the group is actively edited (name, key)
     bool _allowAllTechniques; // true means all techniques are allowed, regardless of preferred techniques.
     volatile bool _isProvidingTextureBinding;
     volatile bool _copyTextureBinding;
     bool _renderToResourceViews;
     bool _autoRenderSRV = false;
+    bool _hideMarkedShaders = false;
     uint64_t _debugEffectRenderCalls = 0;
     uint32_t _debugLastRenderedTechniqueCount = 0;
     uint64_t _debugLastRenderTarget = 0;
