@@ -2,8 +2,8 @@
 
 > **Legacy ReShade 5.x maintenance branch.** This branch is retained for ReShade 5.8–5.9.2 users. New feature development targets ReShade 6.8+ on `main`. ReShade 5.9.2 is the recommended runtime for this legacy line; versions older than 5.8 are unsupported.
 
-[![MSBuild](https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler/actions/workflows/msbuild.yml/badge.svg)](https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler/actions/workflows/msbuild.yml)
-[![Release](https://img.shields.io/github/v/release/Pav-Osmolski/ReshadeEffectShaderToggler?label=release)](https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler/releases/latest)
+[![MSBuild](https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler/actions/workflows/msbuild.yml/badge.svg?branch=legacy%2Freshade-5.x)](https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler/actions/workflows/msbuild.yml)
+[![Legacy Release](https://img.shields.io/github/v/release/Pav-Osmolski/ReshadeEffectShaderToggler?filter=*.580&label=legacy%20release)](https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler/releases?q=Legacy)
 
 A ReShade 5.8+ add-on for applying ReShade effects at specific points inside a game's rendering pipeline. REST groups user-selected shaders and can inject selected ReShade techniques immediately before those shaders are encountered.
 
