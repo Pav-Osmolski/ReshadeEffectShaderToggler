@@ -95,9 +95,14 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
         resource_view view_srgb = {};
         resource_view group_view = {};
         resource_desc desc = cmd_list->get_device()->get_resource_desc(active_resource.resource);
+        if (desc.type != resource_type::texture_2d || desc.texture.samples != 1 || desc.texture.depth_or_layers != 1) {
+            group->setDebugAutoStatus("Unsupported effect target topology");
+            continue;
+        }
         GroupResource& groupResource = group->GetGroupResource(GroupResourceType::RESOURCE_ALPHA);
         const shared_ptr<GlobalResourceView>& view = resourceManager.GetResourceView(runtime->get_device(), active_resource);
         bool copyPreserveAlpha = false;
+        resource alphaCopyResource = {};
 
         if (view == nullptr) {
             continue;
@@ -284,7 +289,14 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
             if (groupResourceManager.IsCompatibleWithGroupFormat(runtime->get_device(), GroupResourceType::RESOURCE_ALPHA, active_resource.resource, group)) {
                 resource group_res = {};
                 groupResourceManager.SetGroupBufferHandles(group, GroupResourceType::RESOURCE_ALPHA, &group_res, &view_non_srgb, &view_srgb, &group_view);
+                if (deviceApi == device_api::d3d12)
+                    cmd_list->barrier(active_resource.resource, resource_usage::render_target, resource_usage::copy_source);
                 cmd_list->copy_resource(active_resource.resource, group_res);
+                if (deviceApi == device_api::d3d12) {
+                    cmd_list->barrier(active_resource.resource, resource_usage::copy_source, resource_usage::render_target);
+                    cmd_list->barrier(group_res, resource_usage::copy_dest, resource_usage::render_target);
+                }
+                alphaCopyResource = group_res;
                 copyPreserveAlpha = true;
             } else {
                 view_non_srgb = view->rtv;
@@ -360,11 +372,15 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
         }
 
         if (copyPreserveAlpha) {
+            if (deviceApi == device_api::d3d12)
+                cmd_list->barrier(alphaCopyResource, resource_usage::render_target, resource_usage::shader_resource);
             resource_view target_view_non_srgb = view->rtv;
             resource_view target_view_srgb = view->rtv_srgb;
 
             if (target_view_non_srgb != 0)
                 shaderManager.CopyResourceMaskAlpha(cmd_list, group_view, target_view_non_srgb, desc.texture.width, desc.texture.height);
+            if (deviceApi == device_api::d3d12)
+                cmd_list->barrier(alphaCopyResource, resource_usage::shader_resource, resource_usage::copy_dest);
         }
 
         if (useNativeStaging) {
