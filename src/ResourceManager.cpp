@@ -1,4 +1,5 @@
 #include "ResourceManager.h"
+#include "RenderingSafety.h"
 #include <format>
 #include <algorithm>
 
@@ -266,9 +267,7 @@ void ResourceManager::SynchronizeGpu(effect_runtime* runtime) {
 }
 
 bool ResourceManager::IsPreviewTargetSupported(const resource_desc& desc) {
-    return desc.type == resource_type::texture_2d && desc.texture.samples == 1 &&
-           desc.texture.levels == 1 && desc.texture.depth_or_layers == 1 &&
-           desc.texture.width != 0 && desc.texture.height != 0;
+    return SupportsWholePreviewCopy(desc);
 }
 
 void ResourceManager::CheckPreview(reshade::api::command_list* cmd_list, reshade::api::device* device) {

@@ -4,7 +4,7 @@ on:
   workflow_run:
     workflows: [MSBuild]
     types: [completed]
-    branches: [main]
+    branches: [main, legacy/reshade-5.x]
 
 concurrency:
   group: tag-release-${{ github.event.workflow_run.head_branch }}
@@ -34,16 +34,22 @@ jobs:
         shell: bash
         env:
           COMMIT_MESSAGE: ${{ github.event.workflow_run.head_commit.message }}
+          RELEASE_BRANCH: ${{ github.event.workflow_run.head_branch }}
           RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           version="$(sed -n 's/^#define REST_VERSION_STRING "\([^"]*\)"/\1/p' src/version.h)"
           tag="v${version}"
-          [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+\.680$ ]] || { echo "Invalid modern release version" >&2; exit 1; }
+          case "$RELEASE_BRANCH" in
+            main) suffix=680 ;;
+            legacy/reshade-5.x) suffix=580 ;;
+            *) echo "Unsupported release branch" >&2; exit 1 ;;
+          esac
+          [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+\.${suffix}$ ]] || { echo "Invalid release version for branch" >&2; exit 1; }
           [[ "${COMMIT_MESSAGE%%$'\n'*}" == "Release $tag" ]] || { echo "Release title/version mismatch" >&2; exit 1; }
           test -f "docs/releases/${tag}.md"
-          git merge-base --is-ancestor "$RELEASE_SHA" origin/main
+          git merge-base --is-ancestor "$RELEASE_SHA" "origin/$RELEASE_BRANCH"
           if git show-ref --verify --quiet "refs/tags/${tag}"; then
             [[ "$(git rev-parse "refs/tags/${tag}^{commit}")" == "$RELEASE_SHA" ]] || { echo "Existing tag points to another commit" >&2; exit 1; }
           else

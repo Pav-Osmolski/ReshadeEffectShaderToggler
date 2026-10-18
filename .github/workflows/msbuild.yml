@@ -16,6 +16,7 @@ on:
       - ".gitmodules"
       - ".github/workflows/msbuild.yml"
       - "scripts/**"
+      - "tests/**"
   pull_request:
     branches: [ "main" ]
     types: [opened, reopened, ready_for_review]
@@ -25,6 +26,7 @@ on:
       - ".gitmodules"
       - ".github/workflows/msbuild.yml"
       - "scripts/**"
+      - "tests/**"
   workflow_dispatch:
 
 env:
@@ -78,6 +80,10 @@ jobs:
 
       - name: Build x86
         run: msbuild /m /property:Platform=x86 /p:Configuration=${{ env.BUILD_CONFIGURATION }} ${{ env.SOLUTION_FILE_PATH }}
+
+      - name: Rendering safety regression tests
+        shell: pwsh
+        run: ./scripts/test-rendering-safety.ps1
 
       - name: Validate x86/x64 binaries
         shell: pwsh

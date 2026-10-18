@@ -21,7 +21,7 @@ void RenderingShaderManager::InitShader(reshade::api::device* device,
                                         reshade::api::pipeline_layout& sh_layout,
                                         reshade::api::sampler& sh_sampler,
                                         resource& quad,
-                                        uint8_t write_mask, format target_format) {
+                                        uint8_t write_mask, reshade::api::format target_format) {
     if (sh_pipeline == 0 && (device->get_api() == device_api::d3d9 || device->get_api() == device_api::d3d10 || device->get_api() == device_api::d3d11 ||
                              device->get_api() == device_api::d3d12)) {
         sampler_desc sampler_desc = {};
@@ -236,7 +236,7 @@ bool RenderingShaderManager::CopyResource(command_list* cmd_list, resource_view 
     const auto desc = device->get_resource_desc(device->get_resource_from_view(rtv_dst));
     if (desc.texture.samples != 1)
         return false;
-    const format targetFormat = device->get_resource_view_desc(rtv_dst).format;
+    const reshade::api::format targetFormat = device->get_resource_view_desc(rtv_dst).format;
     std::lock_guard lock(data.customShader.pipelineMutex);
     CustomShaderInstance* instance = &data.customShader.copyPipeline;
     if (device->get_api() == device_api::d3d12) {
@@ -260,7 +260,7 @@ bool RenderingShaderManager::CopyResourceMaskAlpha(command_list* cmd_list, resou
     const auto desc = device->get_resource_desc(device->get_resource_from_view(rtv_dst));
     if (desc.texture.samples != 1)
         return false;
-    const format targetFormat = device->get_resource_view_desc(rtv_dst).format;
+    const reshade::api::format targetFormat = device->get_resource_view_desc(rtv_dst).format;
     std::lock_guard lock(data.customShader.pipelineMutex);
     CustomShaderInstance* instance = &data.customShader.alphaPreservingCopyPipeline;
     if (device->get_api() == device_api::d3d12) {

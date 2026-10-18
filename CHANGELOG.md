@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased — GPU and release hardening
+
+- Corrects DX12 hunting preview barriers and rejects incompatible whole-resource copies.
+- Synchronizes preview/group-buffer replacement against known GPU queues.
+- Restores Vulkan state after deferred injection and preserves API 20 dynamic descriptor offsets.
+- Caches DX12 copy pipelines by destination format; restores root descriptors and stage-specific constants.
+- Clears stale shader matches on null/unknown pipeline bindings and cancels reset/destroyed preview command-list references.
+- Gates automatic tagging on a successful merge build, verifies existing tag identity, validates workflow scripts and shares binary validation.
+- Documents target limitations, final-head validation and the separately maintained BG3 config asset.
+- Runtime validation is pending; this change does not yet claim to resolve issue #15 in-game.
+
 ## v1.7.1.680 â€” 2026-09-30
 
 ### Shader visibility
