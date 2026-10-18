@@ -4,6 +4,7 @@
  */
 
 #include "DescriptorTracking.h"
+#include "RenderingSafety.h"
 #include "reshade.hpp"
 #include <algorithm>
 
@@ -68,6 +69,17 @@ pipeline_layout_param descriptor_tracking::get_pipeline_layout_param(pipeline_la
     const pipeline_layout_data& layout_data = layouts.at(layout);
 
     return layout_data.params[param];
+}
+
+bool descriptor_tracking::can_restore_vulkan_layout(pipeline_layout layout) const {
+    const auto it = layouts.find(layout);
+    if (it == layouts.end()) return false;
+    for (const auto& ranges : it->second.ranges) {
+        for (const auto& range : ranges) {
+            if (!Rendering::SupportsLegacyVulkanDescriptor(range.type)) return false;
+        }
+    }
+    return true;
 }
 
 void descriptor_tracking::register_pipeline_layout(pipeline_layout layout, uint32_t count, const pipeline_layout_param* params) {

@@ -10,7 +10,7 @@ Release tags must use:
 
 Example:
 
-`v1.6.0.633`
+`v1.6.6.580`
 
 The final component preserves the upstream convention used for the ReShade baseline.
 
@@ -20,8 +20,8 @@ The source tree contains a human-readable default version in `src/version.h`. Du
 
 Before tagging a release:
 
-1. Confirm the intended changes are merged into `main`.
-2. Confirm the **MSBuild** workflow is green for the merge commit.
+1. Confirm the intended changes are merged into `legacy/reshade-5.x`.
+2. Confirm **MSBuild** is green for the final PR merge result, then for the maintained-branch merge commit. Keep revisions in draft and mark the PR ready for review when final. If it changes afterward, return it to draft and mark ready again (or reopen it) to refresh required PR checks. No synchronize trigger is configured.
 3. Confirm both **x64** and **x86** Release configurations build successfully.
 4. Check that `README.md` and files under `docs/` describe any user-visible changes.
 5. Confirm the default version in `src/version.h` matches the release you intend to tag.
@@ -120,13 +120,15 @@ Legacy game-specific hooks may be architecture-specific. The FFXIV constant-copy
 
 ## Creating a release
 
-For a release PR, commit the matching `src/version.h`, changelog entry and `docs/releases/vMAJOR.MINOR.PATCH.RESHADE.md`, then merge it into `main` with the merge commit title:
+For a release PR, commit the matching `src/version.h`, changelog entry and `docs/releases/vMAJOR.MINOR.PATCH.RESHADE.md`, then merge it into `legacy/reshade-5.x` with the merge commit title:
 
 `Release vMAJOR.MINOR.PATCH.RESHADE`
 
-The guarded **Tag Release** workflow reads the committed source version, verifies the matching release-notes file, creates that tag on the merge commit and explicitly dispatches the **Release** workflow at that tag. Ordinary pushes do not create tags.
+The guarded `tag` job runs inside **MSBuild**, after its `build` job succeeds for a push to the maintained branch. It checks out that validated commit, reads its source version, verifies the release title and notes, and checks any existing tag points to that exact commit. It then creates the tag and explicitly dispatches **Release** at the tag. Ordinary commits skip this job and do not create tags or additional workflow runs. Release titles must match exactly on their first line. Both maintained branches contain their own release gate; no default-branch `workflow_run` relay is needed.
 
-A tag may still be created manually from the desired `main` commit when needed.
+The publisher validates its maintained line's version suffix and branch ancestry, rebuilds both architectures, runs regression tests and shared binary validation, then publishes. Per-tag concurrency prevents overlapping publishers. Existing releases/assets are immutable; a manual publisher retry against an existing release fails instead of replacing files. Never move or reuse a tag.
+
+A tag may still be created manually from the desired `legacy/reshade-5.x` commit when needed.
 
 The tag-driven **Release** workflow will then:
 
@@ -148,17 +150,41 @@ No release is published if either architecture fails to build.
 
 ## CI artifacts
 
-Normal pushes to `main`, pull requests targeting `main`, and manual workflow runs build both architectures.
+One **MSBuild** workflow handles validation. Build-affecting pushes to `legacy/reshade-5.x` validate the merged result. Pull requests targeting that branch validate when opened, reopened or marked ready for review. Draft PRs skip the job and allocate no runner. Later WIP commits do not trigger builds: keep the PR in draft during revisions, then mark it ready once final (or reopen it) to refresh the required `build` check. Branch protection requires a successful check for the current PR revision.
 
-The resulting CI artifact is retained for 14 days and contains both add-on binaries. It is intended for validation, not long-term distribution.
+Documentation-only PRs still report the required `build` check, but skip dependency downloads, native compilation and artifact packaging. Workflow, script, test and unknown file changes receive full validation. Release-titled pushes always build both architectures, including a promotion that only changes release notes. Push path filters include every workflow file and release notes.
+
+Concurrent validation runs for the same PR or branch cancel superseded work. Release promotions have a separate concurrency group and are not cancelled by ordinary validation. Manual dispatch remains available for an explicitly requested native test build; it may not satisfy a PR-associated merge check. Workflow structure, PowerShell parsing and regression tests run in the same job, with no duplicate workflow-check run. A normal code PR needs one final review validation and one maintained-branch validation after merging; stable publication adds the separate **Release** workflow.
+
+The release and CI workflows share `scripts/validate-binaries.ps1`, avoiding divergent architecture/version/export checks.
+
+The resulting CI artifact is retained for 14 days and contains a checksummed test-candidate ZIP with both add-on binaries, shaders, docs and BUILD-INFO identifying the exact commit. It is intended for validation, not long-term distribution.
 
 ## Rollback
 
 If a release has a runtime regression:
 
 1. do not reuse or move the existing tag;
-2. fix the issue on `main`;
+2. fix the issue on `legacy/reshade-5.x`;
 3. validate the fix through the normal MSBuild workflow;
 4. publish a new patch tag.
 
 Keeping release tags immutable makes binary/source provenance much easier to reason about.
+
+## GPU hardening regression matrix
+
+Record the game, renderer, architecture, ReShade version, commit and actual outcomes. CI tests eligibility and descriptor-offset bookkeeping; it cannot certify GPU execution.
+
+- Warframe DX12, issue #15: select the previously failing hashes; alternate targets of different sizes/formats, including rapid browsing. Test Clear alpha off/on with unrelated effects disabled first, then with the reporter's effects restored.
+- BG3 DX11: existing Before Fog setup with DLSS on/off, rapid hunting, and unchanged configuration persistence.
+- BG3 Vulkan: same-target LOAD and post-pass-transition injection, rapid hunting, resolution changes, and effects below later fog/UI. Confirm a continuation draw works without explicitly rebinding its pipeline.
+- Representative DX12 HDR title: FP16 and 10-bit targets, alpha-clearing previews and native staging. Record unavailable cases rather than mark them passed.
+- Legacy Vulkan buffer descriptor layouts: confirm the explicit API 7 offset-restoration diagnostic and ordinary end-of-frame fallback. API 7 does not expose offsets or distinguish dynamic buffer descriptors; these layouts are conservatively skipped. Dynamic-offset injection tests apply to the modern API 20 line.
+- Buffer lifetime: repeatedly change output/internal resolution and disable copied binding/alpha buffers with multiple frames in flight; collect debug-layer/validation output when possible.
+- Run both x86 and x64 in representative games where available. A build pass alone is not runtime coverage.
+
+## Optional BG3 configuration asset
+
+The BG3 config ZIP is maintained separately from the source release package. It is not automatically regenerated by Release. Before attaching it, verify its D3D11/Vulkan INIs against the release, record its source/version and SHA-256, and attach a separate checksum file. Do not replace existing release assets silently. The automatically generated SHA256SUMS covers release.zip only.
+
+Legacy fixes are backported onto `legacy/reshade-5.x` using the ReShade 5.8/API 7 SDK. Do not merge the API 20 migration into this branch. The default-branch tagger routes `.580` releases here and publishes them with `--latest=false`.

@@ -1,29 +1,26 @@
 name: MSBuild
 
-# CI is deliberately lifecycle-based rather than commit-based:
-# - validate a PR once when it is opened/marked ready;
-# - validate the merged result on the legacy branch;
-# - use workflow_dispatch for any explicit WIP/test build.
-#
-# We intentionally do not run on pull_request "synchronize", because that
-# creates an Actions run for every WIP commit pushed to an open PR.
+# Validate final PR review events and maintained-branch pushes; WIP stays quiet.
 on:
   push:
     branches: [ "legacy/reshade-5.x" ]
     paths:
       - "src/**"
       - "deps/**"
+      - "Shaders/**"
       - ".gitmodules"
-      - ".github/workflows/msbuild.yml"
+      - ".github/workflows/**"
+      - "scripts/**"
+      - "tests/**"
+      - "docs/releases/**"
   pull_request:
     branches: [ "legacy/reshade-5.x" ]
     types: [opened, reopened, ready_for_review]
-    paths:
-      - "src/**"
-      - "deps/**"
-      - ".gitmodules"
-      - ".github/workflows/msbuild.yml"
   workflow_dispatch:
+
+concurrency:
+  group: msbuild-${{ startsWith(github.event.head_commit.message, 'Release v') && 'release' || 'validation' }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.event.head_commit.message, 'Release v') }}
 
 env:
   SOLUTION_FILE_PATH: src/ReshadeEffectShaderToggler.sln
@@ -34,6 +31,7 @@ permissions:
 
 jobs:
   build:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: windows-latest
     timeout-minutes: 20
 
@@ -41,9 +39,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
         with:
-          submodules: recursive
+          fetch-depth: 0
+
+      - name: Select validation scope
+        id: scope
+        run: python scripts/ci-scope.py
+
+      - name: Fetch native dependencies
+        if: steps.scope.outputs.native == 'true'
+        run: git submodule update --init --recursive
 
       - name: Validate version tooling
+        if: steps.scope.outputs.native == 'true'
         shell: pwsh
         run: |
           $match = Select-String -Path "./src/version.h" -Pattern 'REST_VERSION_STRING "([^"]+)"'
@@ -58,79 +65,103 @@ jobs:
             throw "Version stamping validation failed."
           }
 
+      - name: Install workflow validation dependency
+        run: python -m pip install PyYAML==6.0.3
+
+      - name: Validate workflows and PowerShell
+        shell: pwsh
+        run: |
+          python scripts/validate-workflows.py
+          if ($LASTEXITCODE -ne 0) { throw "Workflow validation failed." }
+          ./scripts/validate-powershell.ps1
+          python -m unittest discover -s tests -p "test_*.py"
+          if ($LASTEXITCODE -ne 0) { throw "Release routing regression failed." }
+
       - name: Add MSBuild to PATH
+        if: steps.scope.outputs.native == 'true'
         uses: microsoft/setup-msbuild@v3
 
       - name: Build x64
+        if: steps.scope.outputs.native == 'true'
         run: msbuild /m /property:Platform=x64 /p:Configuration=${{ env.BUILD_CONFIGURATION }} ${{ env.SOLUTION_FILE_PATH }}
 
       - name: Build x86
+        if: steps.scope.outputs.native == 'true'
         run: msbuild /m /property:Platform=x86 /p:Configuration=${{ env.BUILD_CONFIGURATION }} ${{ env.SOLUTION_FILE_PATH }}
 
-      - name: Validate x86/x64 binaries
+      - name: Rendering safety regression tests
+        if: steps.scope.outputs.native == 'true'
         shell: pwsh
-        run: |
-          $x86 = "src/Win32/Release/ReshadeEffectShaderToggler.addon32"
-          $x64 = "src/x64/Release/ReshadeEffectShaderToggler.addon64"
+        run: ./scripts/test-rendering-safety.ps1
 
-          function Get-PeMachine([string]$Path) {
-            $stream = [System.IO.File]::OpenRead($Path)
-            try {
-              $reader = [System.IO.BinaryReader]::new($stream)
-              $stream.Position = 0x3c
-              $peOffset = $reader.ReadInt32()
-              $stream.Position = $peOffset
-              if ($reader.ReadUInt32() -ne 0x00004550) {
-                throw "$Path does not contain a valid PE signature."
-              }
-              return $reader.ReadUInt16()
-            }
-            finally {
-              $stream.Dispose()
-            }
-          }
+      - name: Validate x86/x64 binaries
+        if: steps.scope.outputs.native == 'true'
+        shell: pwsh
+        run: ./scripts/validate-binaries.ps1
 
-          if ((Get-PeMachine $x86) -ne 0x014c) {
-            throw "addon32 is not an i386/PE32 binary."
-          }
-          if ((Get-PeMachine $x64) -ne 0x8664) {
-            throw "addon64 is not an AMD64/PE32+ binary."
-          }
-
-          $match = Select-String -Path "./src/version.h" -Pattern 'REST_VERSION_STRING "([^"]+)"'
-          $version = $match.Matches[0].Groups[1].Value
-
-          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-          $vsPath = (& $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath)
-          $dumpbin = Get-ChildItem "$vsPath\VC\Tools\MSVC\*\bin\Hostx64\x64\dumpbin.exe" |
-            Sort-Object FullName -Descending |
-            Select-Object -First 1 -ExpandProperty FullName
-          if (-not $dumpbin) {
-            throw "Could not locate dumpbin.exe in the Visual Studio toolchain."
-          }
-
-          foreach ($binary in @($x86, $x64)) {
-            $fileVersion = (Get-Item $binary).VersionInfo.FileVersion
-            if ($fileVersion -ne $version) {
-              throw "$binary reports version $fileVersion; expected $version."
-            }
-
-            $exports = (& $dumpbin /nologo /exports $binary | Out-String)
-            foreach ($requiredExport in @("NAME", "DESCRIPTION")) {
-              if ($exports -notmatch "(?i)\b$requiredExport\b") {
-                throw "$binary is missing required export $requiredExport."
-              }
-            }
-          }
-
-          Write-Host "Validated x86/x64 PE architecture, version metadata and REST exports."
+      - name: Package runtime test candidate
+        if: steps.scope.outputs.native == 'true'
+        shell: pwsh
+        run: ./scripts/package-test-build.ps1
 
       - name: Upload build artifacts
+        if: steps.scope.outputs.native == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: REST-build-${{ github.sha }}
           path: |
-            src/x64/Release/ReshadeEffectShaderToggler.addon64
-            src/Win32/Release/ReshadeEffectShaderToggler.addon32
+            test-package/*.zip
+            test-package/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 14
+
+  tag:
+    needs: build
+    if: >-
+      github.event_name == 'push' &&
+      (github.ref_name == 'main' || github.ref_name == 'legacy/reshade-5.x') &&
+      startsWith(github.event.head_commit.message, 'Release v')
+    permissions:
+      actions: write
+      contents: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout validated commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Create release tag
+        shell: bash
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          RELEASE_BRANCH: ${{ github.ref_name }}
+          RELEASE_SHA: ${{ github.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's/^#define REST_VERSION_STRING "\([^"]*\)"/\1/p' src/version.h)"
+          tag="v${version}"
+          case "$RELEASE_BRANCH" in
+            main) suffix=680 ;;
+            legacy/reshade-5.x) suffix=580 ;;
+            *) echo "Unsupported release branch" >&2; exit 1 ;;
+          esac
+          [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+\.${suffix}$ ]] || { echo "Invalid release version for branch" >&2; exit 1; }
+          [[ "${COMMIT_MESSAGE%%$'\n'*}" == "Release $tag" ]] || { echo "Release title/version mismatch" >&2; exit 1; }
+          test -f "docs/releases/${tag}.md"
+          git merge-base --is-ancestor "$RELEASE_SHA" "origin/$RELEASE_BRANCH"
+          if git show-ref --verify --quiet "refs/tags/${tag}"; then
+            [[ "$(git rev-parse "refs/tags/${tag}^{commit}")" == "$RELEASE_SHA" ]] || { echo "Existing tag points to another commit" >&2; exit 1; }
+          else
+            git tag "${tag}" "$RELEASE_SHA"
+            git push origin "refs/tags/${tag}"
+          fi
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release already exists; assets remain immutable."
+            exit 0
+          fi
+          # GITHUB_TOKEN tag pushes do not trigger the publisher, so dispatch it.
+          gh workflow run release.yml --ref "$tag"

@@ -66,8 +66,11 @@ using namespace Shim::Constants;
 using namespace std;
 
 extern "C" __declspec(dllexport) const char* NAME = "REST Enhanced Legacy — ReShade Effect Shader Toggler";
+extern "C" __declspec(dllexport) const char* AUTHOR = "DeViLhoOD";
 extern "C" __declspec(dllexport) const char* DESCRIPTION =
-  "Legacy ReShade 5.8–5.9.2 add-on for applying selected effects at shader-defined points in the rendering pipeline, including automatic scene-colour injection for upscaled rendering.";
+  "ReShade add-on for applying selected effects at shader-defined points in the rendering pipeline, including automatic scene-colour injection for upscaled rendering.";
+extern "C" __declspec(dllexport) const char* WEBSITE = "https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler";
+extern "C" __declspec(dllexport) const char* ISSUES = "https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler/issues";
 
 constexpr auto MAX_EFFECT_HANDLES = 128;
 constexpr auto REST_VAR_ANNOTATION = "source";
@@ -129,15 +132,48 @@ static void onDestroyDevice(device* device) {
     device->destroy_private_data<DeviceDataContainer>();
 }
 
+static void onInitCommandQueue(command_queue* queue) {
+    auto& data = queue->get_device()->get_private_data<DeviceDataContainer>();
+    std::lock_guard lock(data.queueMutex);
+    data.queues.push_back(queue);
+}
+
+static void onDestroyCommandQueue(command_queue* queue) {
+    auto& data = queue->get_device()->get_private_data<DeviceDataContainer>();
+    std::lock_guard lock(data.queueMutex);
+    std::erase(data.queues, queue);
+}
+
 static void onInitCommandList(command_list* commandList) {
     commandList->create_private_data<CommandListDataContainer>();
 }
 
 static void onDestroyCommandList(command_list* commandList) {
+    auto& previewData = commandList->get_device()->get_private_data<DeviceDataContainer>();
+    std::lock_guard previewLock(previewData.previewMutex);
+    auto& preview = previewData.huntPreview;
+    if (preview.tracked_command_list == commandList)
+        preview.tracked_command_list = nullptr;
+    if (preview.vulkan_command_list == commandList) {
+        // The state tracker may already have been destroyed by its own callback.
+        preview.vulkan_capture_pending = false;
+        preview.vulkan_command_list = nullptr;
+        commandList->get_device()->get_private_data<DeviceDataContainer>().vulkanPreviewWorkPending.store(false);
+    }
     commandList->destroy_private_data<CommandListDataContainer>();
 }
 
 static void onResetCommandList(command_list* commandList) {
+    auto& previewData = commandList->get_device()->get_private_data<DeviceDataContainer>();
+    std::lock_guard previewLock(previewData.previewMutex);
+    auto& preview = previewData.huntPreview;
+    if (preview.tracked_command_list == commandList)
+        preview.tracked_command_list = nullptr;
+    if (preview.vulkan_command_list == commandList) {
+        preview.vulkan_capture_pending = false;
+        preview.vulkan_command_list = nullptr;
+        commandList->get_device()->get_private_data<DeviceDataContainer>().vulkanPreviewWorkPending.store(false);
+    }
     CommandListDataContainer& commandListData = commandList->get_private_data<CommandListDataContainer>();
     commandListData.Reset();
 }
@@ -214,6 +250,11 @@ static bool onReShadeReorderTechniques(effect_runtime* runtime, size_t count, ef
     RuntimeDataContainer& runtimeData = runtime->get_private_data<RuntimeDataContainer>();
     DeviceDataContainer& deviceData = runtime->get_device()->get_private_data<DeviceDataContainer>();
 
+    {
+        unique_lock<shared_mutex> renderLock(deviceData.render_mutex);
+        deviceData.vulkanAutoPendingEffects.clear();
+        deviceData.vulkanAutoWorkPending.store(false, std::memory_order_release);
+    }
     bool ret = techniqueManager.OnReShadeReorderTechniques(runtime, count, techniques);
 
     if (deviceData.current_runtime == runtime) {
@@ -301,7 +342,7 @@ static void onDestroyPipeline(device* device, pipeline pipelineHandle) {
 }
 
 static void onBindPipeline(command_list* commandList, pipeline_stage stages, pipeline pipelineHandle) {
-    if (nullptr == commandList || pipelineHandle.handle == 0 ||
+    if (nullptr == commandList ||
         !((uint32_t)(stages & pipeline_stage::pixel_shader) || (uint32_t)(stages & pipeline_stage::vertex_shader) ||
           (uint32_t)(stages & pipeline_stage::compute_shader))) {
         return;
@@ -314,10 +355,6 @@ static void onBindPipeline(command_list* commandList, pipeline_stage stages, pip
     const uint32_t handleHasComputeShaderAttached =
       (uint32_t)(stages & pipeline_stage::compute_shader) ? g_computeShaderManager.safeGetShaderHash(pipelineHandle.handle) : 0;
 
-    if (!handleHasPixelShaderAttached && !handleHasVertexShaderAttached && !handleHasComputeShaderAttached) {
-        // draw call with unknown handle, don't collect it
-        return;
-    }
     CommandListDataContainer& commandListData = commandList->get_private_data<CommandListDataContainer>();
     DeviceDataContainer& deviceData = commandList->get_device()->get_private_data<DeviceDataContainer>();
 
@@ -327,7 +364,7 @@ static void onBindPipeline(command_list* commandList, pipeline_stage stages, pip
 
     uint32_t pipelineChanged = 0;
 
-    if ((uint32_t)(stages & pipeline_stage::pixel_shader) && handleHasPixelShaderAttached) {
+    if ((uint32_t)(stages & pipeline_stage::pixel_shader)) {
         if (g_activeCollectorFrameCounter > 0) {
             // in collection mode
             g_pixelShaderManager.addActivePipelineHandle(pipelineHandle.handle);
@@ -341,7 +378,7 @@ static void onBindPipeline(command_list* commandList, pipeline_stage stages, pip
         commandListData.ps.activeShaderHash = handleHasPixelShaderAttached;
     }
 
-    if ((uint32_t)(stages & pipeline_stage::vertex_shader) && handleHasVertexShaderAttached) {
+    if ((uint32_t)(stages & pipeline_stage::vertex_shader)) {
         if (g_activeCollectorFrameCounter > 0) {
             // in collection mode
             g_vertexShaderManager.addActivePipelineHandle(pipelineHandle.handle);
@@ -355,7 +392,7 @@ static void onBindPipeline(command_list* commandList, pipeline_stage stages, pip
         commandListData.vs.activeShaderHash = handleHasVertexShaderAttached;
     }
 
-    if ((uint32_t)(stages & pipeline_stage::compute_shader) && handleHasComputeShaderAttached) {
+    if ((uint32_t)(stages & pipeline_stage::compute_shader)) {
         if (g_activeCollectorFrameCounter > 0) {
             // in collection mode
             g_computeShaderManager.addActivePipelineHandle(pipelineHandle.handle);
@@ -458,6 +495,8 @@ static void onBeginRenderPass(command_list* cmd_list, uint32_t count, const rend
     CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
     DeviceDataContainer& deviceData = device->get_private_data<DeviceDataContainer>();
 
+    if (device->get_api() == device_api::d3d12)
+        commandListData.d3d12InsideRenderPass = true;
     if (deviceData.current_runtime == nullptr || !deviceData.current_runtime->get_effects_state()) {
         if (device->get_api() == device_api::vulkan) {
             commandListData.vulkanInsideRenderPass = true;
@@ -508,6 +547,8 @@ static void onBeginRenderPass(command_list* cmd_list, uint32_t count, const rend
 }
 
 static void onEndRenderPass(command_list* cmd_list) {
+    if (cmd_list != nullptr && cmd_list->get_device()->get_api() == device_api::d3d12)
+        cmd_list->get_private_data<CommandListDataContainer>().d3d12InsideRenderPass = false;
     if (cmd_list == nullptr || cmd_list->get_device() == nullptr ||
         cmd_list->get_device()->get_api() != device_api::vulkan) {
         return;
@@ -522,6 +563,7 @@ static void onEndRenderPass(command_list* cmd_list) {
 }
 
 static void onReShadeOverlay(effect_runtime* runtime) {
+    std::lock_guard previewLock(runtime->get_device()->get_private_data<DeviceDataContainer>().previewMutex);
     DisplayOverlay(g_addonUIData, resourceManager, runtime);
 }
 
@@ -553,6 +595,7 @@ static void onPresent(command_queue* queue,
 static void onReShadePresent(effect_runtime* runtime) {
     device* dev = runtime->get_device();
     DeviceDataContainer& deviceData = dev->get_private_data<DeviceDataContainer>();
+    std::lock_guard previewLock(deviceData.previewMutex);
     command_queue* queue = runtime->get_command_queue();
 
     {
@@ -604,6 +647,7 @@ static bool onUpdateBufferRegion(device* device, const void* data, resource reso
 }
 
 static void displaySettings(effect_runtime* runtime) {
+    std::lock_guard previewLock(runtime->get_device()->get_private_data<DeviceDataContainer>().previewMutex);
     DisplaySettings(g_addonUIData, runtime);
 }
 
@@ -849,6 +893,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID) {
             reshade::register_event<reshade::addon_event::destroy_resource_view>(onDestroyResourceView);
             reshade::register_event<reshade::addon_event::init_resource_view>(onInitResourceView);
             reshade::register_event<reshade::addon_event::init_pipeline>(onInitPipeline);
+            reshade::register_event<reshade::addon_event::init_command_queue>(onInitCommandQueue);
+            reshade::register_event<reshade::addon_event::destroy_command_queue>(onDestroyCommandQueue);
             reshade::register_event<reshade::addon_event::init_command_list>(onInitCommandList);
             reshade::register_event<reshade::addon_event::destroy_command_list>(onDestroyCommandList);
             reshade::register_event<reshade::addon_event::reset_command_list>(onResetCommandList);
@@ -892,6 +938,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID) {
             reshade::unregister_event<reshade::addon_event::reshade_set_technique_state>(onReShadeSetTechniqueState);
             reshade::unregister_event<reshade::addon_event::reshade_reorder_techniques>(onReShadeReorderTechniques);
             reshade::unregister_event<reshade::addon_event::bind_pipeline>(onBindPipeline);
+            reshade::unregister_event<reshade::addon_event::init_command_queue>(onInitCommandQueue);
+            reshade::unregister_event<reshade::addon_event::destroy_command_queue>(onDestroyCommandQueue);
             reshade::unregister_event<reshade::addon_event::init_command_list>(onInitCommandList);
             reshade::unregister_event<reshade::addon_event::destroy_command_list>(onDestroyCommandList);
             reshade::unregister_event<reshade::addon_event::reset_command_list>(onResetCommandList);

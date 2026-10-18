@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.6.6.580 — test candidate (unreleased)
+
+- Corrects DX12 preview barriers and rejects incompatible whole-resource copies.
+- Synchronizes preview and group-buffer replacement against known GPU queues.
+- Restores Vulkan pipeline/descriptor state after deferred injection.
+- Caches DX12 copy pipelines by destination format; restores root descriptors and stage-specific constants.
+- Serializes preview payload access and cancels reset/destroyed command-list references.
+- Preserves zero-valued dynamic state and clears stale shader matches on null/unknown pipeline binding.
+- Gates tagging on successful maintained-branch builds and verifies existing tag identity.
+- Adds workflow/script checks, CPU regression tests, shared binary validation and checksummed test packages.
+- Documents target limits, final-head validation and the separately maintained BG3 config asset.
+- Runtime validation is pending; issue #15 is not yet confirmed fixed in-game.
+
+
 ## v1.6.5.580 — 2026-09-30
 
 ### Shader visibility
