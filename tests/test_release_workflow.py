@@ -51,6 +51,11 @@ printf 'gh %s\\n' "$*" >> commands
             log = (root/'commands').read_text() if (root/'commands').exists() else ''
             return result, log
 
+    def test_release_notes_only_promotion_triggers_build(self):
+        workflow = yaml.load(Path('.github/workflows/msbuild.yml').read_text(encoding='utf-8-sig'), Loader=yaml.BaseLoader)
+        self.assertIn('docs/releases/**', workflow['on']['push']['paths'])
+        self.assertNotIn('synchronize', workflow['on']['pull_request']['types'])
+
     def test_new_modern_release(self):
         result, log = self.run_tagger()
         self.assertEqual(result.returncode, 0, result.stderr)
