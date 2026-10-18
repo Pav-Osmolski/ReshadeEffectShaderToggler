@@ -90,6 +90,7 @@ class __declspec(uuid("33319e83-387c-448e-881c-7e68fc2e52c4")) descriptor_tracki
     struct pipeline_layout_data {
         std::vector<reshade::api::pipeline_layout_param> params;
         std::vector<std::vector<reshade::api::descriptor_range>> ranges;
+        std::vector<std::vector<reshade::api::descriptor_range_with_flags>> flagged_ranges;
     };
     struct pipeline_layout_hash : std::hash<uint64_t> {
         size_t operator()(reshade::api::pipeline_layout handle) const { return std::hash<uint64_t>::operator()(handle.handle); }

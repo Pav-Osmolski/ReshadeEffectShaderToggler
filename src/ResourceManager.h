@@ -23,6 +23,9 @@ struct EmbeddedResourceData {
 
 class __declspec(novtable) ResourceManager final {
   public:
+    // Call only at a CPU maintenance boundary, never while recording a draw.
+    static void SynchronizeGpu(reshade::api::effect_runtime* runtime);
+    static bool IsPreviewTargetSupported(const reshade::api::resource_desc& desc);
     void InitBackbuffer(reshade::api::swapchain* runtime);
     void ClearBackbuffer(reshade::api::swapchain* runtime);
 

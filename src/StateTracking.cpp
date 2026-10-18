@@ -36,17 +36,19 @@ void state_block::apply_descriptors_dx12_vulkan(command_list* cmd_list) const {
         // pushed descriptors should be restored along with the tables when the heap is restored to the game internal one
         for (uint32_t i = 0; i < root_table.size(); i++) {
             if (root_table[i].type == root_entry_type::descriptor_table && root_table[i].descriptor_table.handle != 0) {
-                cmd_list->bind_descriptor_tables(stages, pipelinelayout, i, 1, &root_table[i].descriptor_table);
+                const auto& offsets = root_table[i].dynamic_offsets;
+                cmd_list->bind_descriptor_tables2(stages, pipelinelayout, i, 1, &root_table[i].descriptor_table,
+                                                  static_cast<uint32_t>(offsets.size()), offsets.data());
             }
 
             if (root_table[i].type == root_entry_type::push_constants && root_table[i].buffer_index >= 0 &&
-                constant_buffer[root_table[i].buffer_index].size() > 0) {
+                constant_buffer[stageIdx][root_table[i].buffer_index].size() > 0) {
                 cmd_list->push_constants(stages,
                                          pipelinelayout,
                                          i,
                                          0,
-                                         static_cast<uint32_t>(constant_buffer[root_table[i].buffer_index].size()),
-                                         constant_buffer[root_table[i].buffer_index].data());
+                                         static_cast<uint32_t>(constant_buffer[stageIdx][root_table[i].buffer_index].size()),
+                                         constant_buffer[stageIdx][root_table[i].buffer_index].data());
             }
         }
     }
@@ -128,7 +130,7 @@ void state_block::apply_dx9(reshade::api::command_list* cmd_list, bool force_res
     }
 
     // ???
-    if (!render_targets.empty() || depth_stencil != 0)
+    if (cmd_list->get_device()->get_api() != device_api::vulkan && (!render_targets.empty() || depth_stencil != 0))
         cmd_list->bind_render_targets_and_depth_stencil(static_cast<uint32_t>(render_targets.size()), render_targets.data(), depth_stencil);
 
     if (dx_state != nullptr) {
@@ -144,7 +146,7 @@ void state_block::apply_default(reshade::api::command_list* cmd_list, bool force
         return;
     }
 
-    if (!render_targets.empty() || depth_stencil != 0)
+    if (cmd_list->get_device()->get_api() != device_api::vulkan && (!render_targets.empty() || depth_stencil != 0))
         cmd_list->bind_render_targets_and_depth_stencil(static_cast<uint32_t>(render_targets.size()), render_targets.data(), depth_stencil);
 
     uint32_t pipeline_stages_set = 0;
@@ -337,6 +339,31 @@ static void on_bind_scissor_rects(command_list* cmd_list, uint32_t first, uint32
         state.scissor_rects[i + first] = rects[i];
 }
 
+static void capture_dynamic_offsets(command_list* cmd_list, pipeline_layout layout, uint32_t first, uint32_t count,
+                                    uint32_t offset_count, const uint32_t* offsets, std::vector<root_entry>& entries) {
+    uint32_t cursor = 0;
+    const auto& layouts = *cmd_list->get_device()->get_private_data<descriptor_tracking>();
+    for (uint32_t i = 0; i < count; ++i) {
+        auto& saved = entries[first + i].dynamic_offsets;
+        saved.clear();
+        const auto param = layouts.get_pipeline_layout_param(layout, first + i);
+        uint32_t needed = 0;
+        const bool flagged = param.type == pipeline_layout_param_type::descriptor_table_with_flags;
+        if (param.type == pipeline_layout_param_type::descriptor_table || flagged) {
+            const uint32_t ranges = flagged ? param.descriptor_table_with_flags.count : param.descriptor_table.count;
+            for (uint32_t r = 0; r < ranges; ++r) {
+                const descriptor_range& range = flagged ? param.descriptor_table_with_flags.ranges[r] : param.descriptor_table.ranges[r];
+                if (range.type == descriptor_type::constant_buffer_with_dynamic_offset ||
+                    range.type == descriptor_type::shader_storage_buffer_with_dynamic_offset)
+                    needed += range.count;
+            }
+        }
+        if (needed != 0 && offsets != nullptr && cursor <= offset_count && needed <= offset_count - cursor)
+            saved.assign(offsets + cursor, offsets + cursor + needed);
+        cursor += needed;
+    }
+}
+
 static void on_bind_descriptor_tables(command_list* cmd_list,
                                       shader_stage stages,
                                       pipeline_layout layout,
@@ -345,8 +372,6 @@ static void on_bind_descriptor_tables(command_list* cmd_list,
                                       const descriptor_table* tables,
                                       uint32_t dynamic_offset_count,
                                       const uint32_t* dynamic_offsets) {
-    (void)dynamic_offset_count;
-    (void)dynamic_offsets;
     int32_t idx = get_shader_stage_index(stages);
 
     if (idx < 0)
@@ -402,6 +427,7 @@ static void on_bind_descriptor_tables(command_list* cmd_list,
 
         root_table[i + first] = { root_entry_type::descriptor_table, static_cast<int32_t>(descriptor_buffer.size()) - 1, tables[i] };
     }
+    capture_dynamic_offsets(cmd_list, layout, first, count, dynamic_offset_count, dynamic_offsets, root_table);
 }
 
 static void on_bind_descriptor_tables_no_track(command_list* cmd_list,
@@ -412,8 +438,6 @@ static void on_bind_descriptor_tables_no_track(command_list* cmd_list,
                                                const descriptor_table* tables,
                                                uint32_t dynamic_offset_count,
                                                const uint32_t* dynamic_offsets) {
-    (void)dynamic_offset_count;
-    (void)dynamic_offsets;
     int32_t idx = get_shader_stage_index(stages);
 
     if (idx < 0)
@@ -440,6 +464,7 @@ static void on_bind_descriptor_tables_no_track(command_list* cmd_list,
     for (uint32_t i = 0; i < count; ++i) {
         root_table[i + first] = tables[i];
     }
+    capture_dynamic_offsets(cmd_list, layout, first, count, dynamic_offset_count, dynamic_offsets, root_table);
 }
 
 static inline void fill_descriptors(std::vector<descriptor_tracking::descriptor_data>& table, const descriptor_table_update& update) {

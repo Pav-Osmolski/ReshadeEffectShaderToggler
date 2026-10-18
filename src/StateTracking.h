@@ -63,6 +63,7 @@ struct root_entry {
     int32_t buffer_index = -1;
     ;
     reshade::api::descriptor_table descriptor_table = {};
+    std::vector<uint32_t> dynamic_offsets;
 };
 
 struct state_block {
@@ -113,7 +114,7 @@ struct state_block {
 
     std::unordered_map<uint64_t, barrier_track> resource_barrier_track;
 
-    IDirect3DStateBlock9* dx_state;
+    IDirect3DStateBlock9* dx_state = nullptr;
 };
 
 struct __declspec(uuid("EE0C0141-E361-42E5-AF64-25F2F677F37F")) DeviceStateTracking {
