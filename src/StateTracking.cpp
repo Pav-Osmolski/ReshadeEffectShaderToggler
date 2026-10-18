@@ -28,12 +28,20 @@ void state_block::apply_descriptors_dx12_vulkan(command_list* cmd_list) const {
         // shader_stages_set |= static_cast<uint32_t>(stages);
 
         // Restore root signature and descriptor heaps
-        if (pipelinelayout != 0) {
+        if (pipelinelayout != 0 && cmd_list->get_device()->get_api() == device_api::d3d12) {
             cmd_list->bind_descriptor_tables(stages, pipelinelayout, 0, 0, nullptr);
-        } else {
+        } else if (pipelinelayout == 0) {
             continue;
         }
 
+        // Establish both D3D12 heaps before replaying any root arguments: changing
+        // either heap invalidates previously bound descriptor tables.
+        if (cmd_list->get_device()->get_api() == device_api::d3d12) {
+            for (uint32_t i = 0; i < root_table.size(); ++i) {
+                if (root_table[i].type == root_entry_type::descriptor_table && root_table[i].descriptor_table != 0)
+                    cmd_list->bind_descriptor_tables(stages, pipelinelayout, i, 1, &root_table[i].descriptor_table);
+            }
+        }
         // Root descriptors are separate from descriptor heaps and must be replayed too.
         for (uint32_t i = 0; i < root_table.size(); i++) {
             if (root_table[i].type == root_entry_type::descriptor_table && root_table[i].descriptor_table.handle != 0) {
@@ -149,7 +157,7 @@ void state_block::apply_dx9(reshade::api::command_list* cmd_list, bool force_res
     }
 
     // ???
-    if (cmd_list->get_device()->get_api() != device_api::vulkan && (!render_targets.empty() || depth_stencil != 0))
+    if (!render_targets.empty() || depth_stencil != 0)
         cmd_list->bind_render_targets_and_depth_stencil(static_cast<uint32_t>(render_targets.size()), render_targets.data(), depth_stencil);
 
     if (dx_state != nullptr) {
