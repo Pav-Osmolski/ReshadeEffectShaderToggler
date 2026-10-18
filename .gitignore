@@ -261,3 +261,4 @@ paket-files/
 /tests/out/
 
 /test-package/
+/tests/__pycache__/

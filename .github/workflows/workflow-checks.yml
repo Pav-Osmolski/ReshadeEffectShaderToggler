@@ -26,3 +26,5 @@ jobs:
       - name: Parse PowerShell scripts and workflow steps
         shell: pwsh
         run: ./scripts/validate-powershell.ps1
+      - name: Release routing regression tests
+        run: python -m unittest discover -s tests -p test_release_workflow.py
