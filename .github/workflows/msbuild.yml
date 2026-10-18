@@ -17,6 +17,7 @@ on:
       - ".github/workflows/msbuild.yml"
       - "scripts/**"
       - "tests/**"
+      - "docs/releases/**"
   pull_request:
     branches: [ "main" ]
     types: [opened, reopened, ready_for_review]
@@ -27,6 +28,7 @@ on:
       - ".github/workflows/msbuild.yml"
       - "scripts/**"
       - "tests/**"
+      - "docs/releases/**"
   workflow_dispatch:
 
 env:
