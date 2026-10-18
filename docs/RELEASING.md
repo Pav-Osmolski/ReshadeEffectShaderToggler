@@ -171,6 +171,10 @@ If a release has a runtime regression:
 
 Keeping release tags immutable makes binary/source provenance much easier to reason about.
 
+## Reported runtime validation — 19 October 2026
+
+The maintainer tested the new builds in Baldur's Gate 3 on D3D11 and Vulkan and reports that functionality, including shader hunting, worked correctly with no crashes observed. Exact ReShade versions, architectures and separate modern/legacy coverage were not specified. This records the reported coverage without extending it to Warframe DX12, D3D10, HDR-specific cases or every case in the matrix below. Both maintenance releases were authorized following this testing.
+
 ## GPU hardening regression matrix
 
 Record the game, renderer, architecture, ReShade version, commit and actual outcomes. CI tests eligibility and descriptor-offset bookkeeping; it cannot certify GPU execution.
