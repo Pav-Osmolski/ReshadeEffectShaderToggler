@@ -11,7 +11,7 @@ import yaml
 class ReleaseRoutingTests(unittest.TestCase):
     def run_tagger(self, branch='main', version='1.7.2.680', title=None,
                    existing=False, existing_sha=None, published=False, notes=True):
-        workflow = yaml.safe_load(Path('.github/workflows/tag-release.yml').read_text(encoding='utf-8-sig'))
+        workflow = yaml.safe_load(Path('.github/workflows/msbuild.yml').read_text(encoding='utf-8-sig'))
         script = workflow['jobs']['tag']['steps'][1]['run']
         bash = Path(os.environ.get('ProgramFiles', 'C:/Program Files')) / 'Git/bin/bash.exe'
         if os.name != 'nt':
