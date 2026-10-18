@@ -21,14 +21,6 @@ on:
   pull_request:
     branches: [ "legacy/reshade-5.x" ]
     types: [opened, reopened, ready_for_review]
-    paths:
-      - "src/**"
-      - "deps/**"
-      - ".gitmodules"
-      - ".github/workflows/msbuild.yml"
-      - "scripts/**"
-      - "tests/**"
-      - "docs/releases/**"
   workflow_dispatch:
 
 env:
