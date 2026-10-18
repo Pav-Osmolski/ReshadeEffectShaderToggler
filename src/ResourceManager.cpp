@@ -260,8 +260,11 @@ void ResourceManager::SynchronizeGpu(effect_runtime* runtime) {
     immediateQueue->flush_immediate_command_list();
     DeviceDataContainer& data = runtime->get_device()->get_private_data<DeviceDataContainer>();
     std::lock_guard lock(data.queueMutex);
-    for (command_queue* queue : data.queues)
+    for (command_queue* queue : data.queues) {
+        if (queue != immediateQueue)
+            queue->flush_immediate_command_list();
         queue->wait_idle();
+    }
     if (std::find(data.queues.begin(), data.queues.end(), immediateQueue) == data.queues.end())
         immediateQueue->wait_idle();
 }
