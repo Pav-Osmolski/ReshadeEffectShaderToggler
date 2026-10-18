@@ -71,6 +71,8 @@ jobs:
           python scripts/validate-workflows.py
           if ($LASTEXITCODE -ne 0) { throw "Workflow validation failed." }
           ./scripts/validate-powershell.ps1
+          python -m unittest discover -s tests -p test_release_workflow.py
+          if ($LASTEXITCODE -ne 0) { throw "Release routing regression failed." }
 
       - name: Add MSBuild to PATH
         uses: microsoft/setup-msbuild@v3
