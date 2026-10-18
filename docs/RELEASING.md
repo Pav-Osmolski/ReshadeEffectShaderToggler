@@ -154,7 +154,7 @@ Build-affecting pushes to `main` build both architectures. Pull requests targeti
 
 The release and CI workflows share `scripts/validate-binaries.ps1`, avoiding divergent architecture/version/export checks.
 
-The resulting CI artifact is retained for 14 days and contains both add-on binaries. It is intended for validation, not long-term distribution.
+The resulting CI artifact is retained for 14 days and contains a checksummed test-candidate ZIP with both add-on binaries, shaders, docs and BUILD-INFO identifying the exact commit. It is intended for validation, not long-term distribution.
 
 ## Rollback
 
