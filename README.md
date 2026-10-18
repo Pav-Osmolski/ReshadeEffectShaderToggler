@@ -1,6 +1,6 @@
-# REST Enhanced Legacy â€” ReShade Effect Shader Toggler
+# REST Enhanced Legacy — ReShade Effect Shader Toggler
 
-> **Legacy ReShade 5.x maintenance branch.** This branch is retained for ReShade 5.8â€“5.9.2 users. New feature development targets ReShade 6.8+ on `main`. ReShade 5.9.2 is the recommended runtime for this legacy line; versions older than 5.8 are unsupported.
+> **Legacy ReShade 5.x maintenance branch.** This branch is retained for ReShade 5.8–5.9.2 users. New feature development targets ReShade 6.8+ on `main`. ReShade 5.9.2 is the recommended runtime for this legacy line; versions older than 5.8 are unsupported.
 
 [![MSBuild](https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler/actions/workflows/msbuild.yml/badge.svg?branch=legacy%2Freshade-5.x)](https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler/actions/workflows/msbuild.yml)
 [![Legacy Release](https://img.shields.io/github/v/release/Pav-Osmolski/ReshadeEffectShaderToggler?filter=*.580&label=legacy%20release)](https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler/releases?q=Legacy)
@@ -31,7 +31,7 @@ The existing render-target, shader-hunting and binding features remain API/game 
 
 The **Auto scene colour** path supports D3D10, D3D11, D3D12 and Vulkan on both x86 and x64. D3D10/11/12 retain the existing shader-based native-staging copy path. Vulkan defers injection to a proven safe boundary: a new pass that **LOADs the same colour target**, or a **post-pass transition of that exact target out of render-target usage**. Subpass transitions are not treated as completed render passes. REST restores the game's requested resource state and guards against recursive injection.
 
-The live Vulkan image must already have transfer-source usage; native staging additionally requires transfer-destination usage and uses image blits. REST does not add transfer flags to arbitrary game images or split active game passes. Unsupported targets or boundaries are skipped safely. Baldur's Gate 3 Vulkan testing confirmed stable Before Fog injection with `2560Ã—1440 â†’ 3840Ã—2160` staging and rapid shader navigation after the hunting fixes. BG3 DX11 + DLSS remains the D3D regression reference; this does not imply every title or architecture has been runtime-tested.
+The live Vulkan image must already have transfer-source usage; native staging additionally requires transfer-destination usage and uses image blits. REST does not add transfer flags to arbitrary game images or split active game passes. Unsupported targets or boundaries are skipped safely. Baldur's Gate 3 Vulkan testing confirmed stable Before Fog injection with `2560×1440 → 3840×2160` staging and rapid shader navigation after the hunting fixes. BG3 DX11 + DLSS remains the D3D regression reference; this does not imply every title or architecture has been runtime-tested.
 
 This maintenance line begins with **v1.6.4.580**, preserving the v1.6.3 feature set while restoring a true ReShade 5.8 / API 7 build baseline. See the [changelog](CHANGELOG.md) for details.
 
@@ -48,11 +48,11 @@ For Unreal Engine games this is often the executable under a path such as:
 
 ReShade must be installed against that executable as well.
 
-Start the game and open the ReShade overlay. The **Add-ons** tab should list **REST Enhanced Legacy â€” ReShade Effect Shader Toggler**.
+Start the game and open the ReShade overlay. The **Add-ons** tab should list **REST Enhanced Legacy — ReShade Effect Shader Toggler**.
 
 ## Basic workflow
 
-1. Open the ReShade overlay and expand **REST Enhanced Legacy â€” ReShade Effect Shader Toggler**.
+1. Open the ReShade overlay and expand **REST Enhanced Legacy — ReShade Effect Shader Toggler**.
 2. Click **New group** to create a toggle group.
 3. Click **Edit** to give the group a useful name and optional hotkey.
 4. Click **Settings** and keep the relevant scene visible while REST collects active shaders.
