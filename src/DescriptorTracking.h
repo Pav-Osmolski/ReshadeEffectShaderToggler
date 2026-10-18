@@ -27,7 +27,8 @@ class __declspec(uuid("33319e83-387c-448e-881c-7e68fc2e52c4")) descriptor_tracki
     };
 
     struct descriptor_data {
-        reshade::api::descriptor_type type;
+        // Sparse pushed bindings must not replay unobserved entries as null samplers.
+        reshade::api::descriptor_type type = static_cast<reshade::api::descriptor_type>(UINT32_MAX);
         reshade::api::sampler_with_resource_view sampler_and_view;
         reshade::api::sampler sampler;
         reshade::api::resource_view view;
