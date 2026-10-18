@@ -124,7 +124,7 @@ For a release PR, commit the matching `src/version.h`, changelog entry and `docs
 
 `Release vMAJOR.MINOR.PATCH.RESHADE`
 
-The guarded **Tag Release** workflow is hosted on the default branch and starts only after a successful push-triggered **MSBuild** run on `main` or `legacy/reshade-5.x`. It checks out that validated commit, reads its source version, verifies the release title and notes, and checks any existing tag points to that exact commit. It then creates the tag and explicitly dispatches **Release** at the tag. Ordinary commits do not create tags. Release titles must match exactly on their first line.
+The guarded `tag` job runs inside **MSBuild**, after its `build` job succeeds for a push to the maintained branch. It checks out that validated commit, reads its source version, verifies the release title and notes, and checks any existing tag points to that exact commit. It then creates the tag and explicitly dispatches **Release** at the tag. Ordinary commits skip this job and do not create tags or additional workflow runs. Release titles must match exactly on their first line. Both maintained branches contain their own release gate; no default-branch `workflow_run` relay is needed.
 
 The publisher validates its maintained line's version suffix and branch ancestry, rebuilds both architectures, runs regression tests and shared binary validation, then publishes. Per-tag concurrency prevents overlapping publishers. Existing releases/assets are immutable; a manual publisher retry against an existing release fails instead of replacing files. Never move or reuse a tag.
 
@@ -150,7 +150,11 @@ No release is published if either architecture fails to build.
 
 ## CI artifacts
 
-Build-affecting pushes to `main` build both architectures. Pull requests targeting `main` validate on opened, reopened or ready-for-review when source, dependencies, build scripts or MSBuild workflow paths change. Later PR commits do not trigger automatic builds: return the PR to draft and mark it ready after final revisions (or reopen it) to refresh required PR-associated checks. Manual dispatch is available for branch test artifacts; GitHub may not associate those runs with the PR merge check. Documentation-only PRs also validate on these lifecycle events, so the required build check cannot remain missing solely because of a path filter. Workflow checks cover every workflow YAML and embedded PowerShell block.
+One **MSBuild** workflow handles validation. Build-affecting pushes to `main` validate the merged result. Pull requests targeting that branch validate when opened, reopened or marked ready for review. Draft PRs skip the job and allocate no runner. Later WIP commits do not trigger builds: keep the PR in draft during revisions, then mark it ready once final (or reopen it) to refresh the required `build` check. Branch protection requires a successful check for the current PR revision.
+
+Documentation-only PRs still report the required `build` check, but skip dependency downloads, native compilation and artifact packaging. Workflow, script, test and unknown file changes receive full validation. Release-titled pushes always build both architectures, including a promotion that only changes release notes. Push path filters include every workflow file and release notes.
+
+Concurrent validation runs for the same PR or branch cancel superseded work. Release promotions have a separate concurrency group and are not cancelled by ordinary validation. Manual dispatch remains available for an explicitly requested native test build; it may not satisfy a PR-associated merge check. Workflow structure, PowerShell parsing and regression tests run in the same job, with no duplicate workflow-check run. A normal code PR needs one final review validation and one maintained-branch validation after merging; stable publication adds the separate **Release** workflow.
 
 The release and CI workflows share `scripts/validate-binaries.ps1`, avoiding divergent architecture/version/export checks.
 
