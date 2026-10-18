@@ -188,6 +188,7 @@ struct __declspec(uuid("C63E95B1-4E2F-46D6-A276-E8B4612C069A")) DeviceDataContai
     std::atomic_bool vulkanPreviewWorkPending{ false };
     std::mutex queueMutex;
     std::vector<reshade::api::command_queue*> queues;
+    std::recursive_mutex previewMutex;
     HuntPreview huntPreview;
     CustomShader customShader;
     ResouceManagerData resourceManagerData;

@@ -138,6 +138,7 @@ void RenderingQueueManager::CheckCallForCommandList(reshade::api::command_list* 
     DeviceDataContainer& deviceData = *commandList->get_device()->get_private_data<DeviceDataContainer>();
     RuntimeDataContainer& runtimeData = *deviceData.current_runtime->get_private_data<RuntimeDataContainer>();
 
+    std::lock_guard previewLock(deviceData.previewMutex);
     shared_lock<shared_mutex> t_mutex(runtimeData.technique_mutex);
     unique_lock<shared_mutex> b_mutex(deviceData.binding_mutex);
     unique_lock<shared_mutex> r_mutex(deviceData.render_mutex);
@@ -195,6 +196,7 @@ void RenderingQueueManager::_RescheduleGroups(ShaderData& sData, CommandListData
 }
 
 void RenderingQueueManager::RescheduleGroups(CommandListDataContainer& commandListData, DeviceDataContainer& deviceData) {
+    std::lock_guard previewLock(deviceData.previewMutex);
     if (commandListData.ps.techniquesToRender.size() > 0 || commandListData.ps.bindingsToUpdate.size() > 0) {
         _RescheduleGroups(commandListData.ps, commandListData, deviceData);
     }

@@ -276,6 +276,7 @@ void ResourceManager::CheckPreview(reshade::api::command_list* cmd_list, reshade
     }
 
     DeviceDataContainer& deviceData = *device->get_private_data<DeviceDataContainer>();
+    std::lock_guard previewLock(deviceData.previewMutex);
 
     if (deviceData.huntPreview.recreate_preview) {
         // ReShade's destroy_resource() is immediate. Vulkan preview images may still
@@ -369,6 +370,7 @@ void ResourceManager::SetPingPreviewHandles(reshade::api::device* device,
                                             reshade::api::resource_view* rtv,
                                             reshade::api::resource_view* srv) {
     DeviceDataContainer& deviceData = *device->get_private_data<DeviceDataContainer>();
+    std::lock_guard previewLock(deviceData.previewMutex);
 
     if (deviceData.resourceManagerData.preview_res[0] != 0) {
         if (res != nullptr)
@@ -385,6 +387,7 @@ void ResourceManager::SetPongPreviewHandles(reshade::api::device* device,
                                             reshade::api::resource_view* rtv,
                                             reshade::api::resource_view* srv) {
     DeviceDataContainer& deviceData = *device->get_private_data<DeviceDataContainer>();
+    std::lock_guard previewLock(deviceData.previewMutex);
 
     if (deviceData.resourceManagerData.preview_res[1] != 0) {
         if (res != nullptr)
@@ -398,6 +401,7 @@ void ResourceManager::SetPongPreviewHandles(reshade::api::device* device,
 
 bool ResourceManager::IsCompatibleWithPreviewFormat(reshade::api::device* device, reshade::api::resource res, reshade::api::format view_format) {
     DeviceDataContainer& deviceData = *device->get_private_data<DeviceDataContainer>();
+    std::lock_guard previewLock(deviceData.previewMutex);
 
     // Never query a view description for a failed/absent preview SRV. This can
     // occur after an unsupported view creation and used to turn rapid D3D11
