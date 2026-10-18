@@ -23,6 +23,7 @@ void RenderingPreviewManager::RecordVulkanHuntedTarget(command_list* cmd_list, u
 
     device* device = cmd_list->get_device();
     DeviceDataContainer& deviceData = device->get_private_data<DeviceDataContainer>();
+    std::lock_guard previewLock(deviceData.previewMutex);
 
     if (deviceData.current_runtime == nullptr || uiData.GetToggleGroupIdShaderEditing() < 0)
         return;
@@ -79,6 +80,7 @@ void RenderingPreviewManager::CaptureDeferredVulkanPreview(command_list* cmd_lis
 
     device* device = cmd_list->get_device();
     DeviceDataContainer& deviceData = device->get_private_data<DeviceDataContainer>();
+    std::lock_guard previewLock(deviceData.previewMutex);
     HuntPreview& preview = deviceData.huntPreview;
 
     if (!preview.vulkan_capture_pending || preview.target == 0 || preview.vulkan_command_list != cmd_list)
@@ -146,6 +148,7 @@ void RenderingPreviewManager::CancelDeferredVulkanPreview(device* device) {
         return;
 
     DeviceDataContainer& deviceData = device->get_private_data<DeviceDataContainer>();
+    std::lock_guard previewLock(deviceData.previewMutex);
     HuntPreview& preview = deviceData.huntPreview;
     if (preview.tracked_command_list != nullptr && preview.target != 0) {
         preview.tracked_command_list->get_private_data<state_tracking>().stop_resource_barrier_tracking(preview.target);
@@ -169,6 +172,7 @@ void RenderingPreviewManager::UpdatePreview(command_list* cmd_list, uint64_t cal
     device* device = cmd_list->get_device();
     CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
     DeviceDataContainer& deviceData = device->get_private_data<DeviceDataContainer>();
+    std::lock_guard previewLock(deviceData.previewMutex);
 
     // Remove call location from queue
     commandListData.commandQueue &= ~(invocation << (callLocation * MATCH_DELIMITER));

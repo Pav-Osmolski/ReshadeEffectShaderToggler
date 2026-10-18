@@ -4,6 +4,7 @@
  */
 
 #include "StateTracking.h"
+#include "PipelinePrivateData.h"
 #include "reshade.hpp"
 #include <limits>
 
@@ -174,16 +175,12 @@ void state_block::apply_default(reshade::api::command_list* cmd_list, bool force
 
     if (primitive_topology != primitive_topology::undefined)
         cmd_list->bind_pipeline_state(dynamic_state::primitive_topology, static_cast<uint32_t>(primitive_topology));
-    if (blend_constant != 0)
+    if (dynamic_state_mask & 1)
         cmd_list->bind_pipeline_state(dynamic_state::blend_constant, blend_constant);
-    if (sample_mask != 0xFFFFFFFF)
+    if (dynamic_state_mask & 2)
         cmd_list->bind_pipeline_state(dynamic_state::sample_mask, sample_mask);
-    if (front_stencil_reference_value != 0)
-        cmd_list->bind_pipeline_state(dynamic_state::front_stencil_reference_value, front_stencil_reference_value);
-    if (cmd_list->get_device()->get_api() >= device_api::d3d12) {
-        if (back_stencil_reference_value != 0)
-            cmd_list->bind_pipeline_state(dynamic_state::back_stencil_reference_value, back_stencil_reference_value);
-    }
+    if (dynamic_state_mask & 4)
+        cmd_list->bind_pipeline_state(dynamic_state::stencil_reference_value, front_stencil_reference_value);
 
     if (!viewports.empty())
         cmd_list->bind_viewports(0, static_cast<uint32_t>(viewports.size()), viewports.data());
@@ -198,10 +195,12 @@ void state_block::apply_default(reshade::api::command_list* cmd_list, bool force
 }
 
 void state_block::clear() {
+    std::lock_guard barrierLock(resourceBarrierMutex);
     render_targets.clear();
     depth_stencil = { 0 };
     primitive_topology = primitive_topology::undefined;
     blend_constant = 0;
+    dynamic_state_mask = 0;
     front_stencil_reference_value = 0;
     back_stencil_reference_value = 0;
     sample_mask = 0xFFFFFFFF;
@@ -253,6 +252,15 @@ static void on_init_command_list(command_list* cmd_list) {
     deviceState.cmd_lists.emplace(cmd_list);
 }
 static void on_destroy_command_list(command_list* cmd_list) {
+    auto& previewData = cmd_list->get_device()->get_private_data<DeviceDataContainer>();
+    std::lock_guard previewLock(previewData.previewMutex);
+    if (previewData.huntPreview.tracked_command_list == cmd_list)
+        previewData.huntPreview.tracked_command_list = nullptr;
+    if (previewData.huntPreview.vulkan_command_list == cmd_list) {
+        previewData.huntPreview.vulkan_command_list = nullptr;
+        previewData.huntPreview.vulkan_capture_pending = false;
+        previewData.vulkanPreviewWorkPending.store(false);
+    }
     cmd_list->destroy_private_data<state_tracking>();
 
     auto& deviceState = cmd_list->get_device()->get_private_data<DeviceStateTracking>();
@@ -320,13 +328,17 @@ static void on_bind_pipeline_states(command_list* cmd_list, uint32_t count, cons
                 break;
             case dynamic_state::blend_constant:
                 state.blend_constant = values[i];
+                state.dynamic_state_mask |= 1;
                 break;
             case dynamic_state::stencil_reference_value:
                 state.front_stencil_reference_value = values[i];
+                state.dynamic_state_mask |= 4;
                 state.back_stencil_reference_value = values[i];
+                state.dynamic_state_mask |= 8;
                 break;
             case dynamic_state::sample_mask:
                 state.sample_mask = values[i];
+                state.dynamic_state_mask |= 2;
                 break;
         }
     }
@@ -638,6 +650,7 @@ static void on_reshade_present(effect_runtime* runtime) {
 }
 
 void state_block::start_resource_barrier_tracking(reshade::api::resource res, reshade::api::resource_usage current_usage) {
+    std::lock_guard barrierLock(resourceBarrierMutex);
     const auto& restrack = resource_barrier_track.find(res.handle);
 
     if (restrack != resource_barrier_track.end()) {
@@ -648,6 +661,7 @@ void state_block::start_resource_barrier_tracking(reshade::api::resource res, re
 }
 
 reshade::api::resource_usage state_block::stop_resource_barrier_tracking(reshade::api::resource res) {
+    std::lock_guard barrierLock(resourceBarrierMutex);
     const auto& restrack = resource_barrier_track.find(res.handle);
 
     if (restrack != resource_barrier_track.end()) {
@@ -665,7 +679,9 @@ reshade::api::resource_usage state_block::stop_resource_barrier_tracking(reshade
 }
 
 static void on_barrier(command_list* cmd_list, uint32_t count, const resource* resources, const resource_usage* old_states, const resource_usage* new_states) {
-    auto& barrier_track = cmd_list->get_private_data<state_tracking>().resource_barrier_track;
+    auto& tracker = cmd_list->get_private_data<state_tracking>();
+    std::lock_guard barrierLock(tracker.resourceBarrierMutex);
+    auto& barrier_track = tracker.resource_barrier_track;
     if (barrier_track.size() > 0) {
         for (uint32_t i = 0; i < count; i++) {
             const auto& restrack = barrier_track.find(resources[i].handle);

@@ -65,7 +65,7 @@ using namespace AddonImGui;
 using namespace Shim::Constants;
 using namespace std;
 
-extern "C" __declspec(dllexport) const char* NAME = "REST Enhanced â€” ReShade Effect Shader Toggler";
+extern "C" __declspec(dllexport) const char* NAME = "REST Enhanced Legacy — ReShade Effect Shader Toggler";
 extern "C" __declspec(dllexport) const char* AUTHOR = "DeViLhoOD";
 extern "C" __declspec(dllexport) const char* DESCRIPTION =
   "ReShade add-on for applying selected effects at shader-defined points in the rendering pipeline, including automatic scene-colour injection for upscaled rendering.";
@@ -149,7 +149,9 @@ static void onInitCommandList(command_list* commandList) {
 }
 
 static void onDestroyCommandList(command_list* commandList) {
-    auto& preview = commandList->get_device()->get_private_data<DeviceDataContainer>().huntPreview;
+    auto& previewData = commandList->get_device()->get_private_data<DeviceDataContainer>();
+    std::lock_guard previewLock(previewData.previewMutex);
+    auto& preview = previewData.huntPreview;
     if (preview.tracked_command_list == commandList)
         preview.tracked_command_list = nullptr;
     if (preview.vulkan_command_list == commandList) {
@@ -162,7 +164,9 @@ static void onDestroyCommandList(command_list* commandList) {
 }
 
 static void onResetCommandList(command_list* commandList) {
-    auto& preview = commandList->get_device()->get_private_data<DeviceDataContainer>().huntPreview;
+    auto& previewData = commandList->get_device()->get_private_data<DeviceDataContainer>();
+    std::lock_guard previewLock(previewData.previewMutex);
+    auto& preview = previewData.huntPreview;
     if (preview.tracked_command_list == commandList)
         preview.tracked_command_list = nullptr;
     if (preview.vulkan_command_list == commandList) {
@@ -559,6 +563,7 @@ static void onEndRenderPass(command_list* cmd_list) {
 }
 
 static void onReShadeOverlay(effect_runtime* runtime) {
+    std::lock_guard previewLock(runtime->get_device()->get_private_data<DeviceDataContainer>().previewMutex);
     DisplayOverlay(g_addonUIData, resourceManager, runtime);
 }
 
@@ -590,6 +595,7 @@ static void onPresent(command_queue* queue,
 static void onReShadePresent(effect_runtime* runtime) {
     device* dev = runtime->get_device();
     DeviceDataContainer& deviceData = dev->get_private_data<DeviceDataContainer>();
+    std::lock_guard previewLock(deviceData.previewMutex);
     command_queue* queue = runtime->get_command_queue();
 
     {
@@ -641,6 +647,7 @@ static bool onUpdateBufferRegion(device* device, const void* data, resource reso
 }
 
 static void displaySettings(effect_runtime* runtime) {
+    std::lock_guard previewLock(runtime->get_device()->get_private_data<DeviceDataContainer>().previewMutex);
     DisplaySettings(g_addonUIData, runtime);
 }
 

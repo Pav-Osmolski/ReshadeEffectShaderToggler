@@ -9,6 +9,7 @@
 #include <array>
 #include <d3d9.h>
 #include <shared_mutex>
+#include <mutex>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -95,6 +96,7 @@ struct state_block {
     std::array<reshade::api::pipeline_stage, ALL_PIPELINE_STAGES_SIZE> current_pipeline_stage;
     reshade::api::primitive_topology primitive_topology = reshade::api::primitive_topology::undefined;
     uint32_t blend_constant = 0;
+    uint32_t dynamic_state_mask = 0;
     uint32_t sample_mask = 0xFFFFFFFF;
     uint32_t front_stencil_reference_value = 0;
     uint32_t back_stencil_reference_value = 0;
@@ -106,6 +108,7 @@ struct state_block {
     std::array<std::vector<std::vector<uint32_t>>, ALL_SHADER_STAGES_SIZE> constant_buffer;
     std::array<std::vector<std::vector<descriptor_tracking::descriptor_data>>, ALL_SHADER_STAGES_SIZE> descriptor_buffer;
 
+    std::mutex resourceBarrierMutex;
     std::unordered_map<uint64_t, barrier_track> resource_barrier_track;
 
     IDirect3DStateBlock9* dx_state = nullptr;

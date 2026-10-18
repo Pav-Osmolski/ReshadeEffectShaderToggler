@@ -259,3 +259,5 @@ paket-files/
 *.cso
 
 /tests/out/
+
+/test-package/
