@@ -1,12 +1,14 @@
 name: Tag Release
 
 on:
-  push:
-    branches:
-      - legacy/reshade-5.x
-    paths:
-      - "src/version.h"
-      - "docs/releases/**"
+  workflow_run:
+    workflows: [MSBuild]
+    types: [completed]
+    branches: [main, legacy/reshade-5.x]
+
+concurrency:
+  group: tag-release-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
 
 permissions:
   actions: write
@@ -14,53 +16,49 @@ permissions:
 
 jobs:
   tag:
-    if: startsWith(github.event.head_commit.message, 'Release v')
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      startsWith(github.event.workflow_run.head_commit.message, 'Release v')
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - name: Checkout
+      - name: Checkout validated commit
         uses: actions/checkout@v7
         with:
+          ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
 
       - name: Create release tag
         shell: bash
         env:
-          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          COMMIT_MESSAGE: ${{ github.event.workflow_run.head_commit.message }}
+          RELEASE_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-
           version="$(sed -n 's/^#define REST_VERSION_STRING "\([^"]*\)"/\1/p' src/version.h)"
-          if [[ -z "$version" ]]; then
-            echo "Could not read REST_VERSION_STRING from src/version.h" >&2
-            exit 1
-          fi
-
           tag="v${version}"
-          if [[ "$COMMIT_MESSAGE" != "Release $tag"* ]]; then
-            echo "Merge commit requests a different release than source version $tag" >&2
-            exit 1
-          fi
-
-          if [[ ! -f "docs/releases/${tag}.md" ]]; then
-            echo "Missing docs/releases/${tag}.md" >&2
-            exit 1
-          fi
-
-          if ! git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null 2>&1; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git tag "${tag}" "${GITHUB_SHA}"
-            git push origin "${tag}"
+          case "$RELEASE_BRANCH" in
+            main) suffix=680 ;;
+            legacy/reshade-5.x) suffix=580 ;;
+            *) echo "Unsupported release branch" >&2; exit 1 ;;
+          esac
+          [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+\.${suffix}$ ]] || { echo "Invalid release version for branch" >&2; exit 1; }
+          [[ "${COMMIT_MESSAGE%%$'\n'*}" == "Release $tag" ]] || { echo "Release title/version mismatch" >&2; exit 1; }
+          test -f "docs/releases/${tag}.md"
+          git merge-base --is-ancestor "$RELEASE_SHA" "origin/$RELEASE_BRANCH"
+          if git show-ref --verify --quiet "refs/tags/${tag}"; then
+            [[ "$(git rev-parse "refs/tags/${tag}^{commit}")" == "$RELEASE_SHA" ]] || { echo "Existing tag points to another commit" >&2; exit 1; }
           else
-            echo "${tag} already exists."
+            git tag "${tag}" "$RELEASE_SHA"
+            git push origin "refs/tags/${tag}"
           fi
-
-          if gh release view "${tag}" >/dev/null 2>&1; then
-            echo "Release ${tag} already exists; nothing to publish."
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release already exists; assets remain immutable."
             exit 0
           fi
-
-          # Tag pushes made with GITHUB_TOKEN do not start another workflow run,
-          # so explicitly dispatch the validated tag-driven publisher at this tag.
-          gh workflow run release.yml --ref "${tag}"
+          # GITHUB_TOKEN tag pushes do not trigger the publisher, so dispatch it.
+          gh workflow run release.yml --ref "$tag"

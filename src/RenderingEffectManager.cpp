@@ -256,7 +256,11 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
                 // Upscale the game's pre-DLSS scene into a native-size scratch surface.
                 // This keeps ReShade's effect-created intermediate textures at their normal
                 // runtime dimensions, avoiding mixed-resolution shared-resource permutations.
-                shaderManager.CopyResource(cmd_list, view->srv, nativeStageRTV, runtimeWidth, runtimeHeight);
+                if (!shaderManager.CopyResource(cmd_list, view->srv, nativeStageRTV, runtimeWidth, runtimeHeight)) {
+                    cmd_list->barrier(active_resource.resource, resource_usage::shader_resource, resource_usage::render_target);
+                    group->setDebugAutoStatus("Unsupported native staging copy pipeline");
+                    continue;
+                }
             }
 
             view_non_srgb = nativeStageRTV;
@@ -512,7 +516,7 @@ void RenderingEffectManager::_RenderDeferredVulkanAutoEffects(
     vector<EffectData*> removalList;
 
     shared_lock<shared_mutex> techLock(runtimeData.technique_mutex);
-    _RenderEffects(cmd_list,
+    const bool rendered = _RenderEffects(cmd_list,
                    deviceData,
                    runtimeData,
                    deviceData.vulkanAutoPendingEffects,
@@ -534,6 +538,8 @@ void RenderingEffectManager::_RenderDeferredVulkanAutoEffects(
     if (deviceData.vulkanAutoPendingEffects.empty())
         deviceData.vulkanAutoWorkPending.store(false, std::memory_order_release);
 
+    if (rendered)
+        cmd_list->get_private_data<state_tracking>().apply(cmd_list);
     commandListData.vulkanAutoInjectionActive = false;
 }
 
@@ -545,6 +551,9 @@ void RenderingEffectManager::RenderEffects(command_list* cmd_list, uint64_t call
     device* device = cmd_list->get_device();
     CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
     DeviceDataContainer& deviceData = device->get_private_data<DeviceDataContainer>();
+
+    if (device->get_api() == device_api::d3d12 && commandListData.d3d12InsideRenderPass)
+        return;
 
     // Remove call location from queue
     commandListData.commandQueue &= ~(invocation << (callLocation * MATCH_DELIMITER));

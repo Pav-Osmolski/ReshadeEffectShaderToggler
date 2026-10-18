@@ -1,4 +1,5 @@
 #include "ToggleGroupResourceManager.h"
+#include "ResourceManager.h"
 
 using namespace Rendering;
 using namespace reshade::api;
@@ -84,6 +85,7 @@ static bool isValidRenderTarget(reshade::api::format format) {
         case reshade::api::format::b5g5r5a1_unorm:
         case reshade::api::format::b5g5r5x1_unorm:
         case reshade::api::format::b4g4r4a4_unorm:
+        case reshade::api::format::a4b4g4r4_unorm:
             return true;
         default:
             return false;
@@ -93,7 +95,7 @@ static bool isValidRenderTarget(reshade::api::format format) {
 }
 
 void ToggleGroupResourceManager::ToggleGroupRemoved(reshade::api::effect_runtime* runtime, ShaderToggler::ToggleGroup* group) {
-    runtime->get_command_queue()->wait_idle();
+    ResourceManager::SynchronizeGpu(runtime);
 
     for (uint32_t i = 0; i < GroupResourceTypeCount; i++) {
         GroupResource& resources = group->GetGroupResource(static_cast<GroupResourceType>(i));
@@ -149,6 +151,13 @@ void ToggleGroupResourceManager::CheckGroupBuffers(reshade::api::effect_runtime*
     if (runtime == nullptr || runtime->get_device() == nullptr)
         return;
 
+    bool synchronized = false;
+    auto synchronizeReplacement = [&](const GroupResource& resources) {
+        if (!synchronized && resources.res != 0) {
+            ResourceManager::SynchronizeGpu(runtime);
+            synchronized = true;
+        }
+    };
     for (auto& groupEntry : groups) {
         ShaderToggler::ToggleGroup& group = groupEntry.second;
 
@@ -160,6 +169,7 @@ void ToggleGroupResourceManager::CheckGroupBuffers(reshade::api::effect_runtime*
 
             // Dispose of buffers with the alpha preservation option disabled
             if (!resources.enabled()) {
+                synchronizeReplacement(resources);
                 DisposeGroupResources(runtime->get_device(), resources.res, resources.rtv, resources.rtv_srgb, resources.srv);
                 continue;
             }
@@ -168,6 +178,7 @@ void ToggleGroupResourceManager::CheckGroupBuffers(reshade::api::effect_runtime*
             if (resources.state != GroupResourceState::RESOURCE_INVALID)
                 continue;
 
+            synchronizeReplacement(resources);
             DisposeGroupResources(runtime->get_device(), resources.res, resources.rtv, resources.rtv_srgb, resources.srv);
 
             if (static_cast<GroupResourceType>(i) == GroupResourceType::RESOURCE_ALPHA ||

@@ -32,21 +32,38 @@ void state_block::apply_descriptors_dx12_vulkan(command_list* cmd_list) const {
             continue;
         }
 
-        // Restore tables in first pass to assure heaps are restored, do constants in a second pass,
-        // pushed descriptors should be restored along with the tables when the heap is restored to the game internal one
+        // Root descriptors are separate from descriptor heaps and must be replayed too.
         for (uint32_t i = 0; i < root_table.size(); i++) {
             if (root_table[i].type == root_entry_type::descriptor_table && root_table[i].descriptor_table.handle != 0) {
                 cmd_list->bind_descriptor_sets(stages, pipelinelayout, i, 1, &root_table[i].descriptor_table);
             }
 
             if (root_table[i].type == root_entry_type::push_constants && root_table[i].buffer_index >= 0 &&
-                constant_buffer[root_table[i].buffer_index].size() > 0) {
+                constant_buffer[stageIdx][root_table[i].buffer_index].size() > 0) {
                 cmd_list->push_constants(stages,
                                          pipelinelayout,
                                          i,
                                          0,
-                                         static_cast<uint32_t>(constant_buffer[root_table[i].buffer_index].size()),
-                                         constant_buffer[root_table[i].buffer_index].data());
+                                         static_cast<uint32_t>(constant_buffer[stageIdx][root_table[i].buffer_index].size()),
+                                         constant_buffer[stageIdx][root_table[i].buffer_index].data());
+            }
+            if (root_table[i].type == root_entry_type::push_descriptors && root_table[i].buffer_index >= 0) {
+                const auto& descriptors = descriptor_buffer[stageIdx][root_table[i].buffer_index];
+                for (uint32_t binding = 0; binding < descriptors.size(); ++binding) {
+                    const auto& descriptor = descriptors[binding];
+                    const void* value = nullptr;
+                    switch (descriptor.type) {
+                        case descriptor_type::sampler: value = &descriptor.sampler; break;
+                        case descriptor_type::sampler_with_resource_view: value = &descriptor.sampler_and_view; break;
+                        case descriptor_type::shader_resource_view:
+                        case descriptor_type::unordered_access_view: value = &descriptor.view; break;
+                        case descriptor_type::constant_buffer:
+                        case descriptor_type::shader_storage_buffer: value = &descriptor.constant; break;
+                        default: break;
+                    }
+                    if (value != nullptr)
+                        cmd_list->push_descriptors(stages, pipelinelayout, i, { {}, binding, 0, 1, descriptor.type, value });
+                }
             }
         }
     }
@@ -144,7 +161,7 @@ void state_block::apply_default(reshade::api::command_list* cmd_list, bool force
         return;
     }
 
-    if (!render_targets.empty() || depth_stencil != 0)
+    if (cmd_list->get_device()->get_api() != device_api::vulkan && (!render_targets.empty() || depth_stencil != 0))
         cmd_list->bind_render_targets_and_depth_stencil(static_cast<uint32_t>(render_targets.size()), render_targets.data(), depth_stencil);
 
     uint32_t pipeline_stages_set = 0;
@@ -162,7 +179,11 @@ void state_block::apply_default(reshade::api::command_list* cmd_list, bool force
     if (sample_mask != 0xFFFFFFFF)
         cmd_list->bind_pipeline_state(dynamic_state::sample_mask, sample_mask);
     if (front_stencil_reference_value != 0)
-        cmd_list->bind_pipeline_state(dynamic_state::stencil_reference_value, front_stencil_reference_value);
+        cmd_list->bind_pipeline_state(dynamic_state::front_stencil_reference_value, front_stencil_reference_value);
+    if (cmd_list->get_device()->get_api() >= device_api::d3d12) {
+        if (back_stencil_reference_value != 0)
+            cmd_list->bind_pipeline_state(dynamic_state::back_stencil_reference_value, back_stencil_reference_value);
+    }
 
     if (!viewports.empty())
         cmd_list->bind_viewports(0, static_cast<uint32_t>(viewports.size()), viewports.data());
@@ -469,6 +490,11 @@ static void on_push_descriptors(command_list* cmd_list,
     auto& state_stages = state_tracker.root_table_stages[idx];
     auto& descriptor_buffer = state_tracker.descriptor_buffer[idx];
 
+    if (desc_layout != layout) {
+        root_table.clear();
+        state_tracker.descriptor_buffer[idx].clear();
+        state_tracker.constant_buffer[idx].clear();
+    }
     desc_layout = layout;
     state_stages = stages;
 
@@ -479,7 +505,7 @@ static void on_push_descriptors(command_list* cmd_list,
     auto& root_table_entry = root_table[layout_param];
 
     // Initialize table for descriptors
-    if (root_table_entry.type == root_entry_type::undefined) {
+    if (root_table_entry.type != root_entry_type::push_descriptors) {
         std::vector<descriptor_tracking::descriptor_data> buf(update.binding + update.count);
 
         fill_descriptors(buf, update);
@@ -514,6 +540,11 @@ static void on_push_constants(command_list* cmd_list,
     auto& state_stages = state_tracker.root_table_stages[idx];
     auto& constant_buffer = state_tracker.constant_buffer[idx];
 
+    if (desc_layout != layout) {
+        root_table.clear();
+        state_tracker.descriptor_buffer[idx].clear();
+        state_tracker.constant_buffer[idx].clear();
+    }
     desc_layout = layout;
     state_stages = stages;
 
@@ -524,7 +555,7 @@ static void on_push_constants(command_list* cmd_list,
     auto& root_table_entry = root_table[layout_param];
 
     // Not buffered yet, initialize
-    if (root_table_entry.type == root_entry_type::undefined) {
+    if (root_table_entry.type != root_entry_type::push_constants) {
         std::vector<uint32_t> buf(first + count);
 
         for (uint32_t i = 0; i < count; i++) {

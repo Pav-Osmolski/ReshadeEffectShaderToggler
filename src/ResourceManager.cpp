@@ -1,5 +1,7 @@
 #include "ResourceManager.h"
+#include "RenderingSafety.h"
 #include <format>
+#include <algorithm>
 
 using namespace Rendering;
 using namespace reshade::api;
@@ -251,6 +253,23 @@ void ResourceManager::CheckResourceViews(reshade::api::effect_runtime* runtime) 
     }
 }
 
+void ResourceManager::SynchronizeGpu(effect_runtime* runtime) {
+    if (runtime == nullptr || runtime->get_command_queue() == nullptr)
+        return;
+    command_queue* immediateQueue = runtime->get_command_queue();
+    immediateQueue->flush_immediate_command_list();
+    DeviceDataContainer& data = runtime->get_device()->get_private_data<DeviceDataContainer>();
+    std::lock_guard lock(data.queueMutex);
+    for (command_queue* queue : data.queues)
+        queue->wait_idle();
+    if (std::find(data.queues.begin(), data.queues.end(), immediateQueue) == data.queues.end())
+        immediateQueue->wait_idle();
+}
+
+bool ResourceManager::IsPreviewTargetSupported(const resource_desc& desc) {
+    return SupportsWholePreviewCopy(desc);
+}
+
 void ResourceManager::CheckPreview(reshade::api::command_list* cmd_list, reshade::api::device* device) {
     if (device == nullptr) {
         return;
@@ -264,7 +283,7 @@ void ResourceManager::CheckPreview(reshade::api::command_list* cmd_list, reshade
         // them during rapid shader hunting can invalidate in-flight GPU work and
         // eventually cause VK_ERROR_DEVICE_LOST. Synchronize only when the preview
         // allocation actually needs to be replaced.
-        if (device->get_api() == device_api::vulkan &&
+        if ((device->get_api() == device_api::vulkan || device->get_api() == device_api::d3d12) &&
             (deviceData.resourceManagerData.preview_res[0] != 0 || deviceData.resourceManagerData.preview_res[1] != 0) &&
             deviceData.current_runtime != nullptr &&
             deviceData.current_runtime->get_command_queue() != nullptr) {
@@ -272,13 +291,16 @@ void ResourceManager::CheckPreview(reshade::api::command_list* cmd_list, reshade
             // have already recorded sampling commands for the current preview image
             // on the immediate command list. Submit those first, then wait for all
             // GPU references to retire before destroying the image.
-            command_queue* queue = deviceData.current_runtime->get_command_queue();
-            queue->flush_immediate_command_list();
-            queue->wait_idle();
+            SynchronizeGpu(deviceData.current_runtime);
         }
 
         DisposePreview(device);
         resource_desc desc = deviceData.huntPreview.target_desc;
+        if (!IsPreviewTargetSupported(desc)) {
+            deviceData.huntPreview.recreate_preview = false;
+            deviceData.huntPreview.status = "Preview unavailable: requires a single-sample, single-layer, single-mip 2D target";
+            return;
+        }
 
         const bool vulkan = device->get_api() == device_api::vulkan;
         const reshade::api::format sourceViewFormat =
@@ -386,6 +408,8 @@ bool ResourceManager::IsCompatibleWithPreviewFormat(reshade::api::device* device
         return false;
 
     resource_desc res_desc = device->get_resource_desc(res);
+    if (!IsPreviewTargetSupported(res_desc))
+        return false;
     resource_desc preview_desc = device->get_resource_desc(deviceData.resourceManagerData.preview_res[0]);
     resource_view_desc preview_view_desc = device->get_resource_view_desc(deviceData.resourceManagerData.preview_srv[0]);
     const reshade::api::format sourceViewFormat =

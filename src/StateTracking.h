@@ -108,7 +108,7 @@ struct state_block {
 
     std::unordered_map<uint64_t, barrier_track> resource_barrier_track;
 
-    IDirect3DStateBlock9* dx_state;
+    IDirect3DStateBlock9* dx_state = nullptr;
 };
 
 struct __declspec(uuid("EE0C0141-E361-42E5-AF64-25F2F677F37F")) DeviceStateTracking {
