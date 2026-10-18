@@ -257,3 +257,9 @@ paket-files/
 
 # Shaders
 *.cso
+
+/tests/out/
+
+/test-package/
+/tests/__pycache__/
+scripts/__pycache__/

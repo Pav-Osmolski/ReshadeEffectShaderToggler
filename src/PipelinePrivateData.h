@@ -6,6 +6,7 @@
 #include "reshade.hpp"
 #include <chrono>
 #include <shared_mutex>
+#include <mutex>
 #include <tuple>
 #include <unordered_map>
 #include <vector>
@@ -59,6 +60,7 @@ struct __declspec(uuid("222F7169-3C09-40DB-9BC9-EC53842CE537")) CommandListDataC
     bool vulkanInsideRenderPass = false;
     bool vulkanRenderPassEndPending = false;
     bool vulkanRenderPassSuspends = false;
+    bool d3d12InsideRenderPass = false;
     ShaderData ps{ 0 };
     ShaderData vs{ 1 };
     ShaderData cs{ 2 };
@@ -73,6 +75,7 @@ struct __declspec(uuid("222F7169-3C09-40DB-9BC9-EC53842CE537")) CommandListDataC
         vulkanInsideRenderPass = false;
         vulkanRenderPassEndPending = false;
         vulkanRenderPassSuspends = false;
+        d3d12InsideRenderPass = false;
     }
 };
 
@@ -99,6 +102,7 @@ struct __declspec(novtable) HuntPreview final {
     reshade::api::format view_format = reshade::api::format::unknown;
     reshade::api::resource_desc target_desc;
     bool recreate_preview = false;
+    reshade::api::command_list* tracked_command_list = nullptr;
 
     // Vulkan hunting cannot copy from the target inside the active render pass.
     // Record the candidate at the suppressed draw and consume it at the next safe
@@ -118,6 +122,7 @@ struct __declspec(novtable) HuntPreview final {
         format = reshade::api::format::unknown;
         view_format = reshade::api::format::unknown;
         recreate_preview = false;
+        tracked_command_list = nullptr;
         vulkan_capture_pending = false;
         vulkan_command_list = nullptr;
         hunted_shader_hash = 0;
@@ -148,6 +153,9 @@ struct __declspec(novtable) CustomShaderInstance final {
 struct __declspec(novtable) CustomShader final {
     CustomShaderInstance copyPipeline;
     CustomShaderInstance alphaPreservingCopyPipeline;
+    std::unordered_map<uint32_t, CustomShaderInstance> copyFormatPipelines;
+    std::unordered_map<uint32_t, CustomShaderInstance> alphaFormatPipelines;
+    std::mutex pipelineMutex;
 
     reshade::api::resource fullscreenQuadVertexBuffer = { 0 };
 };
@@ -178,6 +186,9 @@ struct __declspec(uuid("C63E95B1-4E2F-46D6-A276-E8B4612C069A")) DeviceDataContai
     effect_queue vulkanAutoPendingEffects;
     std::atomic_bool vulkanAutoWorkPending{ false };
     std::atomic_bool vulkanPreviewWorkPending{ false };
+    std::mutex queueMutex;
+    std::vector<reshade::api::command_queue*> queues;
+    std::recursive_mutex previewMutex;
     HuntPreview huntPreview;
     CustomShader customShader;
     ResouceManagerData resourceManagerData;

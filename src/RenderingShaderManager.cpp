@@ -21,7 +21,7 @@ void RenderingShaderManager::InitShader(reshade::api::device* device,
                                         reshade::api::pipeline_layout& sh_layout,
                                         reshade::api::sampler& sh_sampler,
                                         resource& quad,
-                                        uint8_t write_mask) {
+                                        uint8_t write_mask, reshade::api::format target_format) {
     if (sh_pipeline == 0 && (device->get_api() == device_api::d3d9 || device->get_api() == device_api::d3d10 || device->get_api() == device_api::d3d11 ||
                              device->get_api() == device_api::d3d12)) {
         sampler_desc sampler_desc = {};
@@ -59,13 +59,16 @@ void RenderingShaderManager::InitShader(reshade::api::device* device,
         blend_state.render_target_write_mask[0] = write_mask;
         subobjects.push_back({ reshade::api::pipeline_subobject_type::blend_state, 1, &blend_state });
 
-        reshade::api::format render_target_format = reshade::api::format_to_default_typed(reshade::api::format::r8g8b8a8_typeless, 0);
+        reshade::api::format render_target_format = target_format;
         subobjects.push_back({ reshade::api::pipeline_subobject_type::render_target_formats, 1, &render_target_format });
 
         if (!device->create_pipeline_layout(2, layout_params, &sh_layout) ||
             !device->create_pipeline(sh_layout, static_cast<uint32_t>(subobjects.size()), subobjects.data(), &sh_pipeline) ||
             !device->create_sampler(sampler_desc, &sh_sampler)) {
 
+            if (sh_pipeline != 0) device->destroy_pipeline(sh_pipeline);
+            if (sh_layout != 0) device->destroy_pipeline_layout(sh_layout);
+            if (sh_sampler != 0) device->destroy_sampler(sh_sampler);
             sh_pipeline = { 0 };
             sh_layout = { 0 };
             sh_sampler = { 0 };
@@ -140,6 +143,14 @@ void RenderingShaderManager::InitShaders(reshade::api::device* device) {
 void RenderingShaderManager::DestroyShaders(reshade::api::device* device) {
     DeviceDataContainer& shader = *device->get_private_data<DeviceDataContainer>();
 
+    for (auto* cache : { &shader.customShader.copyFormatPipelines, &shader.customShader.alphaFormatPipelines }) {
+        for (auto& [_, instance] : *cache) {
+            if (instance.pipeline != 0) device->destroy_pipeline(instance.pipeline);
+            if (instance.pipelineLayout != 0) device->destroy_pipeline_layout(instance.pipelineLayout);
+            if (instance.pipelineSampler != 0) device->destroy_sampler(instance.pipelineSampler);
+        }
+        cache->clear();
+    }
     if (shader.customShader.fullscreenQuadVertexBuffer != 0) {
         device->destroy_resource(shader.customShader.fullscreenQuadVertexBuffer);
         shader.customShader.fullscreenQuadVertexBuffer = { 0 };
@@ -176,7 +187,7 @@ void RenderingShaderManager::DestroyShaders(reshade::api::device* device) {
     }
 }
 
-void RenderingShaderManager::ApplyShader(command_list* cmd_list,
+bool RenderingShaderManager::ApplyShader(command_list* cmd_list,
                                          resource_view srv_src,
                                          resource_view rtv_dst,
                                          pipeline& sh_pipeline,
@@ -189,7 +200,7 @@ void RenderingShaderManager::ApplyShader(command_list* cmd_list,
 
     if (sh_pipeline == 0 || !(device->get_api() == device_api::d3d9 || device->get_api() == device_api::d3d10 || device->get_api() == device_api::d3d11 ||
                               device->get_api() == device_api::d3d12)) {
-        return;
+        return false;
     }
 
     cmd_list->get_private_data<state_tracking>()->capture(cmd_list, true);
@@ -214,42 +225,53 @@ void RenderingShaderManager::ApplyShader(command_list* cmd_list,
     } else {
         cmd_list->draw(3, 1, 0, 0);
     }
+    return true;
 }
 
-void RenderingShaderManager::CopyResource(command_list* cmd_list, resource_view srv_src, resource_view rtv_dst, uint32_t width, uint32_t height) {
+bool RenderingShaderManager::CopyResource(command_list* cmd_list, resource_view srv_src, resource_view rtv_dst, uint32_t width, uint32_t height) {
+    if (srv_src == 0 || rtv_dst == 0)
+        return false;
     device* device = cmd_list->get_device();
     DeviceDataContainer& data = *device->get_private_data<DeviceDataContainer>();
-
-    ApplyShader(cmd_list,
-                srv_src,
-                rtv_dst,
-                data.customShader.copyPipeline.pipeline,
-                data.customShader.copyPipeline.pipelineLayout,
-                data.customShader.copyPipeline.pipelineSampler,
-                data.customShader.fullscreenQuadVertexBuffer,
-                width,
-                height);
-
-    cmd_list->get_private_data<state_tracking>()->apply(cmd_list, true);
+    const auto desc = device->get_resource_desc(device->get_resource_from_view(rtv_dst));
+    if (desc.texture.samples != 1)
+        return false;
+    const reshade::api::format targetFormat = device->get_resource_view_desc(rtv_dst).format;
+    std::lock_guard lock(data.customShader.pipelineMutex);
+    CustomShaderInstance* instance = &data.customShader.copyPipeline;
+    if (device->get_api() == device_api::d3d12) {
+        instance = &data.customShader.copyFormatPipelines[static_cast<uint32_t>(targetFormat)];
+        InitShader(device, SHADER_PREVIEW_COPY_PS_4_0, SHADER_FULLSCREEN_VS_4_0,
+                   instance->pipeline, instance->pipelineLayout, instance->pipelineSampler,
+                   data.customShader.fullscreenQuadVertexBuffer, 0xF, targetFormat);
+    }
+    const bool rendered = ApplyShader(cmd_list, srv_src, rtv_dst, instance->pipeline, instance->pipelineLayout,
+                                      instance->pipelineSampler, data.customShader.fullscreenQuadVertexBuffer, width, height);
+    if (rendered)
+        cmd_list->get_private_data<state_tracking>()->apply(cmd_list, true);
+    return rendered;
 }
 
-void RenderingShaderManager::CopyResourceMaskAlpha(reshade::api::command_list* cmd_list,
-                                                   reshade::api::resource_view srv_src,
-                                                   reshade::api::resource_view rtv_dst,
-                                                   uint32_t width,
-                                                   uint32_t height) {
+bool RenderingShaderManager::CopyResourceMaskAlpha(command_list* cmd_list, resource_view srv_src, resource_view rtv_dst, uint32_t width, uint32_t height) {
+    if (srv_src == 0 || rtv_dst == 0)
+        return false;
     device* device = cmd_list->get_device();
     DeviceDataContainer& data = *device->get_private_data<DeviceDataContainer>();
-
-    ApplyShader(cmd_list,
-                srv_src,
-                rtv_dst,
-                data.customShader.alphaPreservingCopyPipeline.pipeline,
-                data.customShader.alphaPreservingCopyPipeline.pipelineLayout,
-                data.customShader.alphaPreservingCopyPipeline.pipelineSampler,
-                data.customShader.fullscreenQuadVertexBuffer,
-                width,
-                height);
-
-    cmd_list->get_private_data<state_tracking>()->apply(cmd_list, true);
+    const auto desc = device->get_resource_desc(device->get_resource_from_view(rtv_dst));
+    if (desc.texture.samples != 1)
+        return false;
+    const reshade::api::format targetFormat = device->get_resource_view_desc(rtv_dst).format;
+    std::lock_guard lock(data.customShader.pipelineMutex);
+    CustomShaderInstance* instance = &data.customShader.alphaPreservingCopyPipeline;
+    if (device->get_api() == device_api::d3d12) {
+        instance = &data.customShader.alphaFormatPipelines[static_cast<uint32_t>(targetFormat)];
+        InitShader(device, SHADER_PREVIEW_COPY_PS_4_0, SHADER_FULLSCREEN_VS_4_0,
+                   instance->pipeline, instance->pipelineLayout, instance->pipelineSampler,
+                   data.customShader.fullscreenQuadVertexBuffer, 0x7, targetFormat);
+    }
+    const bool rendered = ApplyShader(cmd_list, srv_src, rtv_dst, instance->pipeline, instance->pipelineLayout,
+                                      instance->pipelineSampler, data.customShader.fullscreenQuadVertexBuffer, width, height);
+    if (rendered)
+        cmd_list->get_private_data<state_tracking>()->apply(cmd_list, true);
+    return rendered;
 }

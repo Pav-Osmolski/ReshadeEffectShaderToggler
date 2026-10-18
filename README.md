@@ -33,7 +33,7 @@ The **Auto scene colour** path supports D3D10, D3D11, D3D12 and Vulkan on both x
 
 The live Vulkan image must already have transfer-source usage; native staging additionally requires transfer-destination usage and uses image blits. REST does not add transfer flags to arbitrary game images or split active game passes. Unsupported targets or boundaries are skipped safely. Baldur's Gate 3 Vulkan testing confirmed stable Before Fog injection with `2560×1440 → 3840×2160` staging and rapid shader navigation after the hunting fixes. BG3 DX11 + DLSS remains the D3D regression reference; this does not imply every title or architecture has been runtime-tested.
 
-See the [changelog](CHANGELOG.md) for the changes in **v1.6.0.633**.
+See the [changelog](CHANGELOG.md) for release history and current validation coverage.
 
 ## Installation
 
@@ -153,11 +153,23 @@ Rapid **Prev / Next** navigation uses owned shader-group snapshots, synchronised
 
 When native staging is required, REST performs an additional scene copy to native resolution and another copy back to the live scene target, and the selected ReShade techniques run at native resolution. This is intentional for correctness but can cost more GPU time than rendering directly at the game's internal resolution.
 
+## Preview and target safety
+
+Hunting previews currently require a single-sample, single-layer, single-mip 2D image. Unsupported targets are skipped rather than copied unsafely. DX12 preview capture and effect injection are skipped while a native D3D12 render pass is active; globally enabled effects can use ordinary end-of-frame placement instead. ReShade's traditional DX12 render-target binding path remains available.
+
+DX12 fullscreen-copy pipelines are cached by typed destination format, including formats used by HDR targets. This is implementation support, not a claim that every HDR game or add-on combination has been tested.
+
+Preview and group-buffer replacements flush ReShade's immediate list and synchronize the device's known queues at the maintenance boundary. Synchronization occurs only when existing allocations need replacement or disposal, not on every rendered frame. A resolution/format change can therefore briefly stall while prior GPU work completes.
+
+Automatic scene-colour matching retains a conservative scale heuristic: output/input ratios must be between 0.5 and 1.85 in both dimensions with a compatible aspect ratio. A 1920x1080 scene at 3840x2160 output (2x) falls outside that range. Choose a supported internal resolution or use manual target configuration.
+
 ## Building
 
 The repository builds x64 and x86 Release configurations through GitHub Actions and Visual Studio/MSBuild.
 
-A normal pull request to `main` runs the full build. Tagged releases use the format:
+Install Visual Studio 2022 with the C++ v143 toolset and a Windows SDK. Clone with `git clone --recurse-submodules`, or run `git submodule update --init --recursive` after an ordinary clone. Open `src/ReshadeEffectShaderToggler.sln`; its x86 solution configuration maps to the Win32 project configuration. Build x64 and x86 Release.
+
+Build-affecting pull requests validate on opened, reopened and ready-for-review, not on every pushed commit. Keep the PR in draft while revising it, then mark it ready for review to validate the final merge result. If an already-ready PR changes again, return it to draft and mark it ready again (or reopen it) to refresh required PR checks. Manual MSBuild dispatch remains available for branch test builds; those runs may not satisfy PR-associated merge checks. Workflow-only changes also run lightweight YAML/PowerShell checks. Tagged releases use the format:
 
 `vMAJOR.MINOR.PATCH.RESHADE`
 

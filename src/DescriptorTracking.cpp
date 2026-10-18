@@ -65,20 +65,26 @@ void descriptor_tracking::set_all_descriptors(reshade::api::descriptor_heap heap
 }
 
 pipeline_layout_param descriptor_tracking::get_pipeline_layout_param(pipeline_layout layout, uint32_t param) const {
-    const pipeline_layout_data& layout_data = layouts.at(layout);
-
-    return layout_data.params[param];
+    const auto it = layouts.find(layout);
+    if (it == layouts.end() || param >= it->second.params.size())
+        return {};
+    return it->second.params[param];
 }
 
 void descriptor_tracking::register_pipeline_layout(pipeline_layout layout, uint32_t count, const pipeline_layout_param* params) {
     pipeline_layout_data& layout_data = layouts[layout];
     layout_data.params.assign(params, params + count);
     layout_data.ranges.resize(count);
+    layout_data.flagged_ranges.resize(count);
 
     for (uint32_t i = 0; i < count; ++i) {
         if (params[i].type == pipeline_layout_param_type::descriptor_table) {
             layout_data.ranges[i].assign(params[i].descriptor_table.ranges, params[i].descriptor_table.ranges + params[i].descriptor_table.count);
             layout_data.params[i].descriptor_table.ranges = layout_data.ranges[i].data();
+        } else if (params[i].type == pipeline_layout_param_type::descriptor_table_with_flags) {
+            layout_data.flagged_ranges[i].assign(params[i].descriptor_table_with_flags.ranges,
+                                                 params[i].descriptor_table_with_flags.ranges + params[i].descriptor_table_with_flags.count);
+            layout_data.params[i].descriptor_table_with_flags.ranges = layout_data.flagged_ranges[i].data();
         }
     }
 }
@@ -86,6 +92,7 @@ void descriptor_tracking::unregister_pipeline_layout(pipeline_layout layout) {
     pipeline_layout_data& layout_data = layouts[layout];
     layout_data.params.clear();
     layout_data.ranges.clear();
+    layout_data.flagged_ranges.clear();
 }
 
 static void on_init_device(device* device) {
