@@ -7,6 +7,7 @@ on:
     paths:
       - "src/**"
       - "deps/**"
+      - "Shaders/**"
       - ".gitmodules"
       - ".github/workflows/**"
       - "scripts/**"

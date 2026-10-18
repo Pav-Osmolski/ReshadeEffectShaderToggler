@@ -28,6 +28,9 @@ class CiScopeTests(unittest.TestCase):
     def test_single_validation_workflow_and_release_gate(self):
         workflow = yaml.load(Path('.github/workflows/msbuild.yml').read_text(encoding='utf-8'),
                              Loader=yaml.BaseLoader)
+        for required in ('src/**', 'deps/**', 'Shaders/**', '.github/workflows/**',
+                         'scripts/**', 'tests/**', 'docs/releases/**'):
+            self.assertIn(required, workflow['on']['push']['paths'])
         self.assertNotIn('synchronize', workflow['on']['pull_request']['types'])
         self.assertNotIn('paths', workflow['on']['pull_request'])
         self.assertIn('draft == false', workflow['jobs']['build']['if'])
