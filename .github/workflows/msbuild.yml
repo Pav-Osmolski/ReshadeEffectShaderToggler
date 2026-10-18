@@ -21,14 +21,6 @@ on:
   pull_request:
     branches: [ "main" ]
     types: [opened, reopened, ready_for_review]
-    paths:
-      - "src/**"
-      - "deps/**"
-      - ".gitmodules"
-      - ".github/workflows/msbuild.yml"
-      - "scripts/**"
-      - "tests/**"
-      - "docs/releases/**"
   workflow_dispatch:
 
 env:

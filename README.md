@@ -169,7 +169,7 @@ The repository builds x64 and x86 Release configurations through GitHub Actions 
 
 Install Visual Studio 2022 with the C++ v143 toolset and a Windows SDK. Clone with `git clone --recurse-submodules`, or run `git submodule update --init --recursive` after an ordinary clone. Open `src/ReshadeEffectShaderToggler.sln`; its x86 solution configuration maps to the Win32 project configuration. Build x64 and x86 Release.
 
-Build-affecting pull requests validate on opened, reopened and ready-for-review, not on every pushed commit. After subsequent changes, manually dispatch MSBuild for the final branch head before merging. Workflow-only changes also run lightweight YAML/PowerShell checks. Tagged releases use the format:
+Build-affecting pull requests validate on opened, reopened and ready-for-review, not on every pushed commit. Keep the PR in draft while revising it, then mark it ready for review to validate the final merge result. If an already-ready PR changes again, return it to draft and mark it ready again (or reopen it) to refresh required PR checks. Manual MSBuild dispatch remains available for branch test builds; those runs may not satisfy PR-associated merge checks. Workflow-only changes also run lightweight YAML/PowerShell checks. Tagged releases use the format:
 
 `vMAJOR.MINOR.PATCH.RESHADE`
 

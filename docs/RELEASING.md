@@ -21,7 +21,7 @@ The source tree contains a human-readable default version in `src/version.h`. Du
 Before tagging a release:
 
 1. Confirm the intended changes are merged into `main`.
-2. Confirm **MSBuild** is green for the exact final PR head (dispatch it manually after revisions), then for the merge commit. No synchronize trigger is configured.
+2. Confirm **MSBuild** is green for the final PR merge result, then for the maintained-branch merge commit. Keep revisions in draft and mark the PR ready for review when final. If it changes afterward, return it to draft and mark ready again (or reopen it) to refresh required PR checks. No synchronize trigger is configured.
 3. Confirm both **x64** and **x86** Release configurations build successfully.
 4. Check that `README.md` and files under `docs/` describe any user-visible changes.
 5. Confirm the default version in `src/version.h` matches the release you intend to tag.
@@ -150,7 +150,7 @@ No release is published if either architecture fails to build.
 
 ## CI artifacts
 
-Build-affecting pushes to `main` build both architectures. Pull requests targeting `main` validate on opened, reopened or ready-for-review when source, dependencies, build scripts or MSBuild workflow paths change. Later PR commits do not trigger automatic builds: dispatch MSBuild manually at the final branch head. Documentation-only PRs can also be validated manually when required by branch protection. Workflow checks cover every workflow YAML and embedded PowerShell block.
+Build-affecting pushes to `main` build both architectures. Pull requests targeting `main` validate on opened, reopened or ready-for-review when source, dependencies, build scripts or MSBuild workflow paths change. Later PR commits do not trigger automatic builds: return the PR to draft and mark it ready after final revisions (or reopen it) to refresh required PR-associated checks. Manual dispatch is available for branch test artifacts; GitHub may not associate those runs with the PR merge check. Documentation-only PRs also validate on these lifecycle events, so the required build check cannot remain missing solely because of a path filter. Workflow checks cover every workflow YAML and embedded PowerShell block.
 
 The release and CI workflows share `scripts/validate-binaries.ps1`, avoiding divergent architecture/version/export checks.
 
