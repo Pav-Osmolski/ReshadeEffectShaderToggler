@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.7.2.680 — test candidate (unreleased)
+## v1.7.2.680 — 2026-10-19
 
 - Corrects DX12 preview barriers and rejects incompatible whole-resource copies.
 - Synchronizes preview and group-buffer replacement against known GPU queues.
@@ -11,7 +11,7 @@
 - Gates tagging on successful maintained-branch builds and verifies existing tag identity.
 - Adds workflow/script checks, CPU regression tests, shared binary validation and checksummed test packages.
 - Documents target limits, final-head validation and the separately maintained BG3 config asset.
-- Runtime validation is pending; issue #15 is not yet confirmed fixed in-game.
+- Maintainer reports successful BG3 D3D11/Vulkan functionality and shader-hunting checks with no crashes. Exact ReShade versions, architectures and per-branch coverage were not separately recorded; Warframe DX12 issue #15 remains awaiting confirmation.
 - Preserves API 20 dynamic descriptor offsets, including partial set rebinds.
 
 
