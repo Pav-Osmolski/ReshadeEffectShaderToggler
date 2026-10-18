@@ -521,6 +521,21 @@ void RenderingEffectManager::_RenderDeferredVulkanAutoEffects(
     if (toRenderNames.empty())
         return;
 
+    const auto& tracked = cmd_list->get_private_data<state_tracking>();
+    const auto& descriptors = cmd_list->get_device()->get_private_data<descriptor_tracking>();
+    for (const auto& [layout, entries] : tracked.root_tables) {
+        const bool hasBoundSets = std::any_of(entries.begin(), entries.end(), [](const auto& entry) {
+            return entry.type == StateTracking::root_entry_type::descriptor_table && entry.descriptor_table != 0;
+        });
+        if (hasBoundSets && !descriptors.can_restore_vulkan_layout(layout)) {
+            for (const auto& [effect, pending] : deviceData.vulkanAutoPendingEffects) {
+                if (pending.group != nullptr)
+                    pending.group->setDebugAutoStatus("Legacy API 7 cannot safely restore buffer descriptor offsets");
+            }
+            return;
+        }
+    }
+
     CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
     commandListData.vulkanAutoInjectionActive = true;
 

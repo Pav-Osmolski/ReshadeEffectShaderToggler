@@ -124,7 +124,7 @@ For a release PR, commit the matching `src/version.h`, changelog entry and `docs
 
 `Release vMAJOR.MINOR.PATCH.RESHADE`
 
-The guarded **Tag Release** workflow is hosted on the default branch and starts only after a successful push-triggered **MSBuild** run on `legacy/reshade-5.x` or `legacy/reshade-5.x`. It checks out that validated commit, reads its source version, verifies the release title and notes, and checks any existing tag points to that exact commit. It then creates the tag and explicitly dispatches **Release** at the tag. Ordinary commits do not create tags. Release titles must match exactly on their first line.
+The guarded **Tag Release** workflow is hosted on the default branch and starts only after a successful push-triggered **MSBuild** run on `main` or `legacy/reshade-5.x`. It checks out that validated commit, reads its source version, verifies the release title and notes, and checks any existing tag points to that exact commit. It then creates the tag and explicitly dispatches **Release** at the tag. Ordinary commits do not create tags. Release titles must match exactly on their first line.
 
 The publisher validates its maintained line's version suffix and branch ancestry, rebuilds both architectures, runs regression tests and shared binary validation, then publishes. Per-tag concurrency prevents overlapping publishers. Existing releases/assets are immutable; a manual publisher retry against an existing release fails instead of replacing files. Never move or reuse a tag.
 
@@ -175,7 +175,7 @@ Record the game, renderer, architecture, ReShade version, commit and actual outc
 - BG3 DX11: existing Before Fog setup with DLSS on/off, rapid hunting, and unchanged configuration persistence.
 - BG3 Vulkan: same-target LOAD and post-pass-transition injection, rapid hunting, resolution changes, and effects below later fog/UI. Confirm a continuation draw works without explicitly rebinding its pipeline.
 - Representative DX12 HDR title: FP16 and 10-bit targets, alpha-clearing previews and native staging. Record unavailable cases rather than mark them passed.
-- Dynamic Vulkan descriptors: bind multiple sets, partially rebind a later set, inject effects, and confirm original offsets remain bound.
+- Legacy Vulkan buffer descriptor layouts: confirm the explicit API 7 offset-restoration diagnostic and ordinary end-of-frame fallback. API 7 does not expose offsets or distinguish dynamic buffer descriptors; these layouts are conservatively skipped. Dynamic-offset injection tests apply to the modern API 20 line.
 - Buffer lifetime: repeatedly change output/internal resolution and disable copied binding/alpha buffers with multiple frames in flight; collect debug-layer/validation output when possible.
 - Run both x86 and x64 in representative games where available. A build pass alone is not runtime coverage.
 

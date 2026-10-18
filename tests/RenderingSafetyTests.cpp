@@ -7,6 +7,9 @@ static void require(bool condition) {
 
 int main() {
     using namespace reshade::api;
+    require(Rendering::SupportsLegacyVulkanDescriptor(descriptor_type::shader_resource_view));
+    require(!Rendering::SupportsLegacyVulkanDescriptor(descriptor_type::constant_buffer));
+    require(!Rendering::SupportsLegacyVulkanDescriptor(descriptor_type::shader_storage_buffer));
     resource_desc desc(1920, 1080, 1, 1, format::r16g16b16a16_float, 1,
                        memory_heap::gpu_only, resource_usage::render_target);
     require(Rendering::SupportsWholePreviewCopy(desc));

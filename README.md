@@ -153,6 +153,8 @@ Rapid **Prev / Next** navigation uses owned shader-group snapshots, synchronised
 
 When native staging is required, REST performs an additional scene copy to native resolution and another copy back to the live scene target, and the selected ReShade techniques run at native resolution. This is intentional for correctness but can cost more GPU time than rendering directly at the game's internal resolution.
 
+Legacy API 7 cannot distinguish static from dynamic Vulkan buffer descriptors or capture their dynamic offsets. Deferred injection is therefore skipped when restoring a bound buffer-descriptor layout would be ambiguous; globally enabled effects fall back to ordinary end-of-frame placement. The diagnostic explains this limitation. Use the modern ReShade 6.8/API 20 line for dynamic-offset restoration support.
+
 ## Preview and target safety
 
 Hunting previews currently require a single-sample, single-layer, single-mip 2D image. Unsupported targets are skipped rather than copied unsafely. DX12 preview capture and effect injection are skipped while a native D3D12 render pass is active; globally enabled effects can use ordinary end-of-frame placement instead. ReShade's traditional DX12 render-target binding path remains available.

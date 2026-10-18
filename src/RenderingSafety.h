@@ -3,6 +3,12 @@
 #include <vector>
 
 namespace Rendering {
+// API 7 conflates static and dynamic buffer descriptors and cannot replay offsets.
+inline bool SupportsLegacyVulkanDescriptor(reshade::api::descriptor_type type) {
+    return type != reshade::api::descriptor_type::constant_buffer &&
+           type != reshade::api::descriptor_type::shader_storage_buffer;
+}
+
 inline bool SupportsWholePreviewCopy(const reshade::api::resource_desc& desc) {
     return desc.type == reshade::api::resource_type::texture_2d && desc.texture.samples == 1 &&
            desc.texture.levels == 1 && desc.texture.depth_or_layers == 1 &&

@@ -38,6 +38,7 @@ class __declspec(uuid("33319e83-387c-448e-881c-7e68fc2e52c4")) descriptor_tracki
     /// <summary>
     /// Registers all the necessary add-on events for descriptor tracking to work.
     /// </summary>
+    bool can_restore_vulkan_layout(reshade::api::pipeline_layout layout) const;
     static void register_events(bool track_descriptors = true);
     /// <summary>
     /// Unregisters all the necessary add-on events for descriptor tracking to work.
