@@ -8,6 +8,7 @@ on:
       - "src/**"
       - "deps/**"
       - "Shaders/**"
+      - "configs/**"
       - ".gitmodules"
       - ".github/workflows/**"
       - "scripts/**"
@@ -47,7 +48,7 @@ jobs:
 
       - name: Fetch native dependencies
         if: steps.scope.outputs.native == 'true'
-        run: git submodule update --init --recursive
+        run: ./scripts/fetch-dependencies.ps1
 
       - name: Validate version tooling
         if: steps.scope.outputs.native == 'true'
@@ -111,7 +112,7 @@ jobs:
           name: REST-build-${{ github.sha }}
           path: |
             test-package/*.zip
-            test-package/SHA256SUMS.txt
+            test-package/*.txt
           if-no-files-found: error
           retention-days: 14
 

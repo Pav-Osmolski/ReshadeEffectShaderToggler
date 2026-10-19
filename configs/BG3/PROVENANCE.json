@@ -1,0 +1,6 @@
+{
+  "source_release": "v1.7.1.680 (identical asset also shipped in v1.6.5.580)",
+  "source_url": "https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler/releases/download/v1.7.1.680/BG3-Configs-D3D11%2BVulkan.zip",
+  "original_archive_sha256": "e7d072d7fa7a043c36d6f62efdf7e920386db9c85807bbe92ded54e51ce78560",
+  "changes": "INI content unchanged. README line endings normalized. Sources are now version-controlled and packaged with checksums."
+}
