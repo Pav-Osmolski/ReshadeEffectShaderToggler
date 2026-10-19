@@ -9,6 +9,12 @@ A ReShade 5.8+ add-on for applying ReShade effects at specific points inside a g
 
 Both 64-bit and 32-bit are first-class build targets. CI builds and validates both architectures, including PE machine type, version metadata and required add-on exports. Auto Scene Colour supports D3D10/D3D11/D3D12 and Vulkan through ReShade's generic API, with a Vulkan-specific native-staging blit path. Legacy game-specific hooks may remain architecture-specific; the FFXIV constant-copy hook is x64-only because its signatures target 64-bit game code.
 
+## Start here
+
+- [Getting started](docs/getting-started.md): installation, upgrading, first group and BG3 configurations.
+- [Documentation index](docs/README.md): Auto Scene Colour, HDR, troubleshooting and building.
+- [Downloads](https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler/releases) and [changelog](CHANGELOG.md).
+
 ## Highlights
 
 - Create shader groups and toggle them on or off from the ReShade overlay.
@@ -46,7 +52,7 @@ For Unreal Engine games this is often the executable under a path such as:
 
 `GameName\Binaries\Win64\GameName-Win64-Shipping.exe`
 
-ReShade must be installed against that executable as well.
+ReShade must be installed against that executable with full add-on support enabled. Copy the supplied `Shaders/REST_*.fx` files into a configured effect search folder and ensure the include path contains `ReShade.fxh`. Back up your INI before replacing a binary or installing example configs; see [Getting started](docs/getting-started.md).
 
 Start the game and open the ReShade overlay. The **Add-ons** tab should list **REST Enhanced Legacy — ReShade Effect Shader Toggler**.
 
@@ -57,7 +63,7 @@ Start the game and open the ReShade overlay. The **Add-ons** tab should list **R
 3. Click **Edit** to give the group a useful name and optional hotkey.
 4. Click **Settings** and keep the relevant scene visible while REST collects active shaders.
 5. Use the shader search/filter controls, mouse navigation buttons or configured hunting shortcuts to locate and mark the shader(s) that define the desired boundary.
-6. In the **Effects** tab, select the ReShade techniques the group should apply and enable **Auto scene colour** when appropriate.
+6. In **Effects**, select the techniques the group should apply. Enable **Auto scene colour** in the render-target settings when appropriate.
 7. Click **Done**, test the group, then click **Save changes** when the unsaved-changes indicator is shown.
 
 The saved configuration is written to `ReshadeEffectShaderToggler.ini` beside the add-on. Saves are first written to a verified temporary file, the previous configuration is refreshed as `ReshadeEffectShaderToggler.ini.bak`, and the live INI is then replaced atomically. REST also persists the shader-collection frame count, overlay opacity and configurable hunting shortcuts.
@@ -169,7 +175,7 @@ Automatic scene-colour matching retains a conservative scale heuristic: output/i
 
 The repository builds x64 and x86 Release configurations through GitHub Actions and Visual Studio/MSBuild.
 
-Install Visual Studio 2022 with the C++ v143 toolset and a Windows SDK. Clone with `git clone --recurse-submodules`, or run `git submodule update --init --recursive` after an ordinary clone. Open `src/ReshadeEffectShaderToggler.sln`; its x86 solution configuration maps to the Win32 project configuration. Build x64 and x86 Release.
+See [Building and packaging](docs/BUILDING.md) for prerequisites, pinned dependency setup, x86/x64 build commands and local checks.
 
 Build-affecting pull requests validate on opened, reopened and ready-for-review, not on every pushed commit. Keep the PR in draft while revising it, then mark it ready for review to validate the final merge result. If an already-ready PR changes again, return it to draft and mark it ready again (or reopen it) to refresh required PR checks. Manual MSBuild dispatch remains available for branch test builds; those runs may not satisfy PR-associated merge checks. Workflow-only changes also run lightweight YAML/PowerShell checks. Tagged releases use the format:
 

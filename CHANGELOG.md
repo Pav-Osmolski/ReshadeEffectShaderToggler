@@ -2,6 +2,7 @@
 
 ## v1.6.7.580 — 2026-10-19
 
+- Add a documentation index and installation, troubleshooting and local-build guides.
 - Standardize REST Enhanced version headings across the historical release notes, preserving their original content and recorded coverage.
 - Share one CI/release package manifest and package the tracked BG3 configuration sources automatically, with checksums for both archives.
 - Fetch pinned dependencies shallowly and in parallel while retaining main-repository history for validation.
