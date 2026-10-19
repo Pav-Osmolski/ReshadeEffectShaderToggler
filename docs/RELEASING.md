@@ -10,7 +10,7 @@ Release tags must use:
 
 Example:
 
-`v1.7.2.680`
+`v1.7.3.680`
 
 The final component preserves the upstream convention used for the ReShade baseline.
 
