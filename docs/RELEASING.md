@@ -1,6 +1,11 @@
 # Release Process
 
-This fork uses GitHub Actions for validation and tagged releases.
+This fork uses GitHub Actions for validation and tagged releases. For local commands see [Building](BUILDING.md); user instructions start at the [documentation index](README.md).
+
+| Release line | Maintained branch | Version suffix | Latest designation |
+|---|---|---|---|
+| Modern | `main` | `.680` | Yes |
+| Legacy / ReShade 5.x | `legacy/reshade-5.x` | `.580` | No |
 
 ## Version format
 
@@ -140,11 +145,13 @@ The tag-driven **Release** workflow will then:
    - `ReshadeEffectShaderToggler.addon32`;
    - `LICENSE`;
    - `README.md`;
+   - `CHANGELOG.md`;
+   - `BUILD-INFO.txt`;
    - `Shaders/`;
    - `docs/`;
-5. create `release.zip`;
-6. generate `SHA256SUMS.txt`;
-7. publish a GitHub Release using the committed `docs/releases/<tag>.md` notes.
+5. create `release.zip` and the BG3 configuration ZIP from the shared manifest;
+6. generate checksums for both archives and a BG3 source/provenance file;
+7. publish all assets using the committed `docs/releases/<tag>.md` notes.
 
 No release is published if either architecture fails to build.
 

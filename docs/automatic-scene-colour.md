@@ -1,5 +1,7 @@
 # Automatic Scene Colour
 
+[Documentation index](README.md) · [Getting started](getting-started.md) · [HDR notes](HDR.md)
+
 Automatic Scene Colour is a rendering mode for REST groups that need to apply ReShade effects to the live scene before later game passes such as fog or UI, while still allowing those effects to execute at the normal ReShade runtime resolution. It supports D3D10, D3D11, D3D12 and Vulkan on both x86 and x64 through ReShade's generic graphics API.
 
 It was developed against **Baldur's Gate 3 in DX11 mode with DLSS enabled**. The Vulkan implementation was subsequently validated in BG3 with native-resolution staging, Before Fog injection and rapid shader-hunting navigation.
@@ -173,6 +175,10 @@ Native staging adds two fullscreen copy/resample operations:
 The selected ReShade techniques also execute at the native runtime resolution rather than the lower internal game resolution. GPU cost therefore depends on output resolution and the effects being run.
 
 ## Current scope
+
+The maintainer reported successful BG3 D3D11/Vulkan functionality and hunting checks on 19 October 2026. HDR mode, exact ReShade versions, architecture and per-branch coverage were not separately recorded. The issue #15 reporter confirmed the Warframe hunting crashes fixed in official and unofficial ReShade while reporting unspecified HDR symptoms. These results do not certify every HDR path.
+
+Auto chooses a target and injection boundary; it does not infer PQ/scRGB/HLG encoding or convert SDR effects into HDR-aware effects. Read [HDR handling and validation](HDR.md) before enabling tone-map clamping or judging output colour from a hunting preview. Legacy/API 7 retains its conservative fallback for Vulkan layouts whose buffer-descriptor offsets cannot be restored reliably.
 
 - **D3D10, D3D11, D3D12 and Vulkan are supported on x86 and x64.** They share the same live-target selection and effect-dispatch architecture through ReShade's generic API.
 - Baldur's Gate 3 DX11 + DLSS remains the primary runtime-tested D3D configuration and regression reference for scene-colour behaviour.
