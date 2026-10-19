@@ -128,12 +128,13 @@ void ResourceManager::OnDestroyResource(device* device, resource res) {
     }
 
     if (!in_destroy_device) {
-        std::shared_lock<shared_mutex> lock_view(view_mutex);
+        std::unique_lock<shared_mutex> lock_view(view_mutex);
 
         const auto& views = global_resources.find(res.handle);
 
         if (views != global_resources.end()) {
-            views->second->state = GlobalResourceState::RESOURCE_INVALID;
+            for (const auto& [_, view] : views->second)
+                view->state = GlobalResourceState::RESOURCE_INVALID;
         }
     }
 }
@@ -144,7 +145,8 @@ void ResourceManager::OnDestroyDevice(device* device, bool validDevice) {
     std::unique_lock<shared_mutex> lock_view(view_mutex);
 
     for (const auto& view : global_resources) {
-        view.second->Dispose(validDevice);
+        for (const auto& [_, typedView] : view.second)
+            typedView->Dispose(validDevice);
     }
 
     global_resources.clear();
@@ -178,10 +180,15 @@ const std::shared_ptr<GlobalResourceView>& ResourceManager::GetResourceView(devi
 
     std::unique_lock<shared_mutex> lock_view(view_mutex);
 
-    auto& res = global_resources[handle];
+    // A typeless texture can be bound through different typed views. Keep each
+    // interpretation separately instead of reusing whichever was requested first.
+    const auto desc = device->get_resource_desc(resource{ handle });
+    const auto selectedFormat = format != reshade::api::format::unknown ? format :
+        (desc.type == resource_type::texture_2d ? format_to_default_typed(desc.texture.format) : reshade::api::format::unknown);
+    auto& res = global_resources[handle][static_cast<uint32_t>(selectedFormat)];
 
     if (res == nullptr) {
-        res = std::make_shared<GlobalResourceView>(device, resource{ handle }, format);
+        res = std::make_shared<GlobalResourceView>(device, resource{ handle }, selectedFormat);
     }
 
     if (res->state == GlobalResourceState::RESOURCE_INVALID) {
@@ -234,21 +241,23 @@ void ResourceManager::OnEffectsReloaded(effect_runtime* runtime) {
 void ResourceManager::CheckResourceViews(reshade::api::effect_runtime* runtime) {
     if (!effects_reloading) {
         std::unique_lock<shared_mutex> lock_view(view_mutex);
-        for (auto view = global_resources.begin(); view != global_resources.end();) {
-            bool referenced = view->second.use_count() > 1;
-
-            // valid but not used or just invalid, dispose
-            if (view->second->state != GlobalResourceState::RESOURCE_USED && !referenced) {
-                view->second->Dispose();
-                view = global_resources.erase(view);
-                continue;
+        for (auto resourceViews = global_resources.begin(); resourceViews != global_resources.end();) {
+            auto& typedViews = resourceViews->second;
+            for (auto view = typedViews.begin(); view != typedViews.end();) {
+                const bool referenced = view->second.use_count() > 1;
+                if (view->second->state != GlobalResourceState::RESOURCE_USED && !referenced) {
+                    view->second->Dispose();
+                    view = typedViews.erase(view);
+                    continue;
+                }
+                if (view->second->state == GlobalResourceState::RESOURCE_USED)
+                    view->second->state = GlobalResourceState::RESOURCE_VALID;
+                ++view;
             }
-
-            if (view->second->state == GlobalResourceState::RESOURCE_USED) {
-                view->second->state = GlobalResourceState::RESOURCE_VALID;
-            }
-
-            view++;
+            if (typedViews.empty())
+                resourceViews = global_resources.erase(resourceViews);
+            else
+                ++resourceViews;
         }
     }
 }
@@ -422,7 +431,7 @@ bool ResourceManager::IsCompatibleWithPreviewFormat(reshade::api::device* device
     const reshade::api::format sourceViewFormat =
       view_format != reshade::api::format::unknown ? view_format : res_desc.texture.format;
 
-    if ((format_to_typeless(sourceViewFormat) == format_to_typeless(preview_view_desc.format)) &&
+    if (SameColorViewFormat(sourceViewFormat, preview_view_desc.format) &&
         res_desc.texture.width == preview_desc.texture.width &&
         res_desc.texture.height == preview_desc.texture.height) {
         return true;

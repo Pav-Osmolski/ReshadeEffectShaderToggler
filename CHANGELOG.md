@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.7.3.680 — 2026-10-19
+
+- Add a documentation index and installation, troubleshooting and local-build guides.
+- Standardize REST Enhanced version headings across the historical release notes, preserving their original content and recorded coverage.
+- Share one CI/release package manifest and package the tracked BG3 configuration sources automatically, with checksums for both archives.
+- Fetch pinned dependencies shallowly and in parallel while retaining main-repository history for validation.
+- Distinguish HDR FLOAT/UNORM/UINT buffer views, and cache each typed interpretation of a game texture separately.
+- Reuse identical HDR colour views, fall back to valid sRGB views, and prevent duplicate view destruction.
+- Require both halves of tone-map clamping to be ready and document its lossy, linear-only intent.
+- Ignore unsupported alpha-preserving scratch copies on Vulkan/OpenGL so effects remain on the live target.
+- Add HDR format/backend regression coverage and document the remaining HDR runtime matrix.
+
+
 ## v1.7.2.680 — 2026-10-19
 
 - Corrects DX12 preview barriers and rejects incompatible whole-resource copies.

@@ -29,7 +29,7 @@ class CiScopeTests(unittest.TestCase):
         workflow = yaml.load(Path('.github/workflows/msbuild.yml').read_text(encoding='utf-8'),
                              Loader=yaml.BaseLoader)
         for required in ('src/**', 'deps/**', 'Shaders/**', '.github/workflows/**',
-                         'scripts/**', 'tests/**', 'docs/releases/**'):
+                         'scripts/**', 'tests/**', 'docs/releases/**', 'configs/**'):
             self.assertIn(required, workflow['on']['push']['paths'])
         self.assertNotIn('synchronize', workflow['on']['pull_request']['types'])
         self.assertNotIn('paths', workflow['on']['pull_request'])
