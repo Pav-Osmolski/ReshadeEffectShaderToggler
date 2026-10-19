@@ -1,0 +1,17 @@
+{
+  "main": {
+    "ReshadeEffectShaderToggler.addon64": "src/x64/Release/ReshadeEffectShaderToggler.addon64",
+    "ReshadeEffectShaderToggler.addon32": "src/Win32/Release/ReshadeEffectShaderToggler.addon32",
+    "LICENSE": "LICENSE",
+    "README.md": "README.md",
+    "CHANGELOG.md": "CHANGELOG.md",
+    "Shaders": "Shaders",
+    "docs": "docs"
+  },
+  "bg3": {
+    "D3D11/ReshadeEffectShaderToggler.ini": "configs/BG3/D3D11/ReshadeEffectShaderToggler.ini",
+    "Vulkan/ReshadeEffectShaderToggler.ini": "configs/BG3/Vulkan/ReshadeEffectShaderToggler.ini",
+    "README.txt": "configs/BG3/README.txt",
+    "PROVENANCE.json": "configs/BG3/PROVENANCE.json"
+  }
+}

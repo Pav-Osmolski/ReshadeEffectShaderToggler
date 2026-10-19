@@ -31,6 +31,7 @@
 /////////////////////////////////////////////////////////////////////////
 
 #pragma once
+#include "RenderingSafety.h"
 #include "AddonUIAbout.h"
 #include "AddonUIConstants.h"
 #include "ConstantManager.h"
@@ -715,6 +716,10 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
             ImGui::Text("Apply tone map clamping");
             ImGui::TableNextColumn();
             ImGui::Checkbox("##tonemap", &tonemap);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Optional lossy ACES compression for linear HDR effects.\n"
+                                  "Clips highlights and does not preserve negative wide-gamut values.\n"
+                                  "Not an HDR10/PQ or HLG conversion; leave off for those targets.");
 
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
@@ -726,13 +731,14 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
             ImGui::TableNextColumn();
             ImGui::Text("Preserve target alpha channel");
             ImGui::TableNextColumn();
-            if (autoSceneColourActive)
+            const bool preserveAlphaSupported = Rendering::SupportsShaderCopy(deviceApi);
+            if (autoSceneColourActive || !preserveAlphaSupported)
                 ImGui::BeginDisabled();
             ImGui::Checkbox("##preserveAlpha", &preserveAlpha);
-            if (autoSceneColourActive) {
+            if (autoSceneColourActive || !preserveAlphaSupported) {
                 ImGui::EndDisabled();
                 ImGui::SameLine();
-                ImGui::TextDisabled("ignored while Auto scene colour is active");
+                ImGui::TextDisabled(autoSceneColourActive ? "ignored while Auto scene colour is active" : "unavailable on this renderer");
             }
 
             ImGui::TableNextRow();

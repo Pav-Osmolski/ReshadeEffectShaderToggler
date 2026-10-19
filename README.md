@@ -194,3 +194,7 @@ See [Release Process](docs/RELEASING.md) for the release checklist and packaging
 ## Licence
 
 This project retains the licence and notices from the upstream project. See [LICENSE](LICENSE).
+
+## HDR notes
+
+See [HDR handling and validation](docs/HDR.md) for supported format handling, colour-space limits, tone-map clamping, preview limitations and the current test matrix.
