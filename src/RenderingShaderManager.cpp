@@ -1,4 +1,5 @@
 #include "RenderingShaderManager.h"
+#include "RenderingSafety.h"
 #include "StateTracking.h"
 #include "resource.h"
 #include <d3d12.h>
@@ -198,8 +199,7 @@ bool RenderingShaderManager::ApplyShader(command_list* cmd_list,
                                          uint32_t height) {
     device* device = cmd_list->get_device();
 
-    if (sh_pipeline == 0 || !(device->get_api() == device_api::d3d9 || device->get_api() == device_api::d3d10 || device->get_api() == device_api::d3d11 ||
-                              device->get_api() == device_api::d3d12)) {
+    if (sh_pipeline == 0 || !SupportsShaderCopy(device->get_api())) {
         return false;
     }
 

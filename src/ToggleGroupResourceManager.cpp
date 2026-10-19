@@ -1,4 +1,5 @@
 #include "ToggleGroupResourceManager.h"
+#include "RenderingSafety.h"
 #include "ResourceManager.h"
 
 using namespace Rendering;
@@ -217,7 +218,7 @@ void ToggleGroupResourceManager::CheckGroupBuffers(reshade::api::effect_runtime*
                 const reshade::api::format linearViewFormat =
                   vulkan
                     ? (resources.view_format != format::unknown ? resources.view_format : groupFormat)
-                    : format_to_default_typed(resources.view_format, 0);
+                    : format_to_default_typed(resources.view_format != format::unknown ? resources.view_format : desc.texture.format, 0);
 
                 if (validRT && resources.res != 0 &&
                     !runtime->get_device()->create_resource_view(
@@ -231,7 +232,7 @@ void ToggleGroupResourceManager::CheckGroupBuffers(reshade::api::effect_runtime*
                     reshade::log::message(reshade::log::level::error, "Failed to create group render target view!");
                 }
 
-                if (vulkan) {
+                if (vulkan || format_to_default_typed(linearViewFormat, 1) == linearViewFormat) {
                     // Vulkan images have a concrete format rather than D3D-style typeless
                     // storage. Reuse the compatible render-target view instead of asking
                     // for an alternate sRGB reinterpretation that may be illegal.
@@ -239,7 +240,7 @@ void ToggleGroupResourceManager::CheckGroupBuffers(reshade::api::effect_runtime*
                 } else if (resources.res != 0 &&
                            !runtime->get_device()->create_resource_view(resources.res,
                                                                         resource_usage::render_target,
-                                                                        resource_view_desc(format_to_default_typed(resources.view_format, 1)),
+                                                                        resource_view_desc(format_to_default_typed(linearViewFormat, 1)),
                                                                         &resources.rtv_srgb)) {
                     reshade::log::message(reshade::log::level::error, "Failed to create group SRGB render target view!");
                 }
@@ -279,7 +280,8 @@ void ToggleGroupResourceManager::SetGroupBufferHandles(ShaderToggler::ToggleGrou
 bool ToggleGroupResourceManager::IsCompatibleWithGroupFormat(reshade::api::device* device,
                                                              const GroupResourceType type,
                                                              reshade::api::resource res,
-                                                             ShaderToggler::ToggleGroup* group) {
+                                                             ShaderToggler::ToggleGroup* group,
+                                                             reshade::api::format viewFormat) {
     const GroupResource& resources = group->GetGroupResource(type);
 
     if (res == 0 || resources.res == 0)
@@ -289,7 +291,10 @@ bool ToggleGroupResourceManager::IsCompatibleWithGroupFormat(reshade::api::devic
     resource_desc preview_desc = device->get_resource_desc(resources.res);
 
     if (type == GroupResourceType::RESOURCE_ALPHA || type == GroupResourceType::RESOURCE_BINDING || type == GroupResourceType::RESOURCE_NATIVE_STAGING) {
-        if (format_to_typeless(tdesc.texture.format) == format_to_typeless(preview_desc.texture.format) && tdesc.texture.width == preview_desc.texture.width &&
+        const auto sourceFormat = viewFormat != format::unknown ? viewFormat : tdesc.texture.format;
+        const auto cachedFormat = resources.srv != 0 ? device->get_resource_view_desc(resources.srv).format : resources.view_format;
+        if (SameColorViewFormat(sourceFormat, cachedFormat) &&
+            format_to_typeless(tdesc.texture.format) == format_to_typeless(preview_desc.texture.format) && tdesc.texture.width == preview_desc.texture.width &&
             tdesc.texture.height == preview_desc.texture.height && tdesc.texture.levels == preview_desc.texture.levels) {
             return true;
         }

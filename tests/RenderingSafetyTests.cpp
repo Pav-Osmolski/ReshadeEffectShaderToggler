@@ -7,6 +7,30 @@ static void require(bool condition) {
 
 int main() {
     using namespace reshade::api;
+    require(Rendering::SupportsShaderCopy(device_api::d3d9));
+    require(Rendering::SupportsShaderCopy(device_api::d3d10));
+    require(Rendering::SupportsShaderCopy(device_api::d3d11));
+    require(Rendering::SupportsShaderCopy(device_api::d3d12));
+    require(!Rendering::SupportsShaderCopy(device_api::vulkan));
+    require(!Rendering::SupportsShaderCopy(device_api::opengl));
+    require(!Rendering::SameColorViewFormat(format::r16g16b16a16_float, format::r16g16b16a16_unorm));
+    require(!Rendering::SameColorViewFormat(format::r10g10b10a2_uint, format::r10g10b10a2_unorm));
+    require(Rendering::SameColorViewFormat(format::r8g8b8a8_unorm, format::r8g8b8a8_unorm_srgb));
+    require(!Rendering::SameColorViewFormat(format::unknown, format::unknown));
+    for (const auto api : {device_api::d3d10, device_api::d3d11, device_api::d3d12, device_api::vulkan}) {
+        const auto hdr = Rendering::GetColorViewFormats(api, format::r16g16b16a16_float);
+        require(hdr.linear == format::r16g16b16a16_float && hdr.srgb == hdr.linear);
+        const auto hdr10 = Rendering::GetColorViewFormats(api, format::r10g10b10a2_unorm);
+        require(hdr10.linear == format::r10g10b10a2_unorm && hdr10.srgb == hdr10.linear);
+        const auto srgb = Rendering::GetColorViewFormats(api, format::r8g8b8a8_unorm_srgb);
+        if (api == device_api::vulkan)
+            require(srgb.linear == format::r8g8b8a8_unorm_srgb && srgb.srgb == srgb.linear);
+        else
+            require(srgb.linear == format::r8g8b8a8_unorm && srgb.srgb == format::r8g8b8a8_unorm_srgb);
+    }
+    const auto typeless = Rendering::GetColorViewFormats(device_api::d3d11, format::r8g8b8a8_typeless);
+    require(typeless.linear == format::r8g8b8a8_unorm && typeless.srgb == format::r8g8b8a8_unorm_srgb);
+
     require(Rendering::SupportsLegacyVulkanDescriptor(descriptor_type::shader_resource_view));
     require(!Rendering::SupportsLegacyVulkanDescriptor(descriptor_type::constant_buffer));
     require(!Rendering::SupportsLegacyVulkanDescriptor(descriptor_type::shader_storage_buffer));

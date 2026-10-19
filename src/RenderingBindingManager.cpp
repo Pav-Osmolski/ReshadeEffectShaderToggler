@@ -122,7 +122,7 @@ uint32_t RenderingBindingManager::UpdateTextureBinding(effect_runtime* runtime,
     }
 
     // Copy format changed, recreate internal buffer
-    if (!toggleGroupResources.IsCompatibleWithGroupFormat(runtime->get_device(), ShaderToggler::GroupResourceType::RESOURCE_BINDING, res, group)) {
+    if (!toggleGroupResources.IsCompatibleWithGroupFormat(runtime->get_device(), ShaderToggler::GroupResourceType::RESOURCE_BINDING, res, group, viewformat)) {
         groupResource.target_description = desc;
         groupResource.view_format = viewformat;
         groupResource.state = ShaderToggler::GroupResourceState::RESOURCE_INVALID;

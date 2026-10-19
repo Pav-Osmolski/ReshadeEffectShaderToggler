@@ -1,4 +1,5 @@
 #include "RenderingEffectManager.h"
+#include "RenderingSafety.h"
 #include "StateTracking.h"
 #include "Util.h"
 
@@ -113,7 +114,7 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
 
         const device_api deviceApi = cmd_list->get_device()->get_api();
         const bool autoSceneColour = group->isAutoSceneColourActive(deviceApi);
-        const bool preserveTargetAlpha = group->getPreserveAlpha() && !autoSceneColour;
+        const bool preserveTargetAlpha = group->getPreserveAlpha() && !autoSceneColour && SupportsShaderCopy(deviceApi);
         const bool wantsNativeStaging =
           autoSceneColour &&
           runtimeWidth > 0 && runtimeHeight > 0 &&
@@ -204,7 +205,8 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
             desired.texture.depth_or_layers = 1;
             desired.texture.levels = 1;
             desired.texture.samples = 1;
-            desired.texture.format = format_to_typeless(active_resource.format);
+            const auto stagingViewFormat = active_resource.format != reshade::api::format::unknown ? active_resource.format : desc.texture.format;
+            desired.texture.format = format_to_typeless(stagingViewFormat);
 
             bool stagingCompatible = false;
             if (staging.res != 0) {
@@ -212,12 +214,13 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
                 stagingCompatible =
                   current.texture.width == desired.texture.width &&
                   current.texture.height == desired.texture.height &&
-                  format_to_typeless(current.texture.format) == format_to_typeless(desired.texture.format);
+                  format_to_typeless(current.texture.format) == format_to_typeless(desired.texture.format) &&
+                  SameColorViewFormat(staging.view_format, stagingViewFormat);
             }
 
             if (!stagingCompatible) {
                 staging.target_description = desired;
-                staging.view_format = active_resource.format;
+                staging.view_format = stagingViewFormat;
                 staging.state = GroupResourceState::RESOURCE_INVALID;
                 continue;
             }
@@ -286,7 +289,7 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
         }
 
         if (!useNativeStaging && preserveTargetAlpha) {
-            if (groupResourceManager.IsCompatibleWithGroupFormat(runtime->get_device(), GroupResourceType::RESOURCE_ALPHA, active_resource.resource, group)) {
+            if (groupResourceManager.IsCompatibleWithGroupFormat(runtime->get_device(), GroupResourceType::RESOURCE_ALPHA, active_resource.resource, group, active_resource.format)) {
                 resource group_res = {};
                 groupResourceManager.SetGroupBufferHandles(group, GroupResourceType::RESOURCE_ALPHA, &group_res, &view_non_srgb, &view_srgb, &group_view);
                 if (deviceApi == device_api::d3d12)
@@ -325,7 +328,12 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
             runtime->render_technique(runtimeData.specialEffects[REST_FLIP].technique, cmd_list, view_non_srgb, view_srgb);
         }
 
-        if (group->getToneMap() && runtimeData.specialEffects[REST_TONEMAP_TO_SDR].technique != 0) {
+        // Both halves must be ready: never compress without restoring, or run
+        // the inverse alone during an effect reload.
+        const bool applyToneMap = group->getToneMap() &&
+          runtimeData.specialEffects[REST_TONEMAP_TO_SDR].technique != 0 &&
+          runtimeData.specialEffects[REST_TONEMAP_TO_HDR].technique != 0;
+        if (applyToneMap) {
             runtime->render_technique(runtimeData.specialEffects[REST_TONEMAP_TO_SDR].technique, cmd_list, view_non_srgb, view_srgb);
         }
 
@@ -363,7 +371,7 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
                                            useNativeStaging);
         }
 
-        if (group->getToneMap() && runtimeData.specialEffects[REST_TONEMAP_TO_HDR].technique != 0) {
+        if (applyToneMap) {
             runtime->render_technique(runtimeData.specialEffects[REST_TONEMAP_TO_HDR].technique, cmd_list, view_non_srgb, view_srgb);
         }
 

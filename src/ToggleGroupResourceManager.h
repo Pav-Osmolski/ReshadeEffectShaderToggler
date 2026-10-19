@@ -22,7 +22,8 @@ class __declspec(novtable) ToggleGroupResourceManager final {
     bool IsCompatibleWithGroupFormat(reshade::api::device* device,
                                      const ShaderToggler::GroupResourceType type,
                                      reshade::api::resource res,
-                                     ShaderToggler::ToggleGroup* group);
+                                     ShaderToggler::ToggleGroup* group,
+                                     reshade::api::format viewFormat = reshade::api::format::unknown);
 
     void ToggleGroupRemoved(reshade::api::effect_runtime*, ShaderToggler::ToggleGroup*);
 
