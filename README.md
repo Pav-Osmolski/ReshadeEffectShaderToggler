@@ -184,7 +184,7 @@ See [Release Process](docs/RELEASING.md) for the release checklist and packaging
 ## Credits
 
 - [alex / 4lex4nder](https://github.com/4lex4nder) - ReShade Effect Shader Toggler development.
-- **DeViLhoOD** - Automatic Scene Colour, Vulkan safe-boundary injection and previews, shader-hunting stability improvements, DLSS/upscaled rendering support, x86/x64 hardening, QoL workflow improvements, documentation and testing.
+- **[DeViLhoOD](https://github.com/Pav-Osmolski)** - Automatic Scene Colour, Vulkan safe-boundary injection and previews, shader-hunting stability improvements, DLSS/upscaled rendering support, x86/x64 hardening, QoL workflow improvements, documentation and testing.
 - [Frans Bouma](https://github.com/FransBouma) - original ShaderToggler.
 - [Sinom](https://github.com/sinomsinom) - contributor.
 - [crosire](https://github.com/crosire) - ReShade and effect-rendering examples.
