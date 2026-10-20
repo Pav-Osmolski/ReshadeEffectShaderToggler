@@ -16,7 +16,7 @@ Back up your current REST add-on and `ReshadeEffectShaderToggler.ini`. Close the
 
 ## Warframe test
 
-1. Start with **native HDR**, without an HDR add-on, and disable all ReShade techniques, including SOLARIS. Leave REST enabled. Rescan shaders after changing HDR mode.
+1. Start with **native HDR**, without an HDR add-on, and untick all individual ReShade techniques, including SOLARIS. Leave REST and ReShade's global effects switch enabled: disabling the global switch also stops REST's hunting/preview updates. Rescan shaders after changing HDR mode.
 2. Select `0x34e751c3`, then `0xf0f9bb23`. For each, copy **preview diagnostics** and take a screenshot. Record whether HDR is on or off alongside the copied text; REST cannot infer the scene texture's encoding from its format.
 3. Repeat in SDR with the same settings. Keep **Apply tone map clamping** and **Flip render target** off for this comparison. First use **Clear alpha channel** on, as in the original screenshots; then compare it off. Off uses a direct resource copy, so alpha can legitimately make the displayed preview transparent. That alone is not proof of a copy bug.
 4. In HDR, compare **Auto scene colour** on with manual target index 0, **BEFORE DRAW**. If the copied report lists other non-null RTV slots, try those in manual mode. Compare **AFTER DRAW** and **ON RENDER TARGET CHANGE** invocation settings where available, recording the actual capture timing/status. These defer capture to a later pipeline/target bind, can show later image contents or be unavailable, and are diagnostic comparisons rather than guaranteed valid injection points.
