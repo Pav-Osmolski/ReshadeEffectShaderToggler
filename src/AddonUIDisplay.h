@@ -246,6 +246,8 @@ static void DisplayPreview(AddonImGui::AddonUIData& instance,
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(3, 3));
 
         DeviceDataContainer& deviceData = runtime->get_device()->get_private_data<DeviceDataContainer>();
+        const auto& preview = deviceData.huntPreview;
+        ImGui::TextUnformatted("HDR diagnostics 1 (pre-release)");
         reshade::api::resource_view srv = reshade::api::resource_view{ 0 };
         resManager.SetPongPreviewHandles(runtime->get_device(), nullptr, nullptr, &srv);
         bool clearAlpha = group->getClearPreviewAlpha();
@@ -267,16 +269,45 @@ static void DisplayPreview(AddonImGui::AddonUIData& instance,
             ImGui::TextDisabled("%s", deviceData.huntPreview.status.c_str());
         }
 
-        if (deviceData.huntPreview.target != 0) {
+        if (preview.hunted_shader_hash != 0 || preview.target != 0) {
             const char* stageName = deviceData.huntPreview.hunted_stage == 0 ? "PS" :
                                     deviceData.huntPreview.hunted_stage == 1 ? "VS" : "CS";
             ImGui::Text("Shader: 0x%08x (%s)", deviceData.huntPreview.hunted_shader_hash, stageName);
             ImGui::SameLine();
             ImGui::Text("Target: %ux%u", deviceData.huntPreview.width, deviceData.huntPreview.height);
-            ImGui::SameLine();
-            ImGui::Text("Format: %s", Rendering::RenderingManager::FormatName(deviceData.huntPreview.format).c_str());
-            ImGui::SameLine();
+            ImGui::Text("Storage: %s | View: %s",
+                        Rendering::RenderingManager::FormatName(preview.format).c_str(),
+                        Rendering::RenderingManager::FormatName(preview.view_format).c_str());
             ImGui::Text("Address: 0x%llx", static_cast<unsigned long long>(deviceData.huntPreview.target.handle));
+            if (!preview.capture_timing.empty())
+                ImGui::TextWrapped("Timing: %s", preview.capture_timing.c_str());
+            if (!preview.capture_path.empty())
+                ImGui::TextWrapped("Path: %s", preview.capture_path.c_str());
+            if (ImGui::Button("Copy preview diagnostics")) {
+                const auto api = runtime->get_device()->get_api();
+                const char* apiName = api == reshade::api::device_api::d3d9 ? "D3D9" :
+                  api == reshade::api::device_api::d3d10 ? "D3D10" : api == reshade::api::device_api::d3d11 ? "D3D11" :
+                  api == reshade::api::device_api::d3d12 ? "D3D12" : api == reshade::api::device_api::vulkan ? "Vulkan" : "OpenGL";
+                const std::string diagnostics = std::format(
+                  "REST {} | HDR diagnostics 1 (pre-release)\nGroup: {}\nAPI: {}\n"
+                  "Selected shader: 0x{:08x} ({})\nSelection: {}\nStatus: {}\n"
+                  "Source: {}x{} | storage {} | view {} | 0x{:x}\n"
+                  "Capture timing: {}\nCapture path: {}\nSource colour space: unknown (not inferred from format)\n"
+                  "\nColour targets at selected draw\n{}"
+                  "\nCurrent settings\nAuto Scene Colour: {}\nManual target index: {}\nInvocation setting: {}\n"
+                  "Clear alpha: {}\nTone-map clamping: {}\nFlip: {}\n"
+                  "Manual resource-view mode: {} | stage {} | slot {} | descriptor {}\n"
+                  "\nA recorded capture does not verify GPU pixels or identify the game's scene layer.\n",
+                  REST_VERSION_STRING, group->getName(), apiName, preview.hunted_shader_hash, stageName,
+                  preview.target_selection, preview.status, preview.width, preview.height,
+                  Rendering::RenderingManager::FormatName(preview.format), Rendering::RenderingManager::FormatName(preview.view_format),
+                  preview.target.handle, preview.capture_timing.empty() ? "(not captured)" : preview.capture_timing,
+                  preview.capture_path.empty() ? "(not captured)" : preview.capture_path, preview.bound_targets,
+                  group->isAutoSceneColourActive(api), group->getRenderTargetIndex(), group->getInvocationLocation(),
+                  clearAlpha, group->getToneMap(), group->getFlipBuffer(), group->getRenderToResourceViews(),
+                  group->getRenderSRVShaderStage(), group->getRenderSRVSlotIndex(), group->getRenderSRVDescriptorIndex());
+                ImGui::SetClipboardText(diagnostics.c_str());
+            }
             ImGui::Separator();
         }
 

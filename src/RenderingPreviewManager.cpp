@@ -17,6 +17,36 @@ RenderingPreviewManager::RenderingPreviewManager(AddonImGui::AddonUIData& data, 
 
 RenderingPreviewManager::~RenderingPreviewManager() {}
 
+// Snapshot the selected draw, not the subsequently bound pipeline at a deferred
+// capture boundary. This also records null slots and alternate colour targets.
+static void RecordPreviewDiagnostics(command_list* cmd_list, HuntPreview& preview,
+                                     ToggleGroup& group, uint32_t stage, uint32_t hash) {
+    device* device = cmd_list->get_device();
+    preview.hunted_stage = stage;
+    preview.hunted_shader_hash = hash;
+    preview.target_selection = group.isAutoSceneColourActive(device->get_api()) ? "Auto Scene Colour / RTV 0" :
+      group.getRenderToResourceViews() ? "Manual resource view" : std::format("Manual RTV {}", group.getRenderTargetIndex());
+    preview.capture_timing.clear();
+    preview.capture_path.clear();
+    preview.bound_targets.clear();
+    const auto& targets = cmd_list->get_private_data<state_tracking>().render_targets;
+    for (size_t slot = 0; slot < targets.size(); ++slot) {
+        const auto view = targets[slot];
+        const auto res = view != 0 ? device->get_resource_from_view(view) : resource{ 0 };
+        if (res == 0) {
+            preview.bound_targets += std::format("RTV {}: null\n", slot);
+            continue;
+        }
+        const auto desc = device->get_resource_desc(res);
+        preview.bound_targets += std::format("RTV {}: {}x{} | storage {} | view {} | samples {} | 0x{:x}\n",
+          slot, desc.texture.width, desc.texture.height, RenderingManager::FormatName(desc.texture.format),
+          RenderingManager::FormatName(device->get_resource_view_desc(view).format),
+          desc.texture.samples, res.handle);
+    }
+    if (targets.empty())
+        preview.bound_targets = "(no colour render targets tracked)\n";
+}
+
 void RenderingPreviewManager::RecordVulkanHuntedTarget(command_list* cmd_list, uint32_t stageIndex, uint32_t shaderHash) {
     if (cmd_list == nullptr || cmd_list->get_device() == nullptr || cmd_list->get_device()->get_api() != device_api::vulkan)
         return;
@@ -39,6 +69,7 @@ void RenderingPreviewManager::RecordVulkanHuntedTarget(command_list* cmd_list, u
     ToggleGroup& group = groupIt->second;
     CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
     const uint64_t previewAction = MATCH_PREVIEW_PS << stageIndex;
+    RecordPreviewDiagnostics(cmd_list, preview, group, stageIndex, shaderHash);
 
     const ResourceViewData activeTarget =
       RenderingManager::GetCurrentResourceView(cmd_list, deviceData, &group, commandListData, stageIndex, previewAction);
@@ -140,7 +171,9 @@ void RenderingPreviewManager::CaptureDeferredVulkanPreview(command_list* cmd_lis
         cmd_list->barrier(preview.target, resource_usage::copy_source, sourceUsage);
 
     preview.matched = true;
-    preview.status = "Captured at safe Vulkan render-pass boundary";
+    preview.capture_timing = "Safe Vulkan render-pass boundary after suppressed draw";
+    preview.capture_path = "Direct resource copy";
+    preview.status = "Capture recorded (GPU pixels not verified)";
 }
 
 void RenderingPreviewManager::CancelDeferredVulkanPreview(device* device) {
@@ -174,6 +207,8 @@ void RenderingPreviewManager::UpdatePreview(command_list* cmd_list, uint64_t cal
     DeviceDataContainer& deviceData = device->get_private_data<DeviceDataContainer>();
     std::lock_guard previewLock(deviceData.previewMutex);
 
+    // The caller can pass several stage bits; only the queued stages matched.
+    const uint64_t queuedPreview = (commandListData.commandQueue >> (callLocation * MATCH_DELIMITER)) & invocation & MATCH_PREVIEW;
     // Remove call location from queue
     commandListData.commandQueue &= ~(invocation << (callLocation * MATCH_DELIMITER));
 
@@ -181,23 +216,29 @@ void RenderingPreviewManager::UpdatePreview(command_list* cmd_list, uint64_t cal
         return;
     }
 
-    if (device->get_api() == device_api::d3d12 && commandListData.d3d12InsideRenderPass) {
-        deviceData.huntPreview.status = "Preview unavailable inside a D3D12 render pass";
-        return;
-    }
     RuntimeDataContainer& runtimeData = deviceData.current_runtime->get_private_data<RuntimeDataContainer>();
 
     ToggleGroup& group = uiData.GetToggleGroups().at(uiData.GetToggleGroupIdShaderEditing());
 
     // Set views during draw call since we can be sure the correct ones are bound at that point
     if (!callLocation && deviceData.huntPreview.target == 0) {
+        if (queuedPreview == 0)
+            return;
+        const uint32_t stage = (queuedPreview & MATCH_PREVIEW_PS) ? 0 : (queuedPreview & MATCH_PREVIEW_VS) ? 1 : 2;
+        const uint32_t hash = stage == 0 ? commandListData.ps.activeShaderHash :
+                              stage == 1 ? commandListData.vs.activeShaderHash : commandListData.cs.activeShaderHash;
+        RecordPreviewDiagnostics(cmd_list, deviceData.huntPreview, group, stage, hash);
+        if (device->get_api() == device_api::d3d12 && commandListData.d3d12InsideRenderPass) {
+            deviceData.huntPreview.status = "Preview unavailable inside a D3D12 render pass";
+            return;
+        }
         ResourceViewData active_target;
 
-        if (invocation & MATCH_PREVIEW_PS) {
+        if (queuedPreview & MATCH_PREVIEW_PS) {
             active_target = RenderingManager::GetCurrentResourceView(cmd_list, deviceData, &group, commandListData, 0, invocation & MATCH_PREVIEW_PS);
-        } else if (invocation & MATCH_PREVIEW_VS) {
+        } else if (queuedPreview & MATCH_PREVIEW_VS) {
             active_target = RenderingManager::GetCurrentResourceView(cmd_list, deviceData, &group, commandListData, 1, invocation & MATCH_PREVIEW_VS);
-        } else if (invocation & MATCH_PREVIEW_CS) {
+        } else if (queuedPreview & MATCH_PREVIEW_CS) {
             active_target = RenderingManager::GetCurrentResourceView(cmd_list, deviceData, &group, commandListData, 2, invocation & MATCH_PREVIEW_CS);
         }
 
@@ -221,6 +262,7 @@ void RenderingPreviewManager::UpdatePreview(command_list* cmd_list, uint64_t cal
             deviceData.huntPreview.width = desc.texture.width;
             deviceData.huntPreview.height = desc.texture.height;
         } else {
+            deviceData.huntPreview.status = "Preview unavailable: no eligible target resolved for selected shader";
             return;
         }
     }
@@ -233,6 +275,10 @@ void RenderingPreviewManager::UpdatePreview(command_list* cmd_list, uint64_t cal
     HuntPreview& preview = deviceData.huntPreview;
     if (preview.matched)
         return;
+    if (device->get_api() == device_api::d3d12 && commandListData.d3d12InsideRenderPass) {
+        preview.status = "Preview unavailable inside a D3D12 render pass";
+        return;
+    }
     const resource source = preview.target;
     if (!ResourceManager::IsPreviewTargetSupported(device->get_resource_desc(source))) {
         preview.status = "Preview unavailable: unsupported target topology";
@@ -240,29 +286,41 @@ void RenderingPreviewManager::UpdatePreview(command_list* cmd_list, uint64_t cal
     }
     if (!resourceManager.IsCompatibleWithPreviewFormat(device, source, preview.view_format)) {
         preview.recreate_preview = true;
+        preview.status = "Preparing preview resource for selected view format...";
         return;
     }
     resource ping = {}, pong = {};
     resource_view pingSrv = {}, pongRtv = {}, pongSrv = {};
     resourceManager.SetPingPreviewHandles(device, &ping, nullptr, &pingSrv);
     resourceManager.SetPongPreviewHandles(device, &pong, &pongRtv, &pongSrv);
-    if (pong == 0 || pongSrv == 0 || pongRtv == 0)
+    if (pong == 0 || pongSrv == 0 || pongRtv == 0) {
+        preview.status = "Preview unavailable: missing preview resource or view (see ReShade.log)";
         return;
+    }
 
     const bool explicitStates = device->get_api() == device_api::d3d12;
     resource_usage sourceUsage = resource_usage::render_target;
     if (explicitStates) {
-        if (preview.tracked_command_list != cmd_list)
+        if (preview.tracked_command_list != cmd_list) {
+            preview.status = "Preview unavailable: capture boundary is on another command list";
             return;
+        }
         sourceUsage = cmd_list->get_private_data<state_tracking>().stop_resource_barrier_tracking(source);
         preview.tracked_command_list = nullptr;
-        if (sourceUsage == resource_usage::undefined)
+        if (sourceUsage == resource_usage::undefined) {
+            preview.status = "Preview unavailable: source resource state is unknown";
             return;
+        }
     }
     const bool clearAlpha = group.getClearPreviewAlpha();
     const resource destination = clearAlpha ? ping : pong;
-    if (destination == 0 || (clearAlpha && pingSrv == 0))
+    if (destination == 0 || (clearAlpha && pingSrv == 0)) {
+        preview.status = "Preview unavailable: missing alpha-copy resource or view";
         return;
+    }
+    preview.capture_timing = callLocation == CALL_DRAW ? "Before draw / dispatch (selected call suppressed while hunting)" :
+      callLocation == CALL_BIND_PIPELINE ? "Next pipeline bind" : "Next render-target bind";
+    preview.capture_path = clearAlpha ? "Resource copy + alpha-clearing shader copy" : "Direct resource copy";
     if (explicitStates) {
         cmd_list->barrier(source, sourceUsage, resource_usage::copy_source);
         cmd_list->barrier(destination, resource_usage::shader_resource, resource_usage::copy_dest);
@@ -285,5 +343,5 @@ void RenderingPreviewManager::UpdatePreview(command_list* cmd_list, uint64_t cal
         cmd_list->get_private_data<state_tracking>().apply(cmd_list);
     }
     preview.matched = copied;
-    preview.status = copied ? "Captured preview" : "Preview unavailable: unsupported copy pipeline";
+    preview.status = copied ? "Capture recorded (GPU pixels not verified)" : "Preview unavailable: unsupported copy pipeline";
 }

@@ -112,6 +112,10 @@ struct __declspec(novtable) HuntPreview final {
     uint32_t hunted_shader_hash = 0;
     uint32_t hunted_stage = 0;
     std::string status;
+    std::string target_selection;
+    std::string capture_timing;
+    std::string capture_path;
+    std::string bound_targets;
 
     void Reset() {
         matched = false;
@@ -128,6 +132,10 @@ struct __declspec(novtable) HuntPreview final {
         hunted_shader_hash = 0;
         hunted_stage = 0;
         status.clear();
+        target_selection.clear();
+        capture_timing.clear();
+        capture_path.clear();
+        bound_targets.clear();
     }
 };
 
