@@ -370,6 +370,7 @@ void ResourceManager::CheckPreview(reshade::api::command_list* cmd_list, reshade
                                               resource_view_desc(previewViewFormat),
                                               &deviceData.resourceManagerData.preview_rtv[i])) {
                 reshade::log::message(reshade::log::level::error, "Failed to create preview render target view!");
+                deviceData.huntPreview.status = "Preview unavailable: failed to create preview RTV";
             }
         }
 

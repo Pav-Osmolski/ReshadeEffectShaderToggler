@@ -681,6 +681,7 @@ static void displaySettings(effect_runtime* runtime) {
 }
 
 static void Init() {
+    reshade::log::message(reshade::log::level::info, "HDR diagnostics 1 (pre-release): diagnostic capture reporting; not a confirmed HDR fix.");
     resourceManager.SetResourceShim(g_addonUIData.GetResourceShim());
     resourceManager.Init();
     constantManager.Init(g_addonUIData, groupResourceManager, &constantCopy, &constantHandler);
