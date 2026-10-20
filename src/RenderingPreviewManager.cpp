@@ -318,7 +318,7 @@ void RenderingPreviewManager::UpdatePreview(command_list* cmd_list, uint64_t cal
         preview.status = "Preview unavailable: missing alpha-copy resource or view";
         return;
     }
-    preview.capture_timing = callLocation == CALL_DRAW ? "Before draw / dispatch (selected call suppressed while hunting)" :
+    preview.capture_timing = callLocation == CALL_DRAW ? "Before draw / dispatch" :
       callLocation == CALL_BIND_PIPELINE ? "Next pipeline bind" : "Next render-target bind";
     preview.capture_path = clearAlpha ? "Resource copy + alpha-clearing shader copy" : "Direct resource copy";
     if (explicitStates) {
