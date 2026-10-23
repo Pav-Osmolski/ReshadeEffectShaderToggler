@@ -3,6 +3,7 @@
 #include "StateTracking.h"
 #include "Util.h"
 #include "resource.h"
+#include "PreviewInputDiagnostics.h"
 #include <d3d12.h>
 
 using namespace Rendering;
@@ -20,7 +21,7 @@ RenderingPreviewManager::~RenderingPreviewManager() {}
 // Snapshot the selected draw, not the subsequently bound pipeline at a deferred
 // capture boundary. This also records null slots and alternate colour targets.
 static void RecordPreviewDiagnostics(command_list* cmd_list, HuntPreview& preview,
-                                     ToggleGroup& group, uint32_t stage, uint32_t hash) {
+                                     ToggleGroup& group, uint32_t stage, uint32_t hash, bool trackDescriptors) {
     device* device = cmd_list->get_device();
     preview.hunted_stage = stage;
     preview.hunted_shader_hash = hash;
@@ -45,6 +46,35 @@ static void RecordPreviewDiagnostics(command_list* cmd_list, HuntPreview& previe
     }
     if (targets.empty())
         preview.bound_targets = "(no colour render targets tracked)\n";
+
+    preview.bound_inputs.clear();
+    if (!trackDescriptors) {
+        preview.bound_inputs = "Descriptor tracking disabled. Enable Track descriptors in REST Options and restart the game.\n";
+        return;
+    }
+    const auto& state = *cmd_list->get_private_data<state_tracking>();
+    const auto scan = ScanPreviewInputs(state, stage, preview.input_scan_remaining,
+      [&](uint32_t slot, uint32_t binding, resource_view view) {
+        const auto res = device->get_resource_from_view(view);
+        if (res == 0)
+            return;
+        const auto desc = device->get_resource_desc(res);
+        if (desc.type != resource_type::texture_1d && desc.type != resource_type::texture_2d && desc.type != resource_type::texture_3d)
+            return;
+        const char* type = desc.type == resource_type::texture_1d ? "1D" : desc.type == resource_type::texture_2d ? "2D" : "3D";
+        preview.bound_inputs += std::format(
+          "Layout {} / descriptor {}: {} {}x{} | depth/layers {} | mips {} | samples {} | storage {} | view {} | usage 0x{:x} | resource 0x{:x}\n",
+          slot, binding, type, desc.texture.width, desc.texture.height, desc.texture.depth_or_layers,
+          desc.texture.levels, desc.texture.samples, RenderingManager::FormatName(desc.texture.format),
+          RenderingManager::FormatName(device->get_resource_view_desc(view).format), static_cast<uint32_t>(desc.usage), res.handle);
+      });
+    if (preview.bound_inputs.empty())
+        preview.bound_inputs = "(no sampled textures found in the inspected tracked descriptors)\n";
+    preview.bound_inputs += std::format("Inspected descriptors: {}; sampled views: {}; scan truncated: {}\n",
+      scan.inspected, scan.sampled_views, scan.truncated);
+    preview.bound_inputs += "Inputs describe the selected draw, before any deferred output capture.\n"
+      "Layout/descriptor coordinates are not HLSL register numbers. UAVs and buffer views are not listed.\n"
+      "Read-only metadata: input pixels are not inspected, copied or modified; scene/UI roles are not inferred.\n";
 }
 
 void RenderingPreviewManager::RecordVulkanHuntedTarget(command_list* cmd_list, uint32_t stageIndex, uint32_t shaderHash) {
@@ -69,7 +99,7 @@ void RenderingPreviewManager::RecordVulkanHuntedTarget(command_list* cmd_list, u
     ToggleGroup& group = groupIt->second;
     CommandListDataContainer& commandListData = *cmd_list->get_private_data<CommandListDataContainer>();
     const uint64_t previewAction = MATCH_PREVIEW_PS << stageIndex;
-    RecordPreviewDiagnostics(cmd_list, preview, group, stageIndex, shaderHash);
+    RecordPreviewDiagnostics(cmd_list, preview, group, stageIndex, shaderHash, uiData.GetTrackDescriptors());
 
     const ResourceViewData activeTarget =
       RenderingManager::GetCurrentResourceView(cmd_list, deviceData, &group, commandListData, stageIndex, previewAction);
@@ -227,7 +257,7 @@ void RenderingPreviewManager::UpdatePreview(command_list* cmd_list, uint64_t cal
         const uint32_t stage = (queuedPreview & MATCH_PREVIEW_PS) ? 0 : (queuedPreview & MATCH_PREVIEW_VS) ? 1 : 2;
         const uint32_t hash = stage == 0 ? commandListData.ps.activeShaderHash :
                               stage == 1 ? commandListData.vs.activeShaderHash : commandListData.cs.activeShaderHash;
-        RecordPreviewDiagnostics(cmd_list, deviceData.huntPreview, group, stage, hash);
+        RecordPreviewDiagnostics(cmd_list, deviceData.huntPreview, group, stage, hash, uiData.GetTrackDescriptors());
         if (device->get_api() == device_api::d3d12 && commandListData.d3d12InsideRenderPass) {
             deviceData.huntPreview.status = "Preview unavailable inside a D3D12 render pass";
             return;

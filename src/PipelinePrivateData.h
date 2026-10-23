@@ -116,6 +116,8 @@ struct __declspec(novtable) HuntPreview final {
     std::string capture_timing;
     std::string capture_path;
     std::string bound_targets;
+    std::string bound_inputs;
+    size_t input_scan_remaining = 1024;
 
     void Reset() {
         matched = false;
@@ -136,6 +138,8 @@ struct __declspec(novtable) HuntPreview final {
         capture_timing.clear();
         capture_path.clear();
         bound_targets.clear();
+        bound_inputs.clear();
+        input_scan_remaining = 1024;
     }
 };
 
