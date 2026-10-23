@@ -247,7 +247,7 @@ static void DisplayPreview(AddonImGui::AddonUIData& instance,
 
         DeviceDataContainer& deviceData = runtime->get_device()->get_private_data<DeviceDataContainer>();
         const auto& preview = deviceData.huntPreview;
-        ImGui::TextUnformatted("HDR diagnostics 1 (pre-release)");
+        ImGui::TextUnformatted("HDR diagnostics 2 (pre-release)");
         reshade::api::resource_view srv = reshade::api::resource_view{ 0 };
         resManager.SetPongPreviewHandles(runtime->get_device(), nullptr, nullptr, &srv);
         bool clearAlpha = group->getClearPreviewAlpha();
@@ -289,11 +289,12 @@ static void DisplayPreview(AddonImGui::AddonUIData& instance,
                   api == reshade::api::device_api::d3d10 ? "D3D10" : api == reshade::api::device_api::d3d11 ? "D3D11" :
                   api == reshade::api::device_api::d3d12 ? "D3D12" : api == reshade::api::device_api::vulkan ? "Vulkan" : "OpenGL";
                 const std::string diagnostics = std::format(
-                  "REST {} | HDR diagnostics 1 (pre-release)\nGroup: {}\nAPI: {}\n"
+                  "REST {} | HDR diagnostics 2 (pre-release)\nGroup: {}\nAPI: {}\n"
                   "Selected shader: 0x{:08x} ({})\nSelection: {}\nStatus: {}\n"
                   "Source: {}x{} | storage {} | view {} | 0x{:x}\n"
                   "Capture timing: {}\nCapture path: {}\nSource colour space: unknown (not inferred from format)\n"
                   "\nColour targets at selected draw\n{}"
+                  "\nSampled texture inputs at selected draw\n{}"
                   "\nCurrent settings\nAuto Scene Colour: {}\nManual target index: {}\nInvocation setting: {}\n"
                   "Clear alpha: {}\nTone-map clamping: {}\nFlip: {}\n"
                   "Manual resource-view mode: {} | stage {} | slot {} | descriptor {}\n"
@@ -302,7 +303,7 @@ static void DisplayPreview(AddonImGui::AddonUIData& instance,
                   preview.target_selection, preview.status, preview.width, preview.height,
                   Rendering::RenderingManager::FormatName(preview.format), Rendering::RenderingManager::FormatName(preview.view_format),
                   preview.target.handle, preview.capture_timing.empty() ? "(not captured)" : preview.capture_timing,
-                  preview.capture_path.empty() ? "(not captured)" : preview.capture_path, preview.bound_targets,
+                  preview.capture_path.empty() ? "(not captured)" : preview.capture_path, preview.bound_targets, preview.bound_inputs,
                   group->isAutoSceneColourActive(api), group->getRenderTargetIndex(), group->getInvocationLocation(),
                   clearAlpha, group->getToneMap(), group->getFlipBuffer(), group->getRenderToResourceViews(),
                   group->getRenderSRVShaderStage(), group->getRenderSRVSlotIndex(), group->getRenderSRVDescriptorIndex());

@@ -1,11 +1,86 @@
 #include "RenderingSafety.h"
+#include "PreviewInputDiagnostics.h"
 #include <stdexcept>
 
 static void require(bool condition) {
     if (!condition) throw std::runtime_error("Rendering safety regression");
 }
 
+struct TestInputDescriptor {
+    reshade::api::descriptor_type type = static_cast<reshade::api::descriptor_type>(UINT32_MAX);
+    reshade::api::resource_view view = { 0 };
+    reshade::api::sampler_with_resource_view sampler_and_view = {};
+};
+
+struct TestInputState {
+    std::vector<size_t> sizes;
+    std::vector<TestInputDescriptor> descriptors;
+    bool repeat = false;
+    size_t get_root_table_size_at(uint32_t stage) const { require(stage == 2); return sizes.size(); }
+    size_t get_root_table_entry_size_at(uint32_t stage, uint32_t slot) const { require(stage == 2); return sizes.at(slot); }
+    const TestInputDescriptor* get_descriptor_at(uint32_t stage, uint32_t, uint32_t binding) const {
+        require(stage == 2);
+        if (descriptors.empty()) return nullptr;
+        return repeat ? &descriptors[0] : binding < descriptors.size() ? &descriptors[binding] : nullptr;
+    }
+};
+
+static void TestPreviewInputs() {
+    using namespace reshade::api;
+    TestInputState state;
+    state.sizes = { 7 };
+    state.descriptors.resize(6);
+    state.descriptors[0].type = descriptor_type::shader_resource_view;
+    state.descriptors[0].view = { 11 };
+    state.descriptors[1].type = descriptor_type::constant_buffer;
+    state.descriptors[1].view = { 99 }; // Must never be queried as a view.
+    state.descriptors[2].type = descriptor_type::unordered_access_view;
+    state.descriptors[2].view = { 99 };
+    state.descriptors[3].type = descriptor_type::sampler_with_resource_view;
+    state.descriptors[3].sampler_and_view.view = { 22 };
+    state.descriptors[3].view = { 99 }; // Combined descriptors use their own payload.
+    state.descriptors[4].view = { 99 }; // Sparse/unobserved entry.
+    state.descriptors[5].type = descriptor_type::shader_resource_view; // Null view.
+    size_t budget = 1024;
+    std::vector<uint64_t> views;
+    auto scan = Rendering::ScanPreviewInputs(state, 2, budget, [&](uint32_t slot, uint32_t binding, resource_view view) {
+        require(slot == 0 && (binding == 0 || binding == 3));
+        views.push_back(view.handle);
+    });
+    require(views == (std::vector<uint64_t>{11, 22}));
+    require(scan.inspected == 7 && !scan.truncated && budget == 1017);
+
+    // A bindless-sized table must not cause an unbounded walk or GPU queries.
+    state.descriptors.clear();
+    state.sizes = { 1000000000 };
+    auto forbidden = [](uint32_t, uint32_t, resource_view) { require(false); };
+    budget = 1024;
+    scan = Rendering::ScanPreviewInputs(state, 2, budget, forbidden);
+    require(scan.inspected == 256 && scan.truncated);
+    state.sizes.assign(70, 1);
+    budget = 1024;
+    scan = Rendering::ScanPreviewInputs(state, 2, budget, forbidden);
+    require(scan.inspected == 64 && scan.truncated);
+    state.sizes.assign(5, 256);
+    budget = 1024;
+    scan = Rendering::ScanPreviewInputs(state, 2, budget, forbidden);
+    require(scan.inspected == 1024 && scan.truncated && budget == 0);
+    scan = Rendering::ScanPreviewInputs(state, 2, budget, forbidden);
+    require(scan.inspected == 0 && scan.truncated); // Repeated same-frame match.
+
+    state.sizes = { 100 };
+    state.descriptors.resize(1);
+    state.descriptors[0].type = descriptor_type::shader_resource_view;
+    state.descriptors[0].view = { 1 };
+    state.repeat = true;
+    budget = 1024;
+    size_t queries = 0;
+    scan = Rendering::ScanPreviewInputs(state, 2, budget, [&](uint32_t, uint32_t, resource_view) { ++queries; });
+    require(queries == 64 && scan.truncated && scan.sampled_views == 64);
+}
+
 int main() {
+    TestPreviewInputs();
     using namespace reshade::api;
     require(Rendering::SupportsShaderCopy(device_api::d3d9));
     require(Rendering::SupportsShaderCopy(device_api::d3d10));
