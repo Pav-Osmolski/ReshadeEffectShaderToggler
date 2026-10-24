@@ -53,6 +53,26 @@ static void RecordPreviewDiagnostics(command_list* cmd_list, HuntPreview& previe
         return;
     }
     const auto& state = *cmd_list->get_private_data<state_tracking>();
+    preview.bound_inputs = "Root/table coverage (first 64 layout parameters):\n";
+    const auto& roots = state.root_tables[stage].second;
+    for (size_t slot = 0; slot < std::min(roots.size(), size_t{64}); ++slot) {
+        const auto& root = roots[slot];
+        if (root.type == StateTracking::root_entry_type::descriptor_table) {
+            const auto& c = root.coverage;
+            preview.bound_inputs += std::format(
+              "Layout {}: {} table 0x{:x}; ranges {}; skipped unbounded {}; sampler-only {}; missing/partial {}; clipped {}; cached entries {}\n",
+              slot, c.flagged ? "flagged" : "plain", root.descriptor_table.handle, c.ranges, c.unbounded,
+              c.samplers, c.missing, c.clipped, state.get_root_table_entry_size_at(stage, static_cast<uint32_t>(slot)));
+        } else {
+            preview.bound_inputs += std::format("Layout {}: {}\n", slot,
+              root.type == StateTracking::root_entry_type::push_constants ? "root constants (not descriptors)" :
+              root.type == StateTracking::root_entry_type::push_descriptors ? "root/push descriptors" : "unobserved or unsupported root");
+        }
+    }
+    if (roots.empty())
+        preview.bound_inputs += "(no tracked root layout)\n";
+    preview.bound_inputs += "Tracked sampled textures:\n";
+    size_t textureCount = 0;
     const auto scan = ScanPreviewInputs(state, stage, preview.input_scan_remaining,
       [&](uint32_t slot, uint32_t binding, resource_view view) {
         const auto res = device->get_resource_from_view(view);
@@ -61,6 +81,7 @@ static void RecordPreviewDiagnostics(command_list* cmd_list, HuntPreview& previe
         const auto desc = device->get_resource_desc(res);
         if (desc.type != resource_type::texture_1d && desc.type != resource_type::texture_2d && desc.type != resource_type::texture_3d)
             return;
+        ++textureCount;
         const char* type = desc.type == resource_type::texture_1d ? "1D" : desc.type == resource_type::texture_2d ? "2D" : "3D";
         preview.bound_inputs += std::format(
           "Layout {} / descriptor {}: {} {}x{} | depth/layers {} | mips {} | samples {} | storage {} | view {} | usage 0x{:x} | resource 0x{:x}\n",
@@ -68,8 +89,8 @@ static void RecordPreviewDiagnostics(command_list* cmd_list, HuntPreview& previe
           desc.texture.levels, desc.texture.samples, RenderingManager::FormatName(desc.texture.format),
           RenderingManager::FormatName(device->get_resource_view_desc(view).format), static_cast<uint32_t>(desc.usage), res.handle);
       });
-    if (preview.bound_inputs.empty())
-        preview.bound_inputs = "(no sampled textures found in the inspected tracked descriptors)\n";
+    if (textureCount == 0)
+        preview.bound_inputs += "(no sampled textures found in this snapshot; absence is not proof of no shader inputs)\n";
     preview.bound_inputs += std::format("Inspected descriptors: {}; sampled views: {}; scan truncated: {}\n",
       scan.inspected, scan.sampled_views, scan.truncated);
     preview.bound_inputs += "Inputs describe the selected draw, before any deferred output capture.\n"

@@ -1,6 +1,15 @@
-# REST Enhanced HDR diagnostics 2 (pre-release)
+# REST Enhanced HDR diagnostics 3 (pre-release)
 
-This test build follows the [new results in issue #22](https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler/issues/22#issuecomment-6327955448). It adds **read-only metadata for sampled texture inputs at the selected draw**, to help find the scene before Warframe combines it with the UI. It is **not a confirmed HDR fix**. The four-part file version remains the stable baseline (Modern 1.7.3.680 / Legacy 1.6.7.580); identify this build by **HDR diagnostics 2 (pre-release)** above the preview and the source commit in `BUILD-INFO.txt`.
+This test build follows the [build 2 results in issue #22](https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler/issues/22#issuecomment-6376383242). It corrects a descriptor-tracking gap and explains missing input coverage. It is **not a confirmed HDR fix**. The four-part file version remains the stable baseline (Modern 1.7.3.680 / Legacy 1.6.7.580); identify this build by **HDR diagnostics 3 (pre-release)** above the preview and the source commit in `BUILD-INFO.txt`.
+
+## New in diagnostics 3
+
+- Modern now captures both plain and flagged descriptor tables. ReShade exposes flagged tables for newer D3D12 root signatures; REST previously skipped them. Original GPU table handles are retained for restoration even when metadata is empty or partial. This intentionally improves state-tracking/restoration coverage, rather than only changing diagnostic text.
+- The input report lists root/table coverage: plain/flagged tables, cached entries, skipped unbounded/sampler ranges, missing/partial data and clipped ranges. Root constants are labelled separately and no longer count as resource-descriptor entries.
+- Finite metadata snapshots are limited to 65,536 entries per table; unbounded ranges are not allocated. These limits affect metadata, not the original GPU table handle used for replay. Unknown heaps and partial tracked ranges are reported without inventing resource views.
+- Legacy/API 7 retains its plain descriptor-set representation, with the shared bounded snapshots, coverage reporting and counting correction. It does not acquire an API-20 flagged-table type.
+
+For the first retest, use native HDR and copy **one** report for `0x7dcef337` / **AFTER DRAW**, manual target 0, Auto scene colour off, with the menu closed. Include both **Root/table coverage** and the sampled-texture section. Confirm Track descriptors and ReShade's global effects switch are on; individual effects stay unticked. There is no need to repeat all five build-2 comparisons initially.
 
 ## Install
 
@@ -12,13 +21,13 @@ Back up your current REST add-on and `ReshadeEffectShaderToggler.ini`. Close the
 - Storage format and selected typed view format are shown separately.
 - **Copy preview diagnostics** works in both automatic and manual target modes. It copies the selected shader, target/view formats, all colour targets tracked at that draw, capture timing/path, status and relevant settings.
 - Missing targets, resource/view failures and unknown resource states have explicit status messages. A recorded capture is labelled as recorded, rather than implying that GPU pixels have been verified.
-- The target-selection policy, HDR conversion and rendering/injection behavior are unchanged. Automatic selection still follows primary RTV 0; it does not discover compute UAV outputs.
+- The target-selection policy and HDR conversion are unchanged. Automatic selection still follows primary RTV 0; it does not discover compute UAV outputs. Build 3 expands table state tracking/restoration as described above.
 
 ### New in diagnostics 2
 
 **Copy preview diagnostics** now includes **Sampled texture inputs at selected draw** for the matched shader stage. Tracked textures are identified by layout/descriptor coordinates, dimensionality, dimensions, mips, sample count, storage/view formats, usage flags and resource address. Coordinates are **not HLSL register numbers**. Inputs are recorded at the selected draw even when the output preview is captured at a later boundary.
 
-The new inspection reads existing tracked descriptors and resource descriptions only. It does not sample/copy input pixels, create input views, change resource states, modify inputs or apply effects to them. Existing output preview/injection behavior is unchanged; D3D12 input-texture writing remains disabled. Metadata does not automatically establish scene/UI roles or colour space.
+The input inspection reads tracked descriptors and resource descriptions only. It does not sample/copy input pixels, create input views, change input resource states, modify inputs or apply effects to them. D3D12 input-texture writing remains disabled. Metadata does not automatically establish scene/UI roles or colour space. The underlying table tracking/restoration is corrected in build 3.
 
 The scan checks at most 64 layout parameters, 256 entries per parameter, 64 non-null sampled views per snapshot and 1,024 descriptor entries across all snapshots in a frame. It reports truncation. Only sampled-resource and combined sampler/resource descriptors are considered; UAVs, standalone samplers, constant buffers and unobserved entries are excluded. Buffer-backed SRVs are not listed as textures. A missing or truncated list is not proof that the shader has no inputs.
 

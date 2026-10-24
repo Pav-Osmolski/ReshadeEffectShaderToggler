@@ -6,6 +6,7 @@
 #pragma once
 
 #include "DescriptorTracking.h"
+#include "DescriptorTableCapture.h"
 #include <array>
 #include <d3d9.h>
 #include <shared_mutex>
@@ -65,6 +66,7 @@ struct root_entry {
     ;
     reshade::api::descriptor_table descriptor_table = {};
     std::vector<uint32_t> dynamic_offsets;
+    Rendering::DescriptorTableCoverage coverage;
 };
 
 struct state_block {

@@ -1,5 +1,6 @@
 #include "RenderingSafety.h"
 #include "PreviewInputDiagnostics.h"
+#include "DescriptorTableCapture.h"
 #include <stdexcept>
 
 static void require(bool condition) {
@@ -79,7 +80,96 @@ static void TestPreviewInputs() {
     require(queries == 64 && scan.truncated && scan.sampled_views == 64);
 }
 
+enum class TestRootType { undefined, descriptor_table };
+struct TestRoot {
+    TestRootType type = TestRootType::undefined;
+    int32_t buffer_index = -1;
+    uint64_t descriptor_table = 0;
+    Rendering::DescriptorTableCoverage coverage;
+};
+
+static void TestDescriptorTables() {
+    using namespace reshade::api;
+    descriptor_range ranges[3];
+    ranges[0].binding = 3; ranges[0].count = 2; ranges[0].type = descriptor_type::shader_resource_view;
+    ranges[1].binding = 9; ranges[1].count = 1; ranges[1].type = descriptor_type::constant_buffer;
+    ranges[2].binding = 0; ranges[2].count = 1; ranges[2].type = descriptor_type::sampler;
+    pipeline_layout_param param;
+    param.type = pipeline_layout_param_type::descriptor_table;
+    param.descriptor_table = {3, ranges};
+    std::vector<uint32_t> copied;
+    auto reader = [&](const descriptor_range& range, uint32_t count, auto& output) {
+        copied.push_back(range.binding);
+        for (uint32_t i = 0; i < count; ++i) {
+            output[range.binding + i].type = range.type;
+            output[range.binding + i].view = {100 + range.binding + i};
+        }
+        return true;
+    };
+    auto snapshot = Rendering::CaptureDescriptorTable<TestInputDescriptor>(param, reader);
+    require(snapshot.coverage.supported && !snapshot.coverage.flagged && snapshot.coverage.samplers == 1);
+    require(copied == (std::vector<uint32_t>{3, 9}) && snapshot.descriptors.size() == 10);
+    require(snapshot.descriptors[0].type == static_cast<descriptor_type>(UINT32_MAX));
+    require(snapshot.descriptors[3].view.handle == 103 && snapshot.descriptors[9].type == descriptor_type::constant_buffer);
+
+#ifndef REST_LEGACY_TABLE_API
+    descriptor_range_with_flags flagged[2];
+    static_cast<descriptor_range&>(flagged[0]) = ranges[0];
+    static_cast<descriptor_range&>(flagged[1]) = ranges[1];
+    flagged[0].flags = descriptor_range_flags::descriptors_volatile;
+    flagged[1].flags = descriptor_range_flags::data_static;
+    param.type = pipeline_layout_param_type::descriptor_table_with_flags;
+    param.descriptor_table_with_flags = {2, flagged};
+    copied.clear();
+    snapshot = Rendering::CaptureDescriptorTable<TestInputDescriptor>(param, reader);
+    require(snapshot.coverage.flagged && snapshot.coverage.ranges == 2);
+    require(copied == (std::vector<uint32_t>{3, 9})); // Second range uses derived-array stride.
+    require(snapshot.descriptors[9].type == descriptor_type::constant_buffer);
+    require(flagged[1].flags == descriptor_range_flags::data_static); // Original flags stay intact.
+#endif
+
+    std::vector<TestRoot> roots(1);
+    roots[0].descriptor_table = 123;
+    std::vector<std::vector<TestInputDescriptor>> buffers;
+    Rendering::StoreDescriptorTableSnapshot(roots, buffers, 1, uint64_t{77}, std::move(snapshot));
+    require(roots[0].descriptor_table == 123 && roots[1].descriptor_table == 77);
+    require(roots[1].type == TestRootType::descriptor_table && roots[1].buffer_index == 0);
+    require(buffers[0][9].type == descriptor_type::constant_buffer);
+
+    param.type = pipeline_layout_param_type::descriptor_table;
+    param.descriptor_table = {1, ranges};
+    ranges[0].count = UINT32_MAX;
+    snapshot = Rendering::CaptureDescriptorTable<TestInputDescriptor>(param, reader);
+    require(snapshot.coverage.unbounded == 1 && snapshot.descriptors.empty());
+    Rendering::StoreDescriptorTableSnapshot(roots, buffers, 1, uint64_t{88}, std::move(snapshot));
+    require(roots[1].descriptor_table == 88 && buffers[roots[1].buffer_index].empty()); // Still replayable.
+
+    ranges[0].binding = 65535; ranges[0].count = 8;
+    snapshot = Rendering::CaptureDescriptorTable<TestInputDescriptor>(param, reader);
+    require(snapshot.coverage.clipped == 1 && snapshot.descriptors.size() == 65536);
+    require(snapshot.descriptors.back().view.handle == 65635);
+    ranges[0].binding = UINT32_MAX - 1;
+    snapshot = Rendering::CaptureDescriptorTable<TestInputDescriptor>(param, reader);
+    require(snapshot.coverage.clipped == 1 && snapshot.descriptors.empty()); // No offset overflow.
+    ranges[0].binding = 0; ranges[0].count = 1;
+    snapshot = Rendering::CaptureDescriptorTable<TestInputDescriptor>(param, [](const auto&, uint32_t, auto&) { return false; });
+    require(snapshot.coverage.missing == 1 && snapshot.descriptors[0].type == static_cast<descriptor_type>(UINT32_MAX));
+    param.descriptor_table = {0, nullptr};
+    snapshot = Rendering::CaptureDescriptorTable<TestInputDescriptor>(param, reader);
+    require(snapshot.coverage.supported && snapshot.descriptors.empty());
+    param.descriptor_table = {1, nullptr};
+    snapshot = Rendering::CaptureDescriptorTable<TestInputDescriptor>(param, reader);
+    require(snapshot.coverage.supported && snapshot.coverage.missing == 1);
+    param.descriptor_table = {1, &ranges[2]};
+    snapshot = Rendering::CaptureDescriptorTable<TestInputDescriptor>(param, reader);
+    require(snapshot.coverage.samplers == 1 && snapshot.descriptors.empty());
+    param.type = pipeline_layout_param_type::push_constants;
+    snapshot = Rendering::CaptureDescriptorTable<TestInputDescriptor>(param, reader);
+    require(!snapshot.coverage.supported && snapshot.descriptors.empty());
+}
+
 int main() {
+    TestDescriptorTables();
     TestPreviewInputs();
     using namespace reshade::api;
     require(Rendering::SupportsShaderCopy(device_api::d3d9));

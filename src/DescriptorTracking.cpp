@@ -50,18 +50,19 @@ buffer_range descriptor_tracking::get_buffer_range(descriptor_heap heap, uint32_
     return { 0 };
 }
 
-void descriptor_tracking::set_all_descriptors(reshade::api::descriptor_heap heap,
+bool descriptor_tracking::set_all_descriptors(reshade::api::descriptor_heap heap,
                                               uint32_t offset,
                                               uint32_t count,
                                               std::vector<descriptor_tracking::descriptor_data>& descriptor_list,
                                               uint32_t list_offset) const {
-    const descriptor_heap_data& heap_data = heaps.at(heap);
-
-    size_t mcount = std::min(static_cast<size_t>(offset) + count, heap_data.descriptors.size());
-
-    for (uint32_t i = offset; i < mcount; i++) {
-        descriptor_list[list_offset + i - offset] = heap_data.descriptors[i];
-    }
+    const auto it = heaps.find(heap);
+    if (it == heaps.end() || list_offset > descriptor_list.size() || count > descriptor_list.size() - list_offset)
+        return false;
+    const auto& source = it->second.descriptors;
+    const size_t available = offset < source.size() ? std::min(static_cast<size_t>(count), source.size() - offset) : 0;
+    for (size_t i = 0; i < available; ++i)
+        descriptor_list[list_offset + i] = source[static_cast<size_t>(offset) + i];
+    return available == count;
 }
 
 pipeline_layout_param descriptor_tracking::get_pipeline_layout_param(pipeline_layout layout, uint32_t param) const {
