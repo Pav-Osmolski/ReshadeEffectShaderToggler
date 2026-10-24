@@ -404,34 +404,16 @@ static void on_bind_descriptor_sets(command_list* cmd_list,
 
     for (uint32_t i = 0; i < count; ++i) {
         const pipeline_layout_param param = descriptor_state.get_pipeline_layout_param(layout, first + i);
-        if (param.type != pipeline_layout_param_type::descriptor_set)
-            continue;
-
-        uint32_t max_descriptor_size = 0;
-        for (uint32_t k = 0; k < param.descriptor_set.count; ++k) {
-            const descriptor_range& range = param.descriptor_set.ranges[k];
-            if (range.count != UINT32_MAX && range.type != descriptor_type::sampler)
-                max_descriptor_size = std::max(max_descriptor_size, range.binding + range.count);
-        }
-
-        std::vector<descriptor_tracking::descriptor_data> descriptors(max_descriptor_size);
-
-        for (uint32_t k = 0; k < param.descriptor_set.count; ++k) {
-            const descriptor_range& range = param.descriptor_set.ranges[k];
-
-            if (range.count == UINT32_MAX || range.type == descriptor_type::sampler)
-                continue; // Skip unbounded ranges
-
+        auto snapshot = Rendering::CaptureDescriptorTable<descriptor_tracking::descriptor_data>(param,
+          [&](const descriptor_range& range, uint32_t countToRead, auto& descriptors) {
             uint32_t base_offset = 0;
             descriptor_pool heap = { 0 };
             cmd_list->get_device()->get_descriptor_pool_offset(sets[i], range.binding, 0, &heap, &base_offset);
-
-            descriptor_state.set_all_descriptors(heap, base_offset, range.count, descriptors, range.binding);
-        }
-
-        descriptor_buffer.push_back(std::move(descriptors));
-
-        root_table[i + first] = { root_entry_type::descriptor_table, static_cast<int32_t>(descriptor_buffer.size()) - 1, sets[i] };
+            return descriptor_state.set_all_descriptors(heap, base_offset, countToRead, descriptors, range.binding);
+          });
+        if (!snapshot.coverage.supported)
+            continue;
+        Rendering::StoreDescriptorTableSnapshot(root_table, descriptor_buffer, i + first, sets[i], std::move(snapshot));
     }
 }
 
@@ -621,8 +603,6 @@ const size_t state_block::get_root_table_entry_size_at(uint32_t stageIndex, uint
 
         if ((root_entry.type == root_entry_type::push_descriptors || root_entry.type == root_entry_type::descriptor_table) && root_entry.buffer_index >= 0) {
             return descriptor_buffer[stageIndex][root_entry.buffer_index].size();
-        } else if (root_entry.type == root_entry_type::push_constants && root_entry.buffer_index >= 0) {
-            return constant_buffer[root_entry.buffer_index].size();
         }
     }
 

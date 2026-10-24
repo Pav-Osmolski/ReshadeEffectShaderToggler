@@ -6,6 +6,7 @@
 #pragma once
 
 #include "DescriptorTracking.h"
+#include "DescriptorTableCapture.h"
 #include <array>
 #include <d3d9.h>
 #include <shared_mutex>
@@ -59,6 +60,7 @@ struct root_entry {
     int32_t buffer_index = -1;
     ;
     reshade::api::descriptor_set descriptor_table = {};
+    Rendering::DescriptorTableCoverage coverage;
 };
 
 struct state_block {
