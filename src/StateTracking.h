@@ -138,6 +138,7 @@ class __declspec(uuid("c9abddf0-f9c2-4a7b-af49-89d8d470e207")) state_tracking : 
     /// Registers all the necessary add-on events for state tracking to work.
     /// </summary>
     static void register_events(bool track = true);
+    static bool descriptor_tracking_enabled() { return track_descriptors; }
     /// <summary>
     /// Unregisters all the necessary add-on events for state tracking to work.
     /// </summary>

@@ -48,12 +48,19 @@ static void RecordPreviewDiagnostics(command_list* cmd_list, HuntPreview& previe
         preview.bound_targets = "(no colour render targets tracked)\n";
 
     preview.bound_inputs.clear();
-    if (!trackDescriptors) {
-        preview.bound_inputs = "Descriptor tracking disabled. Enable Track descriptors in REST Options and restart the game.\n";
+    const bool activeTracking = state_tracking::descriptor_tracking_enabled();
+    preview.bound_inputs = std::format("Descriptor tracking configured: {}; registered active: {}; restart required: {}\n",
+      trackDescriptors, activeTracking, trackDescriptors != activeTracking);
+    if (!activeTracking) {
+        preview.bound_inputs += "Descriptor tracking inactive. Enable Track descriptors, save, and restart the game.\n";
         return;
     }
     const auto& state = *cmd_list->get_private_data<state_tracking>();
-    preview.bound_inputs = "Root/table coverage (first 64 layout parameters):\n";
+    const auto& descriptorState = *device->get_private_data<descriptor_tracking>();
+    preview.bound_inputs += std::format("Observed descriptor events: updates {}; copies {}; tracked binds {}\n",
+      descriptorState.update_events.load(std::memory_order_relaxed), descriptorState.copy_events.load(std::memory_order_relaxed),
+      descriptorState.tracked_binds.load(std::memory_order_relaxed));
+    preview.bound_inputs += "Root/table coverage (first 64 layout parameters):\n";
     const auto& roots = state.root_tables[stage].second;
     for (size_t slot = 0; slot < std::min(roots.size(), size_t{64}); ++slot) {
         const auto& root = roots[slot];

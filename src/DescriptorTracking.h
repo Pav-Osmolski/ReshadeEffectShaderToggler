@@ -6,6 +6,9 @@
 #pragma once
 
 #include "reshade.hpp"
+#include "DescriptorMetadata.h"
+#include <memory>
+#include <atomic>
 #include <concurrent_unordered_map.h>
 #include <concurrent_vector.h>
 #include <vector>
@@ -16,6 +19,8 @@
 /// </summary>
 class __declspec(uuid("33319e83-387c-448e-881c-7e68fc2e52c4")) descriptor_tracking {
   public:
+    mutable std::atomic<uint64_t> tracked_binds{0};
+    std::atomic<uint64_t> update_events{0}, copy_events{0};
     enum class descriptor_data_type : uint32_t {
         sampler = 0,
         sampler_with_resource_view = 1,
@@ -82,7 +87,8 @@ class __declspec(uuid("33319e83-387c-448e-881c-7e68fc2e52c4")) descriptor_tracki
     static bool on_update_descriptor_tables(reshade::api::device* device, uint32_t count, const reshade::api::descriptor_table_update* updates);
 
     struct descriptor_heap_data {
-        concurrency::concurrent_vector<descriptor_data> descriptors;
+        std::shared_ptr<Rendering::DescriptorMetadata<descriptor_data>> descriptors =
+          std::make_shared<Rendering::DescriptorMetadata<descriptor_data>>();
     };
     struct descriptor_heap_hash : std::hash<uint64_t> {
         size_t operator()(reshade::api::descriptor_heap handle) const { return std::hash<uint64_t>::operator()(handle.handle); }

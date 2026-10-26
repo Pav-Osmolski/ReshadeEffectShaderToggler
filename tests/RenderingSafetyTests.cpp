@@ -1,6 +1,7 @@
 #include "RenderingSafety.h"
 #include "PreviewInputDiagnostics.h"
 #include "DescriptorTableCapture.h"
+#include "DescriptorMetadata.h"
 #include <stdexcept>
 
 static void require(bool condition) {
@@ -168,7 +169,44 @@ static void TestDescriptorTables() {
     require(!snapshot.coverage.supported && snapshot.descriptors.empty());
 }
 
+static void TestDescriptorMetadata() {
+    using Store = Rendering::DescriptorMetadata<TestInputDescriptor, 4>;
+    auto known = [](uint32_t i) { TestInputDescriptor d; d.type = reshade::api::descriptor_type::shader_resource_view; d.view = {100 + i}; return d; };
+    auto unknown = [](const TestInputDescriptor& d) { return static_cast<uint32_t>(d.type) == UINT32_MAX; };
+    Store high;
+    require(high.Write(UINT32_MAX - 3, 4, known));
+    require(high.Size() == 4 && high.ReadOne(UINT32_MAX).view.handle == 103);
+    require(!high.Write(UINT32_MAX, 2, [](uint32_t) -> TestInputDescriptor { require(false); return {}; }));
+    require(high.Size() == 4 && unknown(high.ReadOne(7)));
+
+    Store source, destination;
+    require(source.Write(20, 1, known));
+    require(destination.Write(30, 3, known));
+    const auto partial = source.Snapshot(20, 3);
+    require(!destination.Write(30, 3, [&](uint32_t i) { return partial[i]; }));
+    require(destination.ReadOne(30).view.handle == 100 && unknown(destination.ReadOne(31)) && unknown(destination.ReadOne(32)));
+    const auto missing = source.Snapshot(90, 1);
+    require(!destination.Write(30, 1, [&](uint32_t i) { return missing[i]; }));
+    require(unknown(destination.ReadOne(30))); // Unknown copy must erase old valid metadata.
+
+    Store same;
+    require(same.Write(0, 3, known));
+    const auto overlap = same.Snapshot(0, 3);
+    require(same.Write(1, 3, [&](uint32_t i) { return overlap[i]; }));
+    require(same.ReadOne(1).view.handle == 100 && same.ReadOne(3).view.handle == 102);
+    require(!same.Write(1000, 1, known) && unknown(same.ReadOne(1000)) && same.Size() == 4);
+
+    Store limited;
+    require(limited.Write(7, 1, known));
+    require(!limited.Write(0, 100, known));
+    require(limited.Size() == 4 && unknown(limited.ReadOne(7))); // Invalidate skipped suffix too.
+    require(limited.Snapshot(0, 100).size() == 4);
+    require(limited.Snapshot(0, 0).empty());
+    require(limited.Write(0, 0, known));
+}
+
 int main() {
+    TestDescriptorMetadata();
     TestDescriptorTables();
     TestPreviewInputs();
     using namespace reshade::api;

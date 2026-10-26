@@ -10,10 +10,9 @@
 using namespace reshade::api;
 
 sampler descriptor_tracking::get_sampler(descriptor_heap heap, uint32_t offset) const {
-    const descriptor_heap_data& heap_data = heaps.at(heap);
-
-    if (offset < heap_data.descriptors.size()) {
-        const descriptor_data& descriptor = heap_data.descriptors[offset];
+    const auto it = heaps.find(heap);
+    if (it != heaps.end()) {
+        const descriptor_data descriptor = it->second.descriptors->ReadOne(offset);
 
         if (descriptor.type == descriptor_type::sampler)
             return descriptor.sampler;
@@ -24,10 +23,9 @@ sampler descriptor_tracking::get_sampler(descriptor_heap heap, uint32_t offset) 
     return { 0 };
 }
 resource_view descriptor_tracking::get_shader_resource_view(descriptor_heap heap, uint32_t offset) const {
-    const descriptor_heap_data& heap_data = heaps.at(heap);
-
-    if (offset < heap_data.descriptors.size()) {
-        const descriptor_data& descriptor = heap_data.descriptors[offset];
+    const auto it = heaps.find(heap);
+    if (it != heaps.end()) {
+        const descriptor_data descriptor = it->second.descriptors->ReadOne(offset);
 
         if (descriptor.type == descriptor_type::shader_resource_view)
             return descriptor.view;
@@ -38,10 +36,9 @@ resource_view descriptor_tracking::get_shader_resource_view(descriptor_heap heap
     return { 0 };
 }
 buffer_range descriptor_tracking::get_buffer_range(descriptor_heap heap, uint32_t offset) const {
-    const descriptor_heap_data& heap_data = heaps.at(heap);
-
-    if (offset < heap_data.descriptors.size()) {
-        const descriptor_data& descriptor = heap_data.descriptors[offset];
+    const auto it = heaps.find(heap);
+    if (it != heaps.end()) {
+        const descriptor_data descriptor = it->second.descriptors->ReadOne(offset);
 
         if (descriptor.type == descriptor_type::constant_buffer)
             return descriptor.constant;
@@ -58,11 +55,13 @@ bool descriptor_tracking::set_all_descriptors(reshade::api::descriptor_heap heap
     const auto it = heaps.find(heap);
     if (it == heaps.end() || list_offset > descriptor_list.size() || count > descriptor_list.size() - list_offset)
         return false;
-    const auto& source = it->second.descriptors;
-    const size_t available = offset < source.size() ? std::min(static_cast<size_t>(count), source.size() - offset) : 0;
-    for (size_t i = 0; i < available; ++i)
-        descriptor_list[list_offset + i] = source[static_cast<size_t>(offset) + i];
-    return available == count;
+    const auto source = it->second.descriptors->Snapshot(offset, count);
+    bool complete = source.size() == count;
+    for (uint32_t i = 0; i < count; ++i) {
+        descriptor_list[list_offset + i] = i < source.size() ? source[i] : descriptor_data{};
+        complete &= static_cast<uint32_t>(descriptor_list[list_offset + i].type) != UINT32_MAX;
+    }
+    return complete;
 }
 
 pipeline_layout_param descriptor_tracking::get_pipeline_layout_param(pipeline_layout layout, uint32_t param) const {
@@ -114,27 +113,25 @@ void descriptor_tracking::on_destroy_pipeline_layout(device* device, pipeline_la
 
 bool descriptor_tracking::on_copy_descriptor_tables(device* device, uint32_t count, const descriptor_table_copy* copies) {
     descriptor_tracking& ctx = *device->get_private_data<descriptor_tracking>();
+    ctx.copy_events.fetch_add(1, std::memory_order_relaxed);
 
     for (uint32_t i = 0; i < count; ++i) {
         const descriptor_table_copy& copy = copies[i];
 
-        uint32_t src_offset;
-        descriptor_heap src_heap;
+        uint32_t src_offset = 0;
+        descriptor_heap src_heap = {0};
         device->get_descriptor_heap_offset(copy.source_table, copy.source_binding, copy.source_array_offset, &src_heap, &src_offset);
 
-        uint32_t dst_offset;
-        descriptor_heap dst_heap;
+        uint32_t dst_offset = 0;
+        descriptor_heap dst_heap = {0};
         device->get_descriptor_heap_offset(copy.dest_table, copy.dest_binding, copy.dest_array_offset, &dst_heap, &dst_offset);
 
-        descriptor_heap_data& src_pool_data = ctx.heaps[src_heap];
-        descriptor_heap_data& dst_pool_data = ctx.heaps[dst_heap];
-
-        if (dst_offset + copy.count > dst_pool_data.descriptors.size())
-            dst_pool_data.descriptors.grow_to_at_least(dst_offset + copy.count);
-
-        for (uint32_t k = 0; k < copy.count; ++k) {
-            dst_pool_data.descriptors[dst_offset + k] = src_pool_data.descriptors[src_offset + k];
-        }
+        if (dst_heap == 0) continue;
+        const auto src = ctx.heaps.find(src_heap);
+        const auto snapshot = src != ctx.heaps.end() ? src->second.descriptors->Snapshot(src_offset, copy.count) : std::vector<descriptor_data>{};
+        // Snapshot first so same-heap copies cannot invalidate their own source.
+        ctx.heaps[dst_heap].descriptors->Write(dst_offset, copy.count,
+          [&](uint32_t i) { return i < snapshot.size() ? snapshot[i] : descriptor_data{}; });
     }
 
     return false;
@@ -142,22 +139,19 @@ bool descriptor_tracking::on_copy_descriptor_tables(device* device, uint32_t cou
 
 bool descriptor_tracking::on_update_descriptor_tables(device* device, uint32_t count, const descriptor_table_update* updates) {
     descriptor_tracking& ctx = *device->get_private_data<descriptor_tracking>();
+    ctx.update_events.fetch_add(1, std::memory_order_relaxed);
 
     for (uint32_t i = 0; i < count; ++i) {
         const descriptor_table_update& update = updates[i];
 
-        uint32_t offset;
-        descriptor_heap heap;
+        uint32_t offset = 0;
+        descriptor_heap heap = {0};
         device->get_descriptor_heap_offset(update.table, update.binding, update.array_offset, &heap, &offset);
 
-        descriptor_heap_data& heap_data = ctx.heaps[heap];
-
-        if (offset + update.count > heap_data.descriptors.size())
-            heap_data.descriptors.grow_to_at_least(offset + update.count);
-
-        for (uint32_t k = 0; k < update.count; ++k) {
-            descriptor_data& descriptor = heap_data.descriptors[offset + k];
-
+        if (heap == 0) continue;
+        ctx.heaps[heap].descriptors->Write(offset, update.count, [&](uint32_t k) {
+            descriptor_data descriptor{};
+            if (update.descriptors == nullptr) return descriptor;
             descriptor.type = update.type;
 
             switch (update.type) {
@@ -176,8 +170,11 @@ bool descriptor_tracking::on_update_descriptor_tables(device* device, uint32_t c
                 case descriptor_type::constant_buffer:
                 case descriptor_type::shader_storage_buffer:
                     descriptor.constant = static_cast<const buffer_range*>(update.descriptors)[k];
+                    break;
+                default: return descriptor_data{};
             }
-        }
+            return descriptor;
+        });
     }
 
     return false;
