@@ -1,8 +1,22 @@
-# REST Enhanced HDR diagnostics 3 (pre-release)
+# REST Enhanced HDR diagnostics 4 (pre-release)
 
-This test build follows the [build 2 results in issue #22](https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler/issues/22#issuecomment-6376383242). It corrects a descriptor-tracking gap and explains missing input coverage. It is **not a confirmed HDR fix**. The four-part file version remains the stable baseline (Modern 1.7.3.680 / Legacy 1.6.7.580); identify this build by **HDR diagnostics 3 (pre-release)** above the preview and the source commit in `BUILD-INFO.txt`.
+This test build follows the [build 2 results in issue #22](https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler/issues/22#issuecomment-6376383242). It corrects a descriptor-tracking gap and explains missing input coverage. It is **not a confirmed HDR fix**. The four-part file version remains the stable baseline (Modern 1.7.3.680 / Legacy 1.6.7.580); identify this build by **HDR diagnostics 4 (pre-release)** above the preview and the source commit in `BUILD-INFO.txt`.
 
 ## New in diagnostics 3
+
+### Activation correction in diagnostics 4
+
+Builds 1–3 had an older hard-coded override that forced descriptor-table tracking off at startup, even when the checkbox was on. Their reports used the configured value rather than the active registration mode. The build-3 flagged-table helper correction was present but its capture callback was not activated. This oversight was ours; the reporter supplied the requested sections correctly.
+
+Build 4 removes that override, honours the saved setting, and reports **configured**, **registered active**, **restart required**, plus observed update/copy/tracked-bind event counts. The Options panel also shows the active mode. Changes to Track descriptors require saving and restarting; the report uses the registered mode to decide whether input inspection is available.
+
+Before activating the dormant path, descriptor metadata copying was guarded: storage is sparse and mutex-protected, capped at 65,536 known entries per heap and 65,536 entries of work per update/copy. Unknown copies invalidate old destination metadata, partially observed source ranges remain unknown, and invalid spans do not index outside storage. High heap offsets do not allocate huge prefix vectors. Metadata omitted at limits appears as missing/partial coverage; GPU descriptors are not modified by this cache.
+
+Unlike build 3 in practice, this build activates the table tracking/copy callbacks when enabled. It can change CPU/memory overhead and descriptor-state capture/restoration. It remains a runtime test candidate. To return to handle-only tracking, disable Track descriptors, save and restart; to roll back fully, restore the backed-up add-on.
+
+The new integration test links the actual StateTracking.cpp and DescriptorTracking.cpp registration functions against a mock ReShade host and checks on/off callbacks, the public active-mode query and unregistration. This verifies production registration, not just snapshot helper behavior. It does not exercise a real GPU or guarantee Warframe HDR correctness.
+
+For the next test, first check the report says **registered active: true**, **restart required: false**. Copy the complete report for `0x7dcef337` / AFTER DRAW, native HDR, menu closed, manual target 0, Auto scene colour off. Keep global effects and tracking on, individual techniques unticked, tone-map clamping/flip off and Clear alpha on. The report already includes the coverage and input sections; no shader-count information or repeated multi-scene tests are needed initially.
 
 - Modern now captures both plain and flagged descriptor tables. ReShade exposes flagged tables for newer D3D12 root signatures; REST previously skipped them. Original GPU table handles are retained for restoration even when metadata is empty or partial. This intentionally improves state-tracking/restoration coverage, rather than only changing diagnostic text.
 - The input report lists root/table coverage: plain/flagged tables, cached entries, skipped unbounded/sampler ranges, missing/partial data and clipped ranges. Root constants are labelled separately and no longer count as resource-descriptor entries.

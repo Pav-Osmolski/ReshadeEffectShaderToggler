@@ -11,7 +11,7 @@
 using namespace reshade::api;
 using namespace StateTracking;
 
-bool state_tracking::track_descriptors = true;
+bool state_tracking::track_descriptors = false;
 
 void state_block::apply_descriptors_dx12_vulkan(command_list* cmd_list) const {
     uint32_t shader_stages_set = 0;
@@ -385,6 +385,7 @@ static void on_bind_descriptor_sets(command_list* cmd_list,
 
     auto& state_tracker = cmd_list->get_private_data<state_tracking>();
     const auto& descriptor_state = cmd_list->get_device()->get_private_data<descriptor_tracking>();
+    descriptor_state.tracked_binds.fetch_add(1, std::memory_order_relaxed);
     auto& [desc_layout, root_table] = state_tracker.root_tables[idx];
     auto& state_stages = state_tracker.root_table_stages[idx];
     auto& descriptor_buffer = state_tracker.descriptor_buffer[idx];
@@ -690,11 +691,9 @@ static void on_destroy_device(device* device) {
 }
 
 void state_tracking::register_events(bool track) {
-    // disable for now
-    track = false;
-
     track_descriptors = track;
     descriptor_tracking::register_events(track);
+    reshade::log::message(reshade::log::level::info, track ? "Descriptor tracking registered: active" : "Descriptor tracking registered: handles only");
 
     reshade::register_event<reshade::addon_event::init_command_list>(on_init_command_list);
     reshade::register_event<reshade::addon_event::destroy_command_list>(on_destroy_command_list);
@@ -752,4 +751,5 @@ void state_tracking::unregister_events() {
     reshade::unregister_event<reshade::addon_event::destroy_device>(on_destroy_device);
     reshade::unregister_event<reshade::addon_event::destroy_pipeline>(on_destroy_pipeline);
     // reshade::unregister_event<reshade::addon_event::destroy_resource_view>(on_destroy_resource_view);
+    track_descriptors = false;
 }
