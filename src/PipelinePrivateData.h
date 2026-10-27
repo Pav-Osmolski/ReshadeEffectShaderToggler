@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CDataFile.h"
+#include "ProducerTrace.h"
 #include "EffectData.h"
 #include "ToggleGroup.h"
 #include "reshade.hpp"
@@ -55,6 +56,7 @@ struct __declspec(novtable) ShaderData final {
 };
 
 struct __declspec(uuid("222F7169-3C09-40DB-9BC9-EC53842CE537")) CommandListDataContainer {
+    Rendering::ProducerTrace producerTrace;
     uint64_t commandQueue = 0;
     bool vulkanAutoInjectionActive = false;
     bool vulkanInsideRenderPass = false;
@@ -66,6 +68,7 @@ struct __declspec(uuid("222F7169-3C09-40DB-9BC9-EC53842CE537")) CommandListDataC
     ShaderData cs{ 2 };
 
     void Reset() {
+        producerTrace.Reset();
         ps.Reset();
         vs.Reset();
         cs.Reset();
@@ -201,6 +204,8 @@ struct __declspec(uuid("C63E95B1-4E2F-46D6-A276-E8B4612C069A")) DeviceDataContai
     std::mutex queueMutex;
     std::vector<reshade::api::command_queue*> queues;
     std::recursive_mutex previewMutex;
+    std::atomic_bool traceProducers{false};
+    std::atomic<uint64_t> producerGeneration{1};
     HuntPreview huntPreview;
     CustomShader customShader;
     ResouceManagerData resourceManagerData;

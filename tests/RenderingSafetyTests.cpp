@@ -2,6 +2,7 @@
 #include "PreviewInputDiagnostics.h"
 #include "DescriptorTableCapture.h"
 #include "DescriptorMetadata.h"
+#include "ProducerTrace.h"
 #include <stdexcept>
 
 static void require(bool condition) {
@@ -206,6 +207,29 @@ static void TestDescriptorMetadata() {
 }
 
 int main() {
+    { // No cross-generation or stale lifetime matches; enforce both work bounds.
+        Rendering::ProducerTrace trace;
+        trace.Sync(1);
+        require(trace.BeginDraw());
+        trace.Record(101, 0x1234, 0x5678, 2);
+        require(trace.Find(101) && trace.Find(101)->ps == 0x1234 && trace.Find(101)->ordinal == 1);
+        require(!trace.Find(102));
+        require(trace.BeginDraw()); trace.Record(101, 0xabcd, 0, 1);
+        require(trace.Find(101)->ps == 0xabcd && trace.Find(101)->ordinal == 2);
+        trace.Record(102, 3, 4, 1);
+        trace.Forget(102, "clear"); require(!trace.Find(102) && trace.Find(101));
+        Rendering::ProducerTrace other; other.Sync(1); require(!other.Find(101));
+        trace.Sync(2); require(!trace.Find(101));
+        require(trace.BeginDraw()); trace.Record(101, 1, 2, 0);
+        trace.Reset("copy"); require(!trace.Find(101));
+        for (size_t i = 1; i <= Rendering::ProducerTrace::capacity + 1; ++i) trace.Record(i, 1, 2, 0);
+        require(trace.clipped && !trace.Find(1));
+        trace.Reset();
+        for (uint64_t i = 0; i < Rendering::ProducerTrace::drawLimit; ++i) require(trace.BeginDraw());
+        trace.Record(101, 1, 2, 0);
+        require(!trace.BeginDraw() && trace.clipped && !trace.Find(101));
+    }
+
     TestDescriptorMetadata();
     TestDescriptorTables();
     TestPreviewInputs();
