@@ -35,6 +35,7 @@
 #include "ConstantManager.h"
 #include "KeyMonitor.h"
 #include "PipelinePrivateData.h"
+#include "ProducerTraceEvents.h"
 #include "RenderingBindingManager.h"
 #include "RenderingEffectManager.h"
 #include "RenderingManager.h"
@@ -195,6 +196,7 @@ static bool onCreateResource(device* device, resource_desc& desc, subresource_da
 }
 
 static void onInitResource(device* device, const resource_desc& desc, const subresource_data* initData, resource_usage usage, reshade::api::resource handle) {
+    (device->get_private_data<DeviceDataContainer>()).producerGeneration.fetch_add(1, std::memory_order_relaxed);
     resourceManager.OnInitResource(device, desc, initData, usage, handle);
 
     if (constantCopy != nullptr)
@@ -202,6 +204,7 @@ static void onInitResource(device* device, const resource_desc& desc, const subr
 }
 
 static void onDestroyResource(device* device, resource res) {
+    (device->get_private_data<DeviceDataContainer>()).producerGeneration.fetch_add(1, std::memory_order_relaxed);
     resourceManager.OnDestroyResource(device, res);
 
     if (constantCopy != nullptr)
@@ -652,7 +655,7 @@ static void displaySettings(effect_runtime* runtime) {
 }
 
 static void Init() {
-    reshade::log::message(reshade::log::level::info, "HDR diagnostics 4 (pre-release): read-only texture-input metadata; not a confirmed HDR fix.");
+    reshade::log::message(reshade::log::level::info, "HDR diagnostics 5 (pre-release): read-only texture-input metadata; not a confirmed HDR fix.");
     resourceManager.SetResourceShim(g_addonUIData.GetResourceShim());
     resourceManager.Init();
     constantManager.Init(g_addonUIData, groupResourceManager, &constantCopy, &constantHandler);
@@ -807,6 +810,7 @@ static bool onDraw(command_list* cmd_list, uint32_t vertex_count, uint32_t insta
         return true;
 
     CheckDrawCall(cmd_list, Rendering::MATCH_PS | Rendering::MATCH_VS);
+    ProducerDiagnostics::RecordDraw(cmd_list);
 
     return false;
 }
@@ -815,6 +819,7 @@ static bool onDispatch(command_list* cmd_list, uint32_t group_count_x, uint32_t 
     if (ShouldSuppressVulkanHuntedCall(cmd_list, Rendering::MATCH_CS))
         return true;
 
+    ProducerDiagnostics::Invalidate(cmd_list, "compute dispatch: earlier history discarded");
     CheckDrawCall(cmd_list, Rendering::MATCH_CS);
 
     return false;
@@ -831,6 +836,7 @@ static bool onDrawIndexed(command_list* cmd_list,
         return true;
 
     CheckDrawCall(cmd_list, Rendering::MATCH_PS | Rendering::MATCH_VS);
+    ProducerDiagnostics::RecordDraw(cmd_list);
 
     return false;
 }
@@ -838,6 +844,7 @@ static bool onDrawIndexed(command_list* cmd_list,
 static bool onDrawOrDispatchIndirect(command_list* cmd_list, indirect_command type, resource buffer, uint64_t offset, uint32_t draw_count, uint32_t stride) {
     switch (type) {
         case indirect_command::unknown:
+            ProducerDiagnostics::Invalidate(cmd_list, "unknown indirect operation: earlier history discarded");
             CheckDrawCall(cmd_list);
             break;
         case indirect_command::draw:
@@ -846,10 +853,12 @@ static bool onDrawOrDispatchIndirect(command_list* cmd_list, indirect_command ty
                 ShouldSuppressMarkedGraphicsCall(cmd_list, Rendering::MATCH_PS | Rendering::MATCH_VS))
                 return true;
             CheckDrawCall(cmd_list, Rendering::MATCH_PS | Rendering::MATCH_VS);
+            ProducerDiagnostics::RecordDraw(cmd_list);
             break;
         case indirect_command::dispatch:
             if (ShouldSuppressVulkanHuntedCall(cmd_list, Rendering::MATCH_CS))
                 return true;
+            ProducerDiagnostics::Invalidate(cmd_list, "indirect compute: earlier history discarded");
             CheckDrawCall(cmd_list, Rendering::MATCH_CS);
             break;
     }
@@ -899,6 +908,14 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID) {
             reshade::register_event<reshade::addon_event::init_command_list>(onInitCommandList);
             reshade::register_event<reshade::addon_event::destroy_command_list>(onDestroyCommandList);
             reshade::register_event<reshade::addon_event::reset_command_list>(onResetCommandList);
+            reshade::register_event<reshade::addon_event::copy_resource>(ProducerDiagnostics::copy_resource);
+            reshade::register_event<reshade::addon_event::copy_texture_region>(ProducerDiagnostics::copy_texture_region);
+            reshade::register_event<reshade::addon_event::copy_buffer_to_texture>(ProducerDiagnostics::copy_buffer_to_texture);
+            reshade::register_event<reshade::addon_event::resolve_texture_region>(ProducerDiagnostics::resolve_texture_region);
+            reshade::register_event<reshade::addon_event::clear_render_target_view>(ProducerDiagnostics::clear_render_target_view);
+            reshade::register_event<reshade::addon_event::clear_unordered_access_view_uint>(ProducerDiagnostics::clear_unordered_access_view_uint);
+            reshade::register_event<reshade::addon_event::clear_unordered_access_view_float>(ProducerDiagnostics::clear_unordered_access_view_float);
+            reshade::register_event<reshade::addon_event::execute_secondary_command_list>(ProducerDiagnostics::Secondary);
             reshade::register_event<reshade::addon_event::destroy_pipeline>(onDestroyPipeline);
             reshade::register_event<reshade::addon_event::reshade_overlay>(onReShadeOverlay);
             reshade::register_event<reshade::addon_event::reshade_present>(onReShadePresent);
@@ -944,6 +961,14 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID) {
             reshade::unregister_event<reshade::addon_event::init_command_list>(onInitCommandList);
             reshade::unregister_event<reshade::addon_event::destroy_command_list>(onDestroyCommandList);
             reshade::unregister_event<reshade::addon_event::reset_command_list>(onResetCommandList);
+            reshade::unregister_event<reshade::addon_event::copy_resource>(ProducerDiagnostics::copy_resource);
+            reshade::unregister_event<reshade::addon_event::copy_texture_region>(ProducerDiagnostics::copy_texture_region);
+            reshade::unregister_event<reshade::addon_event::copy_buffer_to_texture>(ProducerDiagnostics::copy_buffer_to_texture);
+            reshade::unregister_event<reshade::addon_event::resolve_texture_region>(ProducerDiagnostics::resolve_texture_region);
+            reshade::unregister_event<reshade::addon_event::clear_render_target_view>(ProducerDiagnostics::clear_render_target_view);
+            reshade::unregister_event<reshade::addon_event::clear_unordered_access_view_uint>(ProducerDiagnostics::clear_unordered_access_view_uint);
+            reshade::unregister_event<reshade::addon_event::clear_unordered_access_view_float>(ProducerDiagnostics::clear_unordered_access_view_float);
+            reshade::unregister_event<reshade::addon_event::execute_secondary_command_list>(ProducerDiagnostics::Secondary);
             reshade::unregister_event<reshade::addon_event::init_device>(onInitDevice);
             reshade::unregister_event<reshade::addon_event::destroy_device>(onDestroyDevice);
             reshade::unregister_event<reshade::addon_event::bind_render_targets_and_depth_stencil>(onBindRenderTargetsAndDepthStencil);

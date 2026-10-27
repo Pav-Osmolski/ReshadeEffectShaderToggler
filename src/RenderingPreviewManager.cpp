@@ -79,6 +79,14 @@ static void RecordPreviewDiagnostics(command_list* cmd_list, HuntPreview& previe
     if (roots.empty())
         preview.bound_inputs += "(no tracked root layout)\n";
     preview.bound_inputs += "Tracked sampled textures:\n";
+    auto& producerList = cmd_list->get_private_data<CommandListDataContainer>();
+    auto& producerDevice = device->get_private_data<DeviceDataContainer>();
+    auto& producerTrace = producerList.producerTrace;
+    const bool traceEnabled = device->get_api() == device_api::d3d12 && producerDevice.traceProducers.load(std::memory_order_relaxed);
+    producerTrace.Sync(producerDevice.producerGeneration.load(std::memory_order_relaxed));
+    preview.bound_inputs += std::format("Earlier colour-target trace enabled: {}; limit reached: {}; observed draws: {}\n",
+      traceEnabled, producerTrace.clipped, producerTrace.ordinal);
+    if (traceEnabled) preview.bound_inputs += "Trace scope: same command-list recording only; bound-target candidates, not verified pixel writes or GPU execution order.\n";
     size_t textureCount = 0;
     const auto scan = ScanPreviewInputs(state, stage, preview.input_scan_remaining,
       [&](uint32_t slot, uint32_t binding, resource_view view) {
@@ -95,6 +103,15 @@ static void RecordPreviewDiagnostics(command_list* cmd_list, HuntPreview& previe
           slot, binding, type, desc.texture.width, desc.texture.height, desc.texture.depth_or_layers,
           desc.texture.levels, desc.texture.samples, RenderingManager::FormatName(desc.texture.format),
           RenderingManager::FormatName(device->get_resource_view_desc(view).format), static_cast<uint32_t>(desc.usage), res.handle);
+        if (traceEnabled) {
+            if (const auto* producer = producerTrace.Find(res.handle)) {
+                preview.bound_inputs += std::format("  Earlier bound-target draw: PS 0x{:08x}; VS 0x{:08x}; RTV {}; recording draw {} (before selected draw).\n",
+                  producer->ps, producer->vs, producer->slot, producer->ordinal);
+            } else {
+                preview.bound_inputs += std::format("  No earlier bound-target draw in retained history ({}, {}).\n",
+                  producerTrace.reason, producerTrace.clipped ? "trace limit reached" : "may be another list, compute, copy or unobserved write");
+            }
+        }
       });
     if (textureCount == 0)
         preview.bound_inputs += "(no sampled textures found in this snapshot; absence is not proof of no shader inputs)\n";
