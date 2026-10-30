@@ -247,7 +247,7 @@ static void DisplayPreview(AddonImGui::AddonUIData& instance,
 
         DeviceDataContainer& deviceData = runtime->get_device()->get_private_data<DeviceDataContainer>();
         const auto& preview = deviceData.huntPreview;
-        ImGui::TextUnformatted("HDR diagnostics 5 (pre-release)");
+        ImGui::TextUnformatted("HDR diagnostics 6 (pre-release)");
         if (runtime->get_device()->get_api() == reshade::api::device_api::d3d12) {
             bool trace = deviceData.traceProducers.load(std::memory_order_relaxed);
             if (ImGui::Checkbox("Trace earlier colour-target draws (diagnostic)", &trace)) {
@@ -297,7 +297,7 @@ static void DisplayPreview(AddonImGui::AddonUIData& instance,
                   api == reshade::api::device_api::d3d10 ? "D3D10" : api == reshade::api::device_api::d3d11 ? "D3D11" :
                   api == reshade::api::device_api::d3d12 ? "D3D12" : api == reshade::api::device_api::vulkan ? "Vulkan" : "OpenGL";
                 const std::string diagnostics = std::format(
-                  "REST {} | HDR diagnostics 5 (pre-release)\nGroup: {}\nAPI: {}\n"
+                  "REST {} | HDR diagnostics 6 (pre-release)\nGroup: {}\nAPI: {}\n"
                   "Selected shader: 0x{:08x} ({})\nSelection: {}\nStatus: {}\n"
                   "Source: {}x{} | storage {} | view {} | 0x{:x}\n"
                   "Capture timing: {}\nCapture path: {}\nSource colour space: unknown (not inferred from format)\n"
