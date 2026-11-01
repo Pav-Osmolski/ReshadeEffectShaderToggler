@@ -1,5 +1,7 @@
 # REST Enhanced HDR diagnostics 6 (pre-release)
 
+> This page documents the published diagnostics-6 probe. For the separate development branches, use the [experimental backend guide](experimental-backend-support.md); its Modern scene-input path is a different test.
+
 This is a focused **scene-boundary placement test** for [issue #22](https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler/issues/22), based on the supplied GPU frame capture. It includes a simple tint-check technique and a specific shader to test. It does not introduce a new injection path or a general HDR conversion fix.
 
 File versions remain the stable baseline: Modern **1.7.3.680**, Legacy **1.6.7.580**. Identify this test package by **HDR diagnostics 6 (pre-release)** above the preview and its commit in `BUILD-INFO.txt`.
