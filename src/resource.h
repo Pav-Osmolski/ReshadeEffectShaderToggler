@@ -12,6 +12,7 @@
 #define SHADER_PREVIEW_COPY_PS_4_0 108
 #define SHADER_FULLSCREEN_VS_3_0 109
 #define SHADER_PREVIEW_COPY_PS_3_0 110
+#define SHADER_SCENE_COPY_PS_4_0 111
 
 // Next default values for new objects
 //

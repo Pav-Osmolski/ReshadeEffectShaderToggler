@@ -144,17 +144,13 @@ void RenderingShaderManager::InitShaders(reshade::api::device* device) {
 void RenderingShaderManager::DestroyShaders(reshade::api::device* device) {
     DeviceDataContainer& shader = *device->get_private_data<DeviceDataContainer>();
 
-    for (auto* cache : { &shader.customShader.copyFormatPipelines, &shader.customShader.alphaFormatPipelines }) {
+    for (auto* cache : { &shader.customShader.copyFormatPipelines, &shader.customShader.alphaFormatPipelines, &shader.customShader.sceneFormatPipelines }) {
         for (auto& [_, instance] : *cache) {
             if (instance.pipeline != 0) device->destroy_pipeline(instance.pipeline);
             if (instance.pipelineLayout != 0) device->destroy_pipeline_layout(instance.pipelineLayout);
             if (instance.pipelineSampler != 0) device->destroy_sampler(instance.pipelineSampler);
         }
         cache->clear();
-    }
-    if (shader.customShader.fullscreenQuadVertexBuffer != 0) {
-        device->destroy_resource(shader.customShader.fullscreenQuadVertexBuffer);
-        shader.customShader.fullscreenQuadVertexBuffer = { 0 };
     }
 
     if (shader.customShader.copyPipeline.pipeline != 0) {
@@ -186,6 +182,11 @@ void RenderingShaderManager::DestroyShaders(reshade::api::device* device) {
         device->destroy_sampler(shader.customShader.alphaPreservingCopyPipeline.pipelineSampler);
         shader.customShader.alphaPreservingCopyPipeline.pipelineSampler = { 0 };
     }
+    if (shader.customShader.fullscreenQuadVertexBuffer != 0) {
+        device->destroy_resource(shader.customShader.fullscreenQuadVertexBuffer);
+        shader.customShader.fullscreenQuadVertexBuffer = { 0 };
+    }
+
 }
 
 bool RenderingShaderManager::ApplyShader(command_list* cmd_list,
@@ -226,6 +227,22 @@ bool RenderingShaderManager::ApplyShader(command_list* cmd_list,
         cmd_list->draw(3, 1, 0, 0);
     }
     return true;
+}
+
+bool RenderingShaderManager::CopySceneInput(command_list* cmd, resource_view source, resource_view target, uint32_t width, uint32_t height) {
+    if (source == 0 || target == 0 || cmd->get_device()->get_api() != device_api::d3d12) return false;
+    auto* dev = cmd->get_device();
+    auto& data = *dev->get_private_data<DeviceDataContainer>();
+    const auto targetFormat = dev->get_resource_view_desc(target).format;
+    std::lock_guard lock(data.customShader.pipelineMutex);
+    auto& instance = data.customShader.sceneFormatPipelines[static_cast<uint32_t>(targetFormat)];
+    InitShader(dev, SHADER_SCENE_COPY_PS_4_0, SHADER_FULLSCREEN_VS_4_0,
+               instance.pipeline, instance.pipelineLayout, instance.pipelineSampler,
+               data.customShader.fullscreenQuadVertexBuffer, 0xF, targetFormat);
+    const bool rendered = ApplyShader(cmd, source, target, instance.pipeline, instance.pipelineLayout,
+                                      instance.pipelineSampler, data.customShader.fullscreenQuadVertexBuffer, width, height);
+    if (rendered) cmd->get_private_data<state_tracking>()->apply(cmd, true);
+    return rendered;
 }
 
 bool RenderingShaderManager::CopyResource(command_list* cmd_list, resource_view srv_src, resource_view rtv_dst, uint32_t width, uint32_t height) {

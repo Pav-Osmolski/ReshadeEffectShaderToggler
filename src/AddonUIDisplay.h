@@ -422,7 +422,7 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
 
     const reshade::api::device_api deviceApi = runtime->get_device()->get_api();
     const bool autoSceneColourSupported = ShaderToggler::IsAutoSceneColourSupported(deviceApi);
-    const bool supportsSRVwrite = deviceApi < reshade::api::device_api::d3d12;
+    const bool supportsSRVwrite = deviceApi <= reshade::api::device_api::d3d12;
 
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
     if (ImGui::BeginChild("RenderTargets", { 0, height / 1.5f }, true, ImGuiChildFlags_AlwaysAutoResize)) {
@@ -630,7 +630,7 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
             } else {
                 if (supportsSRVwrite) {
                     ImGui::TableNextColumn();
-                    ImGui::Text("Render destination");
+                    ImGui::TextUnformatted(deviceApi == reshade::api::device_api::d3d12 ? "Render destination (experimental SRV copy)" : "Render destination");
                     ImGui::TableNextColumn();
                     if (ImGui::BeginCombo("##Renderdestination", typeSelectedDestItem, ImGuiComboFlags_None)) {
                         for (int n = 0; n < IM_ARRAYSIZE(typeDestItems); n++) {
@@ -660,7 +660,10 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
                     ImGui::TableNextColumn();
                     ImGui::Text("Shader Stage");
                     ImGui::TableNextColumn();
-                    if (ImGui::BeginCombo("##RenderShaderStage", selectedStage, ImGuiComboFlags_None)) {
+                    if (deviceApi == reshade::api::device_api::d3d12) {
+                        selectedStageIndex = 0; selectedStage = stageItems[0];
+                        ImGui::TextUnformatted("Pixel (experimental scene input)");
+                    } else if (ImGui::BeginCombo("##RenderShaderStage", selectedStage, ImGuiComboFlags_None)) {
                         for (int n = 0; n < IM_ARRAYSIZE(stageItems); n++) {
                             const bool is_selected = (selectedStage == stageItems[n]);
                             if (ImGui::Selectable(stageItems[n], is_selected)) {
@@ -1945,7 +1948,7 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, reshade::api::eff
         for (const auto* group : toRemove) {
             instance.SignalToggleGroupRemoved(runtime, const_cast<ShaderToggler::ToggleGroup*>(group));
             const int id = group->getId();
-            std::erase_if(instance.GetToggleGroups(), [id](const auto& item) { return item.first == id; });
+            instance.RetireToggleGroup(id);
         }
 
         if (!toRemove.empty()) {

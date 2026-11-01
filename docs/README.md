@@ -8,6 +8,7 @@ Start with [Getting started](getting-started.md) for installation, upgrading and
 | Inject effects before later fog/UI or work with DLSS/upscaling | [Automatic Scene Colour](automatic-scene-colour.md) |
 | Understand HDR formats, preview colour and tone-map clamping | [HDR handling and validation](HDR.md) |
 | Diagnose missing effects, configuration problems or crashes | [Troubleshooting](troubleshooting.md) |
+| Test D3D12 scene-input redirection or D3D9 reset improvements | [Experimental backend support and fork audit](experimental-backend-support.md) |
 | Build or package locally | [Building](BUILDING.md) |
 | Maintain CI or publish a release | [Release process](RELEASING.md) |
 | Review changes and historical release notes | [Changelog](../CHANGELOG.md) and [release-note archive](releases/) |

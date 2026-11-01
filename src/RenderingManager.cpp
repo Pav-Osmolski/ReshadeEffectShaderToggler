@@ -1,5 +1,7 @@
 #include "RenderingManager.h"
 #include "PipelinePrivateData.h"
+#include "SceneInputPolicy.h"
+#include "SceneInput.h"
 
 using namespace Rendering;
 using namespace ShaderToggler;
@@ -371,6 +373,25 @@ const ResourceViewData RenderingManager::GetCurrentResourceView(command_list* cm
         active_data.format = v_desc.format;
     } else if (action & (MATCH_EFFECT | MATCH_PREVIEW) && !autoSceneColour &&
                group->getRenderToResourceViews()) {
+        if (device->get_api() == device_api::d3d12) {
+            if (commandListData.sceneInputTainted) return active_data;
+            RefreshSceneInputDescriptors(cmd_list);
+            // Scene input uses an exact pixel SRV. Never silently select a nearby
+            // table/descriptor or interpret a CBV/UAV payload as a texture view.
+            const uint32_t slot = group->getRenderSRVSlotIndex(), index = group->getRenderSRVDescriptorIndex();
+            if (!state_tracking::descriptor_tracking_enabled() || group->getRenderSRVShaderStage() != 0 ||
+                slot >= state.get_root_table_size_at(0) || index >= state.get_root_table_entry_size_at(0, slot)) return active_data;
+            const auto* input = state.get_descriptor_at(0, slot, index);
+            if (!input || input->type != descriptor_type::shader_resource_view || input->view == 0) return active_data;
+            if (!input->nativeSnapshot) return active_data;
+            const auto texture = input->nativeSnapshot->resource;
+            if (texture == 0) return active_data;
+            const auto view = input->nativeSnapshot->description;
+            const auto description = device->get_resource_desc(texture);
+            if (!IsSceneInputShape(description, view) ||
+                !ValidFormat(deviceData.current_runtime, description, group->getMatchSwapchainResolution())) return active_data;
+            return {texture, view.format};
+        }
         uint32_t stageIndex = std::min(static_cast<uint32_t>(2), group->getRenderSRVShaderStage());
 
         int32_t slot_size = static_cast<int32_t>(state.get_root_table_size_at(stageIndex));
@@ -423,6 +444,10 @@ void RenderingManager::QueueOrDequeue(command_list* cmd_list,
                                       uint64_t action) {
     for (auto it = queue.begin(); it != queue.end();) {
         auto& [name, data] = *it;
+        if (data.group == nullptr || data.group->isRetired()) { it = queue.erase(it); continue; }
+        if (cmd_list->get_device()->get_api() == device_api::d3d12 && (action & MATCH_EFFECT) &&
+            data.group->getRenderToResourceViews() && !data.group->isAutoSceneColourActive(device_api::d3d12))
+            deviceData.sceneInputAttempted = true;
         // Set views during draw call since we can be sure the correct ones are bound at that point
         if (!callLocation && data.resource == 0) {
             ResourceViewData active_data = GetCurrentResourceView(cmd_list, deviceData, data.group, commandListData, layoutIndex, action);
@@ -430,6 +455,12 @@ void RenderingManager::QueueOrDequeue(command_list* cmd_list,
             if (active_data.resource != 0) {
                 data.resource = active_data.resource;
                 data.format = active_data.format;
+            } else if (cmd_list->get_device()->get_api() == device_api::d3d12 && (action & MATCH_EFFECT) &&
+                       data.group->getRenderToResourceViews() && !data.group->isAutoSceneColourActive(device_api::d3d12)) {
+                data.group->setDebugAutoStatus("Scene input: exact pixel SRV unavailable; effects skipped");
+                name->rendered = true; // Never apply these effects over the UI as a fallback.
+                it = queue.erase(it);
+                continue;
             } else if (data.group->getRequeueAfterRTMatchingFailure()) {
                 // Leave loaded up in the effect/bind list and re-issue command on RT change
                 it++;

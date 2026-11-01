@@ -323,10 +323,8 @@ void RenderingPreviewManager::UpdatePreview(command_list* cmd_list, uint64_t cal
                 deviceData.huntPreview.status = "Preview unavailable: unsupported target topology";
                 return;
             }
-            if (device->get_api() == device_api::d3d12) {
-                const resource_usage initialUsage = !group.isAutoSceneColourActive(device_api::d3d12) && group.getRenderToResourceViews()
-                    ? resource_usage::shader_resource : resource_usage::render_target;
-                cmd_list->get_private_data<state_tracking>()->start_resource_barrier_tracking(active_target.resource, initialUsage);
+            if (device->get_api() == device_api::d3d12 && !group.getRenderToResourceViews()) {
+                cmd_list->get_private_data<state_tracking>()->start_resource_barrier_tracking(active_target.resource, resource_usage::render_target);
                 deviceData.huntPreview.tracked_command_list = cmd_list;
             }
 
@@ -374,6 +372,25 @@ void RenderingPreviewManager::UpdatePreview(command_list* cmd_list, uint64_t cal
     }
 
     const bool explicitStates = device->get_api() == device_api::d3d12;
+    if (explicitStates && group.getRenderToResourceViews() && !group.isAutoSceneColourActive(device_api::d3d12)) {
+        const auto* input = cmd_list->get_private_data<state_tracking>()->get_descriptor_at(
+            0, group.getRenderSRVSlotIndex(), group.getRenderSRVDescriptorIndex());
+        if (!input || !input->nativeSnapshot || group.getRenderSRVShaderStage() != 0) {
+            preview.status = "Scene input preview unavailable: exact pixel SRV snapshot missing";
+            return;
+        }
+        cmd_list->barrier(pong, resource_usage::shader_resource, resource_usage::render_target);
+        const bool copied = group.getClearPreviewAlpha()
+            ? shaderManager.CopyResource(cmd_list, input->nativeSnapshot->view, pongRtv, preview.width, preview.height)
+            : shaderManager.CopySceneInput(cmd_list, input->nativeSnapshot->view, pongRtv, preview.width, preview.height);
+        cmd_list->barrier(pong, resource_usage::render_target, resource_usage::shader_resource);
+        cmd_list->get_private_data<state_tracking>()->apply(cmd_list, true);
+        preview.capture_path = "Shader-sampled scene input (source unchanged)";
+        preview.capture_timing = "Before selected compositor draw";
+        preview.matched = copied;
+        preview.status = copied ? "Experimental scene input preview" : "Scene input preview copy unavailable";
+        return;
+    }
     resource_usage sourceUsage = resource_usage::render_target;
     if (explicitStates) {
         if (preview.tracked_command_list != cmd_list) {

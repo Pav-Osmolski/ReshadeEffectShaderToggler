@@ -9,9 +9,12 @@ Users who need ReShade 5.x should use the [`legacy/reshade-5.x`](https://github.
 
 Both 64-bit and 32-bit are first-class build targets. CI builds and validates both architectures, including PE machine type, version metadata and required add-on exports. Auto Scene Colour supports D3D10/D3D11/D3D12 and Vulkan through ReShade's generic API, with a Vulkan-specific native-staging blit path. Legacy game-specific hooks may remain architecture-specific; the FFXIV constant-copy hook is x64-only because its signatures target 64-bit game code.
 
+> **Experimental branch:** D3D12 scene-input redirection and D3D9 reset/surface improvements are under development here. See the [setup, limits and fork audit](docs/experimental-backend-support.md). These changes are not yet in the stable releases.
+
 ## Start here
 
 - [Getting started](docs/getting-started.md): installation, upgrading, first group and BG3 configurations.
+- [Experimental backend support](docs/experimental-backend-support.md): D3D12 private scene copies, D3D9 fixes and validation limits.
 - [Documentation index](docs/README.md): Auto Scene Colour, HDR, troubleshooting and building.
 - [Downloads](https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler/releases) and [changelog](CHANGELOG.md).
 
@@ -184,6 +187,8 @@ For example: `v1.7.3.680`.
 See [Release Process](docs/RELEASING.md) for the release checklist and packaging details.
 
 ## Credits
+
+- **[BadassBaboon](https://github.com/BadassBaboon)** and **[CrazyDaifu](https://github.com/CrazyDaifu)** — D3D9 surface/reset work and resource-lifetime fixes reviewed and adapted from the fork; see the [audit and source commits](docs/experimental-backend-support.md#fork-audit-and-attribution).
 
 - [alex / 4lex4nder](https://github.com/4lex4nder) - ReShade Effect Shader Toggler development.
 - **[DeViLhoOD](https://github.com/Pav-Osmolski)** - Automatic Scene Colour, Vulkan safe-boundary injection and previews, shader-hunting stability improvements, DLSS/upscaled rendering support, x86/x64 hardening, QoL workflow improvements, documentation and testing.

@@ -7,6 +7,7 @@
 
 #include "reshade.hpp"
 #include "DescriptorMetadata.h"
+#include "NativeDescriptorSnapshot.h"
 #include <memory>
 #include <atomic>
 #include <concurrent_unordered_map.h>
@@ -31,7 +32,10 @@ class __declspec(uuid("33319e83-387c-448e-881c-7e68fc2e52c4")) descriptor_tracki
         push_constant = 8
     };
 
+    Rendering::NativeDescriptorSnapshots nativeSnapshots;
+
     struct descriptor_data {
+        std::shared_ptr<Rendering::NativeDescriptorSnapshot> nativeSnapshot;
         // Sparse pushed bindings must not replay unobserved entries as null samplers.
         reshade::api::descriptor_type type = static_cast<reshade::api::descriptor_type>(UINT32_MAX);
         reshade::api::sampler_with_resource_view sampler_and_view;
@@ -71,6 +75,7 @@ class __declspec(uuid("33319e83-387c-448e-881c-7e68fc2e52c4")) descriptor_tracki
     /// <summary>
     /// Gets the description that was used to create the specified pipeline layout parameter.
     /// </summary>
+    uint32_t get_pipeline_layout_param_count(reshade::api::pipeline_layout layout) const;
     reshade::api::pipeline_layout_param get_pipeline_layout_param(reshade::api::pipeline_layout layout, uint32_t param) const;
 
   private:

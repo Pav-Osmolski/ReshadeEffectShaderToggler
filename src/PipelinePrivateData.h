@@ -11,6 +11,7 @@
 #include <tuple>
 #include <unordered_map>
 #include <vector>
+namespace Rendering { struct SceneInputLease; class SceneInputPool; }
 
 struct __declspec(novtable) ResourceRenderData final {
     constexpr ResourceRenderData()
@@ -63,11 +64,18 @@ struct __declspec(uuid("222F7169-3C09-40DB-9BC9-EC53842CE537")) CommandListDataC
     bool vulkanRenderPassEndPending = false;
     bool vulkanRenderPassSuspends = false;
     bool d3d12InsideRenderPass = false;
+    std::vector<std::shared_ptr<Rendering::SceneInputLease>> sceneInputLeases;
+    std::shared_ptr<Rendering::SceneInputLease> sceneInputPending;
+    bool sceneInputPatched = false;
+    bool sceneInputAllowed = false;
+    bool sceneInputTainted = false;
     ShaderData ps{ 0 };
     ShaderData vs{ 1 };
     ShaderData cs{ 2 };
 
     void Reset() {
+        sceneInputTainted = false;
+        sceneInputAllowed = false;
         producerTrace.Reset();
         ps.Reset();
         vs.Reset();
@@ -168,6 +176,7 @@ struct __declspec(novtable) CustomShaderInstance final {
 struct __declspec(novtable) CustomShader final {
     CustomShaderInstance copyPipeline;
     CustomShaderInstance alphaPreservingCopyPipeline;
+    std::unordered_map<uint32_t, CustomShaderInstance> sceneFormatPipelines;
     std::unordered_map<uint32_t, CustomShaderInstance> copyFormatPipelines;
     std::unordered_map<uint32_t, CustomShaderInstance> alphaFormatPipelines;
     std::mutex pipelineMutex;
@@ -191,6 +200,10 @@ struct __declspec(novtable) BindingManagerData final {
 };
 
 struct __declspec(uuid("C63E95B1-4E2F-46D6-A276-E8B4612C069A")) DeviceDataContainer {
+    std::shared_ptr<Rendering::SceneInputPool> sceneInputPool;
+    std::atomic_bool sceneInputAttempted{false};
+    std::mutex scenePipelineMutex;
+    std::unordered_set<uint64_t> classicGraphicsPipelines;
     reshade::api::effect_runtime* current_runtime = nullptr;
     std::atomic_bool rendered_effects = false;
     std::shared_mutex binding_mutex;

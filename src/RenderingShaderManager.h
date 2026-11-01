@@ -11,6 +11,8 @@ class __declspec(novtable) RenderingShaderManager final {
     void InitShaders(reshade::api::device* device);
     void DestroyShaders(reshade::api::device* device);
 
+    bool CopySceneInput(reshade::api::command_list*, reshade::api::resource_view source,
+                        reshade::api::resource_view target, uint32_t width, uint32_t height);
     bool CopyResource(reshade::api::command_list* cmd_list,
                       reshade::api::resource_view srv_src,
                       reshade::api::resource_view rtv_dst,

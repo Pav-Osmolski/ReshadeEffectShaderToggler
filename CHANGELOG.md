@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased — experimental backend support
+
+- Add opt-in D3D12 pixel scene-input processing using private, RGBA-preserving textures and descriptor tables; retain CPU descriptor snapshots and fence GPU resource reuse. Unsupported cases skip without final-frame effect fallback.
+- Adapt D3D9 surface-target and pre-Reset cleanup fixes from BadassBaboon/CrazyDaifu, release views before textures, and scope typed view caches by device.
+- Retain removed group objects while command-list queues may reference them; skip retired work. Evaluate PS/VS/CS effect queues independently.
+- Document setup, explicit backend limits, fork decisions and required game testing in the [experimental guide](docs/experimental-backend-support.md). These changes are not a stable compatibility claim.
+
+
 ## v1.7.3.680 — 2026-10-19
 
 - Add a documentation index and installation, troubleshooting and local-build guides.

@@ -1,4 +1,5 @@
 #pragma once
+#include "SceneInput.h"
 #include "PipelinePrivateData.h"
 #include "StateTracking.h"
 

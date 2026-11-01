@@ -113,6 +113,7 @@ LICENSE_IMGUI           RCDATA                  "..\\deps\\reshade\\deps\\imgui\
 
 SHADER_FULLSCREEN_VS_4_0 RCDATA                  "shader\\fullscreen_vs_4_0.cso"
 
+SHADER_SCENE_COPY_PS_4_0 RCDATA "shader\\scene_copy_ps_4_0.cso"
 SHADER_PREVIEW_COPY_PS_4_0 RCDATA                  "shader\\preview_copy_ps_4_0.cso"
 
 SHADER_FULLSCREEN_VS_3_0 RCDATA                  "shader\\fullscreen_vs_3_0.cso"

@@ -35,7 +35,8 @@ class __declspec(novtable) RenderingEffectManager final {
                         std::vector<EffectData*>& removalList,
                         const std::unordered_set<EffectData*>& toRenderNames,
                         bool vulkanSafeBoundary = false,
-                        const std::unordered_map<uint64_t, reshade::api::resource_usage>* allowedVulkanTargets = nullptr);
+                        const std::unordered_map<uint64_t, reshade::api::resource_usage>* allowedVulkanTargets = nullptr,
+                        const std::shared_ptr<GlobalResourceView>& sceneCopyView = {});
 
     void _RenderDeferredVulkanAutoEffects(
       reshade::api::command_list* cmd_list,

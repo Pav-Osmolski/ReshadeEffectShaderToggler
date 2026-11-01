@@ -2,6 +2,7 @@
 #include "RenderingSafety.h"
 #include "StateTracking.h"
 #include "Util.h"
+#include "SceneInput.h"
 
 using namespace Rendering;
 using namespace ShaderToggler;
@@ -60,7 +61,8 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
                                             vector<EffectData*>& removalList,
                                             const unordered_set<EffectData*>& toRenderNames,
                                             bool vulkanSafeBoundary,
-                                            const unordered_map<uint64_t, resource_usage>* allowedVulkanTargets) {
+                                            const unordered_map<uint64_t, resource_usage>* allowedVulkanTargets,
+                                            const shared_ptr<GlobalResourceView>& sceneCopyView) {
     bool rendered = false;
     CommandListDataContainer& cmdData = *cmd_list->get_private_data<CommandListDataContainer>();
     effect_runtime* runtime = deviceData.current_runtime;
@@ -70,7 +72,7 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
     for (const auto& aTech : runtimeData.allSortedTechniques) {
         const auto& sTech = techniquesToRender.find(aTech);
 
-        if (sTech == techniquesToRender.end()) {
+        if (sTech == techniquesToRender.end() || sTech->second.group == nullptr || sTech->second.group->isRetired()) {
             continue;
         }
 
@@ -88,20 +90,57 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
         const auto& group = tech.first;
         const auto& [effectList, active_resource] = tech.second;
 
-        if (active_resource.resource == 0) {
+        const bool sceneInput = cmd_list->get_device()->get_api() == device_api::d3d12 &&
+                                group->getRenderToResourceViews() && !group->isAutoSceneColourActive(device_api::d3d12);
+        if (sceneInput && !sceneCopyView) {
+            // Claim selected techniques even on failure: a skipped scene input
+            // must never fall back onto the final frame and tint its UI.
+            auto suppressFallback = [&] {
+                for (auto* effect : effectList) { effect->rendered = true; removalList.push_back(effect); }
+            };
+            if (active_resource.resource == 0 || group->getRenderSRVShaderStage() != 0) {
+                group->setDebugAutoStatus("Scene input: exact pixel SRV unavailable"); suppressFallback(); continue;
+            }
+            resource_view source = {0}; const char* status = nullptr;
+            auto lease = PrepareSceneInput(cmd_list, group->getRenderSRVSlotIndex(), group->getRenderSRVDescriptorIndex(), source, status);
+            group->setDebugAutoStatus(status);
+            if (!lease) { suppressFallback(); continue; }
+            if (lease->shaderReadable)
+                cmd_list->barrier(lease->texture, resource_usage::shader_resource, resource_usage::render_target);
+            lease->shaderReadable = false;
+            if (!shaderManager.CopySceneInput(cmd_list, source, lease->views->rtv, lease->width, lease->height)) {
+                group->setDebugAutoStatus("Scene input: copy shader unavailable"); suppressFallback(); continue;
+            }
+            effect_queue copiedQueue;
+            unordered_set<EffectData*> copiedNames;
+            for (auto* effect : effectList) {
+                copiedQueue.emplace(effect, ResourceRenderData{group, CALL_DRAW, lease->texture, lease->format});
+                copiedNames.insert(effect);
+            }
+            const bool copied = _RenderEffects(cmd_list, deviceData, runtimeData, copiedQueue, removalList,
+                                               copiedNames, false, nullptr, lease->views);
+            cmd_list->barrier(lease->texture, resource_usage::render_target, resource_usage::shader_resource);
+            lease->shaderReadable = true;
+            if (copied) {
+                cmdData.sceneInputPending = lease;
+                group->setDebugAutoStatus("Experimental scene input: private copy supplied to selected draw");
+                rendered = true;
+            } else group->setDebugAutoStatus("Scene input: effects skipped");
+            suppressFallback();
             continue;
         }
+        if (active_resource.resource == 0) continue;
 
         resource_view view_non_srgb = {};
         resource_view view_srgb = {};
         resource_view group_view = {};
         resource_desc desc = cmd_list->get_device()->get_resource_desc(active_resource.resource);
-        if (desc.type != resource_type::texture_2d || desc.texture.samples != 1 || desc.texture.depth_or_layers != 1) {
+        if (!IsColorTargetType(cmd_list->get_device()->get_api(), desc.type) || desc.texture.samples != 1 || desc.texture.depth_or_layers != 1) {
             group->setDebugAutoStatus("Unsupported effect target topology");
             continue;
         }
         GroupResource& groupResource = group->GetGroupResource(GroupResourceType::RESOURCE_ALPHA);
-        const shared_ptr<GlobalResourceView>& view = resourceManager.GetResourceView(runtime->get_device(), active_resource);
+        const shared_ptr<GlobalResourceView>& view = sceneCopyView ? sceneCopyView : resourceManager.GetResourceView(runtime->get_device(), active_resource);
         bool copyPreserveAlpha = false;
         resource alphaCopyResource = {};
 
@@ -114,7 +153,7 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
 
         const device_api deviceApi = cmd_list->get_device()->get_api();
         const bool autoSceneColour = group->isAutoSceneColourActive(deviceApi);
-        const bool preserveTargetAlpha = group->getPreserveAlpha() && !autoSceneColour && SupportsShaderCopy(deviceApi);
+        const bool preserveTargetAlpha = group->getPreserveAlpha() && !sceneCopyView && !autoSceneColour && SupportsShaderCopy(deviceApi);
         const bool wantsNativeStaging =
           autoSceneColour &&
           runtimeWidth > 0 && runtimeHeight > 0 &&
@@ -278,7 +317,7 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
         }
 
         const bool transitionManualSRV =
-          !autoSceneColour && group->getRenderToResourceViews() &&
+          !sceneCopyView && !autoSceneColour && group->getRenderToResourceViews() &&
           cmd_list->get_device()->get_api() == device_api::d3d12 &&
           !useNativeStaging;
 
@@ -576,8 +615,21 @@ void RenderingEffectManager::RenderEffects(command_list* cmd_list, uint64_t call
     CommandListDataContainer& commandListData = *cmd_list->get_private_data<CommandListDataContainer>();
     DeviceDataContainer& deviceData = *device->get_private_data<DeviceDataContainer>();
 
-    if (device->get_api() == device_api::d3d12 && commandListData.d3d12InsideRenderPass)
+    if (device->get_api() == device_api::d3d12 && commandListData.d3d12InsideRenderPass) {
+        auto suppress = [&](ShaderData& stage, uint64_t mask) {
+            if (!(invocation & mask)) return;
+            for (auto& [effect, data] : stage.techniquesToRender)
+                if (data.group && data.group->getRenderToResourceViews() && !data.group->isAutoSceneColourActive(device_api::d3d12)) {
+                    effect->rendered = true;
+                    deviceData.sceneInputAttempted = true;
+                    data.group->setDebugAutoStatus("Scene input: render passes are unsupported; effects skipped");
+                }
+        };
+        suppress(commandListData.ps, MATCH_EFFECT_PS);
+        suppress(commandListData.vs, MATCH_EFFECT_VS);
+        suppress(commandListData.cs, MATCH_EFFECT_CS);
         return;
+    }
 
     // Remove call location from queue
     commandListData.commandQueue &= ~(invocation << (callLocation * MATCH_DELIMITER));
@@ -625,12 +677,9 @@ void RenderingEffectManager::RenderEffects(command_list* cmd_list, uint64_t call
     }
 
     shared_lock<shared_mutex> techLock(runtimeData.technique_mutex);
-    rendered =
-      (psToRenderNames.size() > 0) &&
-        _RenderEffects(cmd_list, deviceData, runtimeData, commandListData.ps.techniquesToRender, psRemovalList, psToRenderNames) ||
-      (vsToRenderNames.size() > 0) &&
-        _RenderEffects(cmd_list, deviceData, runtimeData, commandListData.vs.techniquesToRender, vsRemovalList, vsToRenderNames) ||
-      (csToRenderNames.size() > 0) && _RenderEffects(cmd_list, deviceData, runtimeData, commandListData.cs.techniquesToRender, csRemovalList, csToRenderNames);
+    if (!psToRenderNames.empty()) rendered |= _RenderEffects(cmd_list, deviceData, runtimeData, commandListData.ps.techniquesToRender, psRemovalList, psToRenderNames);
+    if (!vsToRenderNames.empty()) rendered |= _RenderEffects(cmd_list, deviceData, runtimeData, commandListData.vs.techniquesToRender, vsRemovalList, vsToRenderNames);
+    if (!csToRenderNames.empty()) rendered |= _RenderEffects(cmd_list, deviceData, runtimeData, commandListData.cs.techniquesToRender, csRemovalList, csToRenderNames);
     techLock.unlock();
 
     for (auto& g : psRemovalList) {

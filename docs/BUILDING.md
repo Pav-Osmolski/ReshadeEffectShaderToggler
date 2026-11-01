@@ -10,6 +10,10 @@
 
 Modern and Legacy use different pinned ReShade SDKs. Check out the intended maintenance branch before building; do not update its ReShade submodule to upstream HEAD as a routine build step.
 
+## Experimental branches
+
+`feature/scene-input-and-backend-support` and its Legacy counterpart use their existing pinned SDKs and the same build/package commands. The new RGBA-preserving D3D12 shader is compiled and embedded by the project for both architectures; do not distribute an old binary with only the new guide. The shared package manifest already includes `docs/`. Use one manual full-build workflow per final branch revision, then verify the source identity in its artifacts. See the [experimental validation requirements](experimental-backend-support.md#before-a-stable-release).
+
 ## Build both architectures
 
 Clone this repository, enter it, then initialize pinned dependencies:

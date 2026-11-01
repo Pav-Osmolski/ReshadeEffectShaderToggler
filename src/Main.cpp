@@ -38,6 +38,8 @@
 #include "ProducerTraceEvents.h"
 #include "RenderingBindingManager.h"
 #include "RenderingEffectManager.h"
+#include "SceneInput.h"
+#include "ClassicShader.h"
 #include "RenderingManager.h"
 #include "RenderingPreviewManager.h"
 #include "RenderingQueueManager.h"
@@ -125,6 +127,7 @@ static void onInitDevice(device* device) {
 static void onDestroyDevice(device* device) {
     DeviceDataContainer& data = *device->get_private_data<DeviceDataContainer>();
 
+    Rendering::DisposeSceneInputs(device);
     groupResourceManager.DisposeGroupBuffers(device, g_addonUIData.GetToggleGroups());
     renderingBindingManager.DisposeTextureBindings(device, g_addonUIData.GetToggleGroups());
     resourceManager.OnDestroyDevice(device);
@@ -140,6 +143,7 @@ static void onInitCommandQueue(command_queue* queue) {
 }
 
 static void onDestroyCommandQueue(command_queue* queue) {
+    if (queue->get_device()->get_private_data<DeviceDataContainer>()->sceneInputPool) queue->wait_idle();
     auto& data = *queue->get_device()->get_private_data<DeviceDataContainer>();
     std::lock_guard lock(data.queueMutex);
     std::erase(data.queues, queue);
@@ -150,6 +154,7 @@ static void onInitCommandList(command_list* commandList) {
 }
 
 static void onDestroyCommandList(command_list* commandList) {
+    Rendering::RetireSceneInputs(commandList);
     auto& previewData = *commandList->get_device()->get_private_data<DeviceDataContainer>();
     std::lock_guard previewLock(previewData.previewMutex);
     auto& preview = previewData.huntPreview;
@@ -165,6 +170,7 @@ static void onDestroyCommandList(command_list* commandList) {
 }
 
 static void onResetCommandList(command_list* commandList) {
+    Rendering::RetireSceneInputs(commandList);
     auto& previewData = *commandList->get_device()->get_private_data<DeviceDataContainer>();
     std::lock_guard previewLock(previewData.previewMutex);
     auto& preview = previewData.huntPreview;
@@ -292,7 +298,20 @@ static void onInitEffectRuntime(effect_runtime* runtime) {
 static void onDestroyEffectRuntime(effect_runtime* runtime) {
     DeviceDataContainer& data = *runtime->get_device()->get_private_data<DeviceDataContainer>();
 
-    renderingBindingManager.DisposeTextureBindings(runtime->get_device(), g_addonUIData.GetToggleGroups());
+    device* dev = runtime->get_device();
+    const bool otherRuntimeOnDevice = std::any_of(runtimes.begin(), runtimes.end(), [=](effect_runtime* other) {
+        return other != runtime && other->get_device() == dev;
+    });
+    if (!otherRuntimeOnDevice) {
+        Rendering::ResourceManager::SynchronizeGpu(runtime);
+        renderingBindingManager.DisposeTextureBindings(dev, g_addonUIData.GetToggleGroups());
+        if (dev->get_api() == device_api::d3d9) {
+            // Adapted from the CrazyDaifu/BadassBaboon D3D9 reset fixes.
+            groupResourceManager.DisposeGroupBuffers(dev, g_addonUIData.GetToggleGroups());
+            resourceManager.OnDestroyDevice(dev, true);
+            renderingShaderManager.DestroyShaders(dev);
+        }
+    }
 
     // Remove runtime from stack
     for (auto it = runtimes.begin(); it != runtimes.end();) {
@@ -306,8 +325,11 @@ static void onDestroyEffectRuntime(effect_runtime* runtime) {
 
     // Pick the runtime on top of our stack if there are any
     if (runtime == data.current_runtime) {
-        if (runtimes.size() > 0) {
-            data.current_runtime = runtimes[runtimes.size() - 1];
+        const auto replacement = std::find_if(runtimes.rbegin(), runtimes.rend(), [=](effect_runtime* other) {
+            return other->get_device() == dev;
+        });
+        if (replacement != runtimes.rend()) {
+            data.current_runtime = *replacement;
 
             if (constantHandler != nullptr) {
                 constantHandler->ReloadConstantVariables(data.current_runtime);
@@ -325,6 +347,27 @@ static void onDestroyEffectRuntime(effect_runtime* runtime) {
 }
 
 static void onInitPipeline(device* device, pipeline_layout, uint32_t subobjectCount, const pipeline_subobject* subobjects, pipeline pipelineHandle) {
+    if (device->get_api() == device_api::d3d12) {
+        bool classic = true, pixel = false;
+        for (uint32_t i = 0; i < subobjectCount; ++i) {
+            switch (subobjects[i].type) {
+                case pipeline_subobject_type::pixel_shader: pixel = true; [[fallthrough]];
+                case pipeline_subobject_type::vertex_shader:
+                case pipeline_subobject_type::geometry_shader:
+                case pipeline_subobject_type::hull_shader:
+                case pipeline_subobject_type::domain_shader: {
+                    if (subobjects[i].count != 1 || subobjects[i].data == nullptr) { classic = false; break; }
+                    const auto& code = *static_cast<const shader_desc*>(subobjects[i].data);
+                    classic &= Rendering::IsClassicDxbc(code.code, code.code_size);
+                    break;
+                }
+                default: break;
+            }
+        }
+        auto& data = *device->get_private_data<DeviceDataContainer>();
+        std::lock_guard lock(data.scenePipelineMutex);
+        if (pixel && classic) data.classicGraphicsPipelines.insert(pipelineHandle.handle);
+    }
     // shader has been created, we will now create a hash and store it with the handle we got.
     for (uint32_t i = 0; i < subobjectCount; ++i) {
         switch (subobjects[i].type) {
@@ -342,12 +385,19 @@ static void onInitPipeline(device* device, pipeline_layout, uint32_t subobjectCo
 }
 
 static void onDestroyPipeline(device* device, pipeline pipelineHandle) {
+    {
+        auto& data = *device->get_private_data<DeviceDataContainer>();
+        std::lock_guard lock(data.scenePipelineMutex);
+        data.classicGraphicsPipelines.erase(pipelineHandle.handle);
+    }
     g_pixelShaderManager.removeHandle(pipelineHandle.handle);
     g_vertexShaderManager.removeHandle(pipelineHandle.handle);
     g_computeShaderManager.removeHandle(pipelineHandle.handle);
 }
 
 static void onBindPipeline(command_list* commandList, pipeline_stage stages, pipeline pipelineHandle) {
+    if (commandList != nullptr)
+        Rendering::RestoreSceneInput(commandList, static_cast<uint32_t>(stages & (pipeline_stage::compute_shader | pipeline_stage::ray_tracing_shader)) == 0);
     if (nullptr == commandList ||
         !((uint32_t)(stages & pipeline_stage::pixel_shader) || (uint32_t)(stages & pipeline_stage::vertex_shader) ||
           (uint32_t)(stages & pipeline_stage::compute_shader))) {
@@ -616,6 +666,10 @@ static void onPresent(command_queue* queue,
 
     if (queue == runtime->get_command_queue()) {
         if (runtime->get_effects_state()) {
+            if (deviceData.sceneInputAttempted && !deviceData.rendered_effects) {
+                runtime->render_effects(queue->get_immediate_command_list(), resource_view{0}, resource_view{0});
+                deviceData.rendered_effects = true;
+            }
             renderingEffectManager.RenderRemainingEffects(runtime);
         }
     }
@@ -637,6 +691,7 @@ static void onReShadePresent(effect_runtime* runtime) {
     }
 
     deviceData.rendered_effects = false;
+    deviceData.sceneInputAttempted = false;
 
     keyMonitor.PollKeyStates(runtime);
 
@@ -834,17 +889,22 @@ static bool ShouldSuppressVulkanHuntedCall(command_list* cmd_list, uint64_t matc
 }
 
 static bool onDraw(command_list* cmd_list, uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance) {
+    Rendering::RestoreSceneInput(cmd_list);
     if (ShouldSuppressVulkanHuntedCall(cmd_list, Rendering::MATCH_PS | Rendering::MATCH_VS) ||
         ShouldSuppressMarkedGraphicsCall(cmd_list, Rendering::MATCH_PS | Rendering::MATCH_VS))
         return true;
 
+    cmd_list->get_private_data<CommandListDataContainer>()->sceneInputAllowed = true;
     CheckDrawCall(cmd_list, Rendering::MATCH_PS | Rendering::MATCH_VS);
     ProducerDiagnostics::RecordDraw(cmd_list);
+    Rendering::BindSceneInput(cmd_list);
+    cmd_list->get_private_data<CommandListDataContainer>()->sceneInputAllowed = false;
 
     return false;
 }
 
 static bool onDispatch(command_list* cmd_list, uint32_t group_count_x, uint32_t group_count_y, uint32_t group_count_z) {
+    Rendering::RestoreSceneInput(cmd_list, false);
     if (ShouldSuppressVulkanHuntedCall(cmd_list, Rendering::MATCH_CS))
         return true;
 
@@ -860,17 +920,22 @@ static bool onDrawIndexed(command_list* cmd_list,
                           uint32_t first_index,
                           int32_t vertex_offset,
                           uint32_t first_instance) {
+    Rendering::RestoreSceneInput(cmd_list);
     if (ShouldSuppressVulkanHuntedCall(cmd_list, Rendering::MATCH_PS | Rendering::MATCH_VS) ||
         ShouldSuppressMarkedGraphicsCall(cmd_list, Rendering::MATCH_PS | Rendering::MATCH_VS))
         return true;
 
+    cmd_list->get_private_data<CommandListDataContainer>()->sceneInputAllowed = true;
     CheckDrawCall(cmd_list, Rendering::MATCH_PS | Rendering::MATCH_VS);
     ProducerDiagnostics::RecordDraw(cmd_list);
+    Rendering::BindSceneInput(cmd_list);
+    cmd_list->get_private_data<CommandListDataContainer>()->sceneInputAllowed = false;
 
     return false;
 }
 
 static bool onDrawOrDispatchIndirect(command_list* cmd_list, indirect_command type, resource buffer, uint64_t offset, uint32_t draw_count, uint32_t stride) {
+    Rendering::RestoreSceneInput(cmd_list, type != indirect_command::dispatch);
     switch (type) {
         case indirect_command::unknown:
             ProducerDiagnostics::Invalidate(cmd_list, "unknown indirect operation: earlier history discarded");
@@ -892,6 +957,7 @@ static bool onDrawOrDispatchIndirect(command_list* cmd_list, indirect_command ty
             break;
     }
 
+    Rendering::BindSceneInput(cmd_list);
     return false;
 }
 
@@ -945,6 +1011,9 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID) {
             reshade::register_event<reshade::addon_event::clear_unordered_access_view_uint>(ProducerDiagnostics::clear_unordered_access_view_uint);
             reshade::register_event<reshade::addon_event::clear_unordered_access_view_float>(ProducerDiagnostics::clear_unordered_access_view_float);
             reshade::register_event<reshade::addon_event::execute_secondary_command_list>(ProducerDiagnostics::Secondary);
+            reshade::register_event<reshade::addon_event::execute_secondary_command_list>(Rendering::SceneInputSecondary);
+            reshade::register_event<reshade::addon_event::dispatch_mesh>(Rendering::SceneInputMesh);
+            reshade::register_event<reshade::addon_event::dispatch_rays>(Rendering::SceneInputRays);
             reshade::register_event<reshade::addon_event::destroy_pipeline>(onDestroyPipeline);
             reshade::register_event<reshade::addon_event::reshade_overlay>(onReShadeOverlay);
             reshade::register_event<reshade::addon_event::reshade_present>(onReShadePresent);
@@ -998,6 +1067,9 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID) {
             reshade::unregister_event<reshade::addon_event::clear_unordered_access_view_uint>(ProducerDiagnostics::clear_unordered_access_view_uint);
             reshade::unregister_event<reshade::addon_event::clear_unordered_access_view_float>(ProducerDiagnostics::clear_unordered_access_view_float);
             reshade::unregister_event<reshade::addon_event::execute_secondary_command_list>(ProducerDiagnostics::Secondary);
+            reshade::unregister_event<reshade::addon_event::execute_secondary_command_list>(Rendering::SceneInputSecondary);
+            reshade::unregister_event<reshade::addon_event::dispatch_mesh>(Rendering::SceneInputMesh);
+            reshade::unregister_event<reshade::addon_event::dispatch_rays>(Rendering::SceneInputRays);
             reshade::unregister_event<reshade::addon_event::init_device>(onInitDevice);
             reshade::unregister_event<reshade::addon_event::destroy_device>(onDestroyDevice);
             reshade::unregister_event<reshade::addon_event::bind_render_targets_and_depth_stencil>(onBindRenderTargetsAndDepthStencil);

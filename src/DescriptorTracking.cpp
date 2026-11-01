@@ -64,6 +64,11 @@ bool descriptor_tracking::set_all_descriptors(reshade::api::descriptor_heap heap
     return complete;
 }
 
+uint32_t descriptor_tracking::get_pipeline_layout_param_count(pipeline_layout layout) const {
+    const auto it = layouts.find(layout);
+    return it == layouts.end() ? 0 : static_cast<uint32_t>(it->second.params.size());
+}
+
 pipeline_layout_param descriptor_tracking::get_pipeline_layout_param(pipeline_layout layout, uint32_t param) const {
     const auto it = layouts.find(layout);
     if (it == layouts.end() || param >= it->second.params.size())
@@ -163,9 +168,12 @@ bool descriptor_tracking::on_update_descriptor_tables(device* device, uint32_t c
                     descriptor.view = descriptor.sampler_and_view.view;
                     descriptor.sampler = descriptor.sampler_and_view.sampler;
                     break;
+                case descriptor_type::buffer_shader_resource_view:
+                case descriptor_type::buffer_unordered_access_view:
                 case descriptor_type::shader_resource_view:
                 case descriptor_type::unordered_access_view:
                     descriptor.view = static_cast<const resource_view*>(update.descriptors)[k];
+                    descriptor.nativeSnapshot = ctx.nativeSnapshots.Capture(device, heap, descriptor.view);
                     break;
                 case descriptor_type::constant_buffer:
                 case descriptor_type::shader_storage_buffer:

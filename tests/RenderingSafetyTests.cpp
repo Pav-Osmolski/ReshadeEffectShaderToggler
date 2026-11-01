@@ -1,4 +1,6 @@
 #include "RenderingSafety.h"
+#include "SceneInputPolicy.h"
+#include "ClassicShader.h"
 #include "PreviewInputDiagnostics.h"
 #include "DescriptorTableCapture.h"
 #include "DescriptorMetadata.h"
@@ -206,7 +208,40 @@ static void TestDescriptorMetadata() {
     require(limited.Write(0, 0, known));
 }
 
+static void TestSceneInputPolicy() {
+    using namespace reshade::api;
+    require(Rendering::IsColorTargetType(device_api::d3d9, resource_type::surface));
+    require(!Rendering::IsColorTargetType(device_api::d3d11, resource_type::surface));
+    require(!Rendering::IsColorTargetType(device_api::d3d12, resource_type::surface));
+    resource_desc desc(1920, 1080, 1, 1, format::r11g11b10_float, 1, memory_heap::default_, resource_usage::shader_resource);
+    resource_view_desc view(format::r11g11b10_float, 0, 1, 0, 1);
+    view.type = resource_view_type::texture_2d;
+    require(Rendering::IsSceneInputShape(desc, view));
+    desc.texture.samples = 2; require(!Rendering::IsSceneInputShape(desc, view)); desc.texture.samples = 1;
+    desc.texture.levels = 2; require(!Rendering::IsSceneInputShape(desc, view)); desc.texture.levels = 1;
+    view.texture.first_level = 1; require(!Rendering::IsSceneInputShape(desc, view)); view.texture.first_level = 0;
+    view.format = format::r16g16b16a16_float; require(!Rendering::IsSceneInputShape(desc, view));
+    require(!Rendering::IsSceneInputFormat(format::r10g10b10a2_uint));
+    require(!Rendering::IsSceneInputFormat(format::d32_float));
+    require(!Rendering::IsSceneInputFormat(format::r8g8b8a8_unorm_srgb));
+    Rendering::DescriptorTableCoverage coverage;
+    coverage.supported = true; coverage.ranges = 1;
+    require(Rendering::CanCloneSceneTable(coverage, 255));
+    require(!Rendering::CanCloneSceneTable(coverage, 256));
+    require(!Rendering::CanCloneSceneTable(coverage, 0));
+    coverage.unbounded = 1; require(!Rendering::CanCloneSceneTable(coverage, 1)); coverage.unbounded = 0;
+    coverage.missing = 1; require(!Rendering::CanCloneSceneTable(coverage, 1)); coverage.missing = 0;
+    coverage.samplers = 1; require(!Rendering::CanCloneSceneTable(coverage, 1)); coverage.samplers = 0;
+    coverage.clipped = 1; require(!Rendering::CanCloneSceneTable(coverage, 1));
+    uint32_t dxbc[] = {0x43425844, 0, 0, 0, 0, 1, 44, 1, 36, 0x58454853, 0};
+    require(Rendering::IsClassicDxbc(dxbc, sizeof(dxbc)));
+    dxbc[9] = 0x4c495844; require(!Rendering::IsClassicDxbc(dxbc, sizeof(dxbc)));
+    dxbc[9] = 0x58454853; dxbc[8] = 40; require(!Rendering::IsClassicDxbc(dxbc, sizeof(dxbc)));
+    require(!Rendering::IsClassicDxbc(nullptr, 0));
+}
+
 int main() {
+    TestSceneInputPolicy();
     { // No cross-generation or stale lifetime matches; enforce both work bounds.
         Rendering::ProducerTrace trace;
         trace.Sync(1);

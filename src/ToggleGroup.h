@@ -150,7 +150,9 @@ class ToggleGroup {
 
     uint32_t getToggleKey() const { return _keybind; }
     const std::string& getName() const { return _name; }
-    bool isActive() const { return _isActive; }
+    bool isActive() const { return _isActive && !_retired; }
+    bool isRetired() const { return _retired; }
+    void retire() { _retired = true; _isActive = false; }
     bool isEditing() { return _isEditing; }
     bool isEmpty() const { return _vertexShaderHashes.size() <= 0 && _pixelShaderHashes.size() <= 0; }
     int getId() const { return _id; }
@@ -420,6 +422,7 @@ class ToggleGroup {
     uint32_t _renderSrvDescIndex = 0;
     uint32_t _bindingSrvShaderStage = 0;
     uint32_t _renderSrvShaderStage = 0;
+    bool _retired = false;
     bool _isActive;           // true means the group participates in its configured matching behaviour.
     bool _isEditing;          // true means the group is actively edited (name, key)
     bool _allowAllTechniques; // true means all techniques are allowed, regardless of preferred techniques.
