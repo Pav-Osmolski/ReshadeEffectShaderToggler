@@ -9,6 +9,12 @@ inline bool SupportsShaderCopy(reshade::api::device_api api) {
            api == device_api::d3d11 || api == device_api::d3d12;
 }
 
+// D3D9 exposes standalone render targets as surfaces, rather than textures.
+inline bool IsColorTargetType(reshade::api::device_api api, reshade::api::resource_type type) {
+    return type == reshade::api::resource_type::texture_2d ||
+           (api == reshade::api::device_api::d3d9 && type == reshade::api::resource_type::surface);
+}
+
 struct ColorViewFormats {
     reshade::api::format linear;
     reshade::api::format srgb;

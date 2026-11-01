@@ -423,6 +423,7 @@ void RenderingManager::QueueOrDequeue(command_list* cmd_list,
                                       uint64_t action) {
     for (auto it = queue.begin(); it != queue.end();) {
         auto& [name, data] = *it;
+        if (data.group == nullptr || data.group->isRetired()) { it = queue.erase(it); continue; }
         // Set views during draw call since we can be sure the correct ones are bound at that point
         if (!callLocation && data.resource == 0) {
             ResourceViewData active_data = GetCurrentResourceView(cmd_list, deviceData, data.group, commandListData, layoutIndex, action);

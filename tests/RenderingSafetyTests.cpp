@@ -207,6 +207,9 @@ static void TestDescriptorMetadata() {
 }
 
 int main() {
+    require(Rendering::IsColorTargetType(reshade::api::device_api::d3d9, reshade::api::resource_type::surface));
+    require(!Rendering::IsColorTargetType(reshade::api::device_api::d3d11, reshade::api::resource_type::surface));
+    require(!Rendering::IsColorTargetType(reshade::api::device_api::d3d12, reshade::api::resource_type::surface));
     { // No cross-generation or stale lifetime matches; enforce both work bounds.
         Rendering::ProducerTrace trace;
         trace.Sync(1);

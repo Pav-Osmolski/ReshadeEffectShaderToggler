@@ -103,6 +103,8 @@ void ToggleGroupResourceManager::ToggleGroupRemoved(reshade::api::effect_runtime
         if (resources.owning) {
             DisposeGroupResources(runtime->get_device(), resources.res, resources.rtv, resources.rtv_srgb, resources.srv);
         }
+        resources.g_res.reset();
+        resources.state = GroupResourceState::RESOURCE_INVALID;
     }
 }
 
@@ -139,10 +141,12 @@ void ToggleGroupResourceManager::DisposeGroupBuffers(reshade::api::device* devic
         for (uint32_t i = 0; i < GroupResourceTypeCount; i++) {
             GroupResource& resources = group.GetGroupResource(static_cast<GroupResourceType>(i));
 
-            if (!resources.owning)
-                continue;
-
-            DisposeGroupResources(device, resources.res, resources.rtv, resources.rtv_srgb, resources.srv);
+            if (resources.owning)
+                DisposeGroupResources(device, resources.res, resources.rtv, resources.rtv_srgb, resources.srv);
+            resources.g_res.reset();
+            resources.res = { 0 };
+            resources.rtv = resources.rtv_srgb = resources.srv = { 0 };
+            resources.state = GroupResourceState::RESOURCE_INVALID;
         }
     }
 }

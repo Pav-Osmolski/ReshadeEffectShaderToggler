@@ -124,6 +124,7 @@ class AddonUIData {
     std::atomic_int _toggleGroupIdEffectEditing = -1;
     std::atomic_int _toggleGroupIdConstantEditing = -1;
     std::unordered_map<int, ShaderToggler::ToggleGroup> _toggleGroups;
+    std::vector<decltype(_toggleGroups)::node_type> _retiredGroups;
     std::unordered_map<uint32_t, std::vector<ShaderToggler::ToggleGroup*>> _pixelShaderHashToToggleGroups;
     std::unordered_map<uint32_t, std::vector<ShaderToggler::ToggleGroup*>> _vertexShaderHashToToggleGroups;
     std::unordered_map<uint32_t, std::vector<ShaderToggler::ToggleGroup*>> _computeShaderHashToToggleGroups;
@@ -206,6 +207,7 @@ class AddonUIData {
     bool GetTrackDescriptors() const { return _trackDescriptors; }
     void SetTrackDescriptors(bool track) { if (_trackDescriptors != track) { _trackDescriptors = track; MarkConfigDirty(); } }
     void AddToggleGroupRemovalCallback(std::function<void(reshade::api::effect_runtime*, ShaderToggler::ToggleGroup*)> callback);
+    void RetireToggleGroup(int id);
     void SignalToggleGroupRemoved(reshade::api::effect_runtime*, ShaderToggler::ToggleGroup*);
     bool GetPreventRuntimeReload() const { return _preventRuntimeReload; }
     void SetPreventRuntimeReload(bool reload) { if (_preventRuntimeReload != reload) { _preventRuntimeReload = reload; MarkConfigDirty(); } }

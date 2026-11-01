@@ -1945,7 +1945,7 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, reshade::api::eff
         for (const auto* group : toRemove) {
             instance.SignalToggleGroupRemoved(runtime, const_cast<ShaderToggler::ToggleGroup*>(group));
             const int id = group->getId();
-            std::erase_if(instance.GetToggleGroups(), [id](const auto& item) { return item.first == id; });
+            instance.RetireToggleGroup(id);
         }
 
         if (!toRemove.empty()) {

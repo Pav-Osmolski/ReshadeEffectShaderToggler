@@ -17,7 +17,7 @@ GlobalResourceView::GlobalResourceView(reshade::api::device* d, reshade::api::re
 
     if ((static_cast<uint32_t>(desc.usage) & static_cast<uint32_t>(resource_usage::render_target) ||
          static_cast<uint32_t>(desc.usage) & static_cast<uint32_t>(resource_usage::shader_resource)) &&
-        desc.type == resource_type::texture_2d) {
+        IsColorTargetType(device->get_api(), desc.type)) {
         reshade::api::format f = format == reshade::api::format::unknown ? desc.texture.format : format;
 
         const auto formats = GetColorViewFormats(device->get_api(), desc.texture.format, f);
@@ -83,4 +83,7 @@ void GlobalResourceView::Dispose(bool deviceValid) {
     rtv_srgb = { 0 };
     srv = { 0 };
     srv_srgb = { 0 };
+    resource_handle = 0;
+    state = GlobalResourceState::RESOURCE_INVALID;
+    device = nullptr;
 }

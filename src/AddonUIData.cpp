@@ -91,6 +91,14 @@ unordered_map<int, ToggleGroup>& AddonUIData::GetToggleGroups()
     return _toggleGroups;
 }
 
+void AddonUIData::RetireToggleGroup(int id)
+{
+    auto node = _toggleGroups.extract(id);
+    if (node.empty()) return;
+    node.mapped().retire();
+    _retiredGroups.push_back(std::move(node));
+}
+
 void AddonUIData::AddToggleGroupRemovalCallback(std::function<void(reshade::api::effect_runtime*, ShaderToggler::ToggleGroup*)> callback)
 {
     _removalCallbacks.push_back(callback);

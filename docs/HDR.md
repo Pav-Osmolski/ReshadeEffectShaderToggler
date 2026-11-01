@@ -12,9 +12,13 @@ REST selects where ReShade effects run. It does not select a game's HDR presenta
 ## What the format fixes cover
 
 - Preview and copied-buffer compatibility distinguishes FP16 FLOAT from 16-bit UNORM/UINT, and 10-bit UNORM from UINT. Sharing a typeless storage family does not make those interpretations interchangeable.
-- Cached game-resource views are keyed by resource handle **and** selected typed format. Changing a texture's bound interpretation no longer reuses the first requested view indefinitely.
+- Cached game-resource views are keyed by device, resource handle **and** selected typed format. Changing a texture's bound interpretation no longer reuses the first requested view indefinitely.
 - Formats such as FP16 and 10-bit UNORM have no separate sRGB variant: their valid view is reused and destroyed once. Vulkan uses the selected concrete view rather than assuming a mutable linear/sRGB pair. D3D/OpenGL retain supported linear/sRGB alternatives, with fallback to a valid view when one alternative cannot be created.
 - The DX12 copy pipeline remains keyed by actual destination format. D3D10/11 do not bake render-target format into the same pipeline object; their copy shader writes sampled RGB without saturation. The copy shader changes alpha only where explicitly requested.
+
+## Experimental D3D12 scene input
+
+The separate development branch can sample a selected pixel-shader scene input into a private RGBA-preserving texture and redirect the selected compositor draw to that processed copy. The game texture is not transitioned or written. This is distinct from rendering into a bound output or Automatic Scene Colour. It is opt-in and skips incomplete layouts rather than falling back over the UI. See [setup, supported formats and remaining tests](experimental-backend-support.md); the Warframe captures establish producer differences, not live DLSS or universal HDR compatibility.
 
 ## Backend coverage
 

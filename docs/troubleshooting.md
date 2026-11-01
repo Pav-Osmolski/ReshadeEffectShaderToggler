@@ -31,6 +31,12 @@ Attach a fresh `ReShade.log`, the game's own crash/log output when relevant, and
 
 The Warframe hunting crash in issue #15 was confirmed fixed by its reporter in official and unofficial ReShade. That confirmation does not describe or resolve the later, unspecified HDR symptoms. Separate HDR reports with reproduction details are useful.
 
+## Experimental D3D12 scene input and D3D9
+
+For a skipped scene-input group, check its status, confirm descriptor tracking was enabled before restarting the game, and verify the exact pixel SRV Slot/Binding with Auto Scene Colour off. Missing CPU snapshots, DXIL, shared-stage bindings, unsupported textures/tables and resource limits intentionally skip processing. Selected techniques also skip final-frame fallback for that attempt. See the [experimental guide](experimental-backend-support.md) before changing settings or reporting a failure.
+
+For D3D9, report whether a problem occurs during normal rendering or after a device reset (resize, Alt-Tab or fullscreen change). Surface render targets can accept effects without being usable as shader-sampled textures. Auto Scene Colour is not supported on D3D9.
+
 ## Testing scope
 
 Successful x86/x64 builds verify compilation and package metadata. CPU tests cover selected format/descriptor bookkeeping and packaging. They do not run the game or certify HDR colour output, validation-layer cleanliness or performance. Read each release's recorded coverage rather than extending a BG3 result to every title and renderer.
