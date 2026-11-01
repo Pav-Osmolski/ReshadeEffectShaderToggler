@@ -2,13 +2,13 @@
 
 [Documentation index](README.md) · [HDR guide](HDR.md) · [Troubleshooting](troubleshooting.md)
 
-This work lives on `feature/scene-input-and-backend-support` (Modern) and `feature/legacy-scene-input-and-backend-support` (Legacy). The D3D12 scene-input path is Modern-only: the Legacy SDK cannot report all operations required for safe descriptor restoration. Legacy receives the D3D9 and general lifecycle fixes. This work is not part of the stable releases. A successful build establishes compilation and automated checks, not compatibility with every game or HDR/upscaler configuration.
+This work lives on `feature/scene-input-and-backend-support` (Modern) and `feature/legacy-scene-input-and-backend-support` (Legacy). The first D3D12 scene-input implementation is Modern-only; its API 7 adaptation and runtime coverage need a separate review. Legacy receives the D3D9 and general lifecycle fixes. This work is not part of the stable releases. A successful build establishes compilation and automated checks, not compatibility with every game or HDR/upscaler configuration.
 
 ## D3D12 scene input
 
 Some games combine scene colour and UI in one final draw. Injecting into that draw's output also affects UI; selecting the scene **input** can avoid that. Warframe's captures in [issue #22](https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler/issues/22) show different producers for no TAA, TAA and FSR/TAAU. The optional temporal sharpening shader is not a universal boundary. The supplied DLSS capture fell back to TAA after NVAPI initialization failed, so it does not establish DLSS coverage.
 
-REST's experimental path samples the selected input into a private texture, runs the group's effects on that copy, then supplies the processed texture to the selected compositor draw. It leaves the original scene texture unchanged, including history or output owned by an upscaler. This also permits a graphics compositor to consume an input previously produced by compute on another command list. It does not inject inside the upscaler itself.
+REST's experimental path samples the selected input into a private texture, runs the group's effects on that copy, then supplies the processed texture to the selected compositor draw. REST issues the selected direct draw once with the private input, then restores bindings immediately before returning control to the game. It leaves the original scene texture unchanged, including history or output owned by an upscaler. This also permits a graphics compositor to consume an input previously produced by compute on another command list. It does not inject inside the upscaler itself.
 
 ### Setup
 
@@ -26,7 +26,7 @@ REST's experimental path samples the selected input into a private texture, runs
 - The selected SRV must be visible only to the pixel shader. Shared-stage bindings are skipped.
 - One scene-input group per draw, applied with the existing once-per-frame technique scheduling.
 - Single-sample, single-mip, single-layer 2D textures with a complete view. Supported typed formats are R11G11B10 FLOAT, RGBA16 FLOAT, RGBA8 UNORM, BGRA8 UNORM and RGB10A2 UNORM. Integer, depth, sRGB, array, partial and multisampled views are skipped.
-- Every resource descriptor table must be finite, fully tracked and at most 255 entries. Unbounded, mixed sampler/resource or incomplete tables are skipped. Sampler tables keep the game's original heap.
+- Every resource descriptor table must be finite, fully tracked and at most 255 entries. Unbounded, mixed sampler/resource or incomplete tables are skipped. Sampler tables keep the game's original heap. Observed graphics and compute tables must share a restorable original heap pair; incompatible historical bindings cause a skip. Static samplers do not need a bound table.
 - Texture/buffer views require retained CPU descriptor snapshots. Descriptors created directly in shader-visible heaps, unsupported descriptors and exhausted snapshot storage cause a skip. REST does not read descriptors back from shader-visible heaps.
 - Private texture storage is capped at 256 MiB and 64 recordings. Resources are reused only after the previous recording has been reset or destroyed and completion fences on all known queues have passed. Allocation or fence failures skip work or retain resources rather than reusing them prematurely.
 - Failed scene-input attempts suppress the selected techniques' final-frame fallback for that frame. They must not unexpectedly run over the UI.
@@ -60,4 +60,4 @@ Existing copyright and license notices remain in their original files. The fork'
 
 ## Before a stable release
 
-Build Modern and Legacy for x86/x64 with the pinned SDKs and run the regression checks. A public test build should be a clearly marked pre-release with this guide. Validate the compositor path in-game across the Warframe modes above, including live DLSS outside RenderDoc; check UI isolation, effect intensity, alpha, HDR range, long sessions and repeated resolution changes. Capture debug-layer errors/device removal if any occur. D3D9 reset tests and D3D10/D3D11/Vulkan regression tests remain separate requirements. Do not describe untested modes as confirmed support.
+Build Modern and Legacy for x86/x64 with the pinned SDKs and run the regression checks. Start runtime testing with REST as the only additional add-on: draw interception may interact with other add-ons that also cancel or replace draws. A public test build should be a clearly marked pre-release with this guide. Validate the compositor path in-game across the Warframe modes above, including live DLSS outside RenderDoc; check UI isolation, effect intensity, alpha, HDR range, long sessions and repeated resolution changes. Capture debug-layer errors/device removal if any occur. D3D9 reset tests and D3D10/D3D11/Vulkan regression tests remain separate requirements. Do not describe untested modes as confirmed support.

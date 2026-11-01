@@ -2,7 +2,7 @@
 
 ## Unreleased — experimental backend support
 
-- Modern-only companion work adds experimental D3D12 private scene-input processing. Legacy retains its existing D3D12 path because API 7 cannot report all operations required for safe descriptor restoration.
+- Modern-only companion work adds experimental D3D12 private scene-input processing. Legacy retains its existing D3D12 path pending a separate API 7 adaptation and runtime review.
 - Adapt D3D9 surface-target and pre-Reset cleanup fixes from BadassBaboon/CrazyDaifu, release views before textures, and scope typed view caches by device.
 - Retain removed group objects while command-list queues may reference them; skip retired work. Evaluate PS/VS/CS effect queues independently.
 - Document setup, explicit backend limits, fork decisions and required game testing in the [experimental guide](docs/experimental-backend-support.md). These changes are not a stable compatibility claim.
