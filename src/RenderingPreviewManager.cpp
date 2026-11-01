@@ -4,6 +4,7 @@
 #include "Util.h"
 #include "resource.h"
 #include "PreviewInputDiagnostics.h"
+#include "SceneInput.h"
 #include <d3d12.h>
 
 using namespace Rendering;
@@ -55,6 +56,8 @@ static void RecordPreviewDiagnostics(command_list* cmd_list, HuntPreview& previe
         preview.bound_inputs += "Descriptor tracking inactive. Enable Track descriptors, save, and restart the game.\n";
         return;
     }
+    if (device->get_api() == device_api::d3d12 && stage == 0 && group.getRenderToResourceViews())
+        RefreshSceneInputDescriptors(cmd_list);
     const auto& state = *cmd_list->get_private_data<state_tracking>();
     const auto& descriptorState = *device->get_private_data<descriptor_tracking>();
     preview.bound_inputs += std::format("Observed descriptor events: updates {}; copies {}; tracked binds {}\n",
@@ -90,7 +93,11 @@ static void RecordPreviewDiagnostics(command_list* cmd_list, HuntPreview& previe
     size_t textureCount = 0;
     const auto scan = ScanPreviewInputs(state, stage, preview.input_scan_remaining,
       [&](uint32_t slot, uint32_t binding, resource_view view) {
-        const auto res = device->get_resource_from_view(view);
+        const auto* tracked = state.get_descriptor_at(stage, slot, binding);
+        const auto snapshot = tracked != nullptr ? tracked->nativeSnapshot : nullptr;
+        // The game may have reused the original CPU staging descriptor after
+        // copying it. Report the same retained resource/view used by processing.
+        const auto res = snapshot ? snapshot->resource : device->get_resource_from_view(view);
         if (res == 0)
             return;
         const auto desc = device->get_resource_desc(res);
@@ -102,7 +109,7 @@ static void RecordPreviewDiagnostics(command_list* cmd_list, HuntPreview& previe
           "Layout {} / descriptor {}: {} {}x{} | depth/layers {} | mips {} | samples {} | storage {} | view {} | usage 0x{:x} | resource 0x{:x}\n",
           slot, binding, type, desc.texture.width, desc.texture.height, desc.texture.depth_or_layers,
           desc.texture.levels, desc.texture.samples, RenderingManager::FormatName(desc.texture.format),
-          RenderingManager::FormatName(device->get_resource_view_desc(view).format), static_cast<uint32_t>(desc.usage), res.handle);
+          RenderingManager::FormatName(snapshot ? snapshot->description.format : device->get_resource_view_desc(view).format), static_cast<uint32_t>(desc.usage), res.handle);
         if (traceEnabled) {
             if (const auto* producer = producerTrace.Find(res.handle)) {
                 preview.bound_inputs += std::format("  Earlier bound-target draw: PS 0x{:08x}; VS 0x{:08x}; RTV {}; recording draw {} (before selected draw).\n",

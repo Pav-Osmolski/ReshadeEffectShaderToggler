@@ -19,6 +19,10 @@ void RefreshSceneInputDescriptors(command_list* cmd) {
         auto& root = roots[i];
         if (root.type != StateTracking::root_entry_type::descriptor_table || root.descriptor_table == 0 || root.buffer_index < 0)
             continue;
+        // Unsupported large/bindless tables were already captured at binding.
+        // Do not rescan them on every attempted input or preview draw.
+        if (i >= 64 || root.coverage.unbounded || root.coverage.clipped || state.get_root_table_entry_size_at(0, i) > 255)
+            continue;
         auto snapshot = CaptureDescriptorTable<descriptor_tracking::descriptor_data>(
           tracker.get_pipeline_layout_param(layout, i), [&](const descriptor_range& range, uint32_t count, auto& descriptors) {
               descriptor_heap heap = { 0 };
