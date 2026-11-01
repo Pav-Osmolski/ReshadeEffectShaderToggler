@@ -27,28 +27,8 @@ std::shared_ptr<SceneInputLease> PrepareSceneInput(reshade::api::command_list*,
                                                    reshade::api::resource_view& source,
                                                    const char*& status);
 void BindSceneInput(reshade::api::command_list*);
-void RestoreSceneInput(reshade::api::command_list*, bool graphics = true);
+void RestoreSceneInput(reshade::api::command_list*);
 void RetireSceneInputs(reshade::api::command_list*);
 void DisposeSceneInputs(reshade::api::device*);
 void SceneInputSecondary(reshade::api::command_list*, reshade::api::command_list*);
-bool SceneInputMesh(reshade::api::command_list*, uint32_t, uint32_t, uint32_t);
-bool SceneInputRays(reshade::api::command_list*,
-                    reshade::api::resource,
-                    uint64_t,
-                    uint64_t,
-                    reshade::api::resource,
-                    uint64_t,
-                    uint64_t,
-                    uint64_t,
-                    reshade::api::resource,
-                    uint64_t,
-                    uint64_t,
-                    uint64_t,
-                    reshade::api::resource,
-                    uint64_t,
-                    uint64_t,
-                    uint64_t,
-                    uint32_t,
-                    uint32_t,
-                    uint32_t);
 }

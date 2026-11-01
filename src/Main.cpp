@@ -396,8 +396,6 @@ static void onDestroyPipeline(device* device, pipeline pipelineHandle) {
 }
 
 static void onBindPipeline(command_list* commandList, pipeline_stage stages, pipeline pipelineHandle) {
-    if (commandList != nullptr)
-        Rendering::RestoreSceneInput(commandList, static_cast<uint32_t>(stages & (pipeline_stage::compute_shader | pipeline_stage::ray_tracing_shader)) == 0);
     if (nullptr == commandList ||
         !((uint32_t)(stages & pipeline_stage::pixel_shader) || (uint32_t)(stages & pipeline_stage::vertex_shader) ||
           (uint32_t)(stages & pipeline_stage::compute_shader))) {
@@ -889,7 +887,6 @@ static bool ShouldSuppressVulkanHuntedCall(command_list* cmd_list, uint64_t matc
 }
 
 static bool onDraw(command_list* cmd_list, uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance) {
-    Rendering::RestoreSceneInput(cmd_list);
     if (ShouldSuppressVulkanHuntedCall(cmd_list, Rendering::MATCH_PS | Rendering::MATCH_VS) ||
         ShouldSuppressMarkedGraphicsCall(cmd_list, Rendering::MATCH_PS | Rendering::MATCH_VS))
         return true;
@@ -897,14 +894,17 @@ static bool onDraw(command_list* cmd_list, uint32_t vertex_count, uint32_t insta
     cmd_list->get_private_data<CommandListDataContainer>()->sceneInputAllowed = true;
     CheckDrawCall(cmd_list, Rendering::MATCH_PS | Rendering::MATCH_VS);
     ProducerDiagnostics::RecordDraw(cmd_list);
-    Rendering::BindSceneInput(cmd_list);
     cmd_list->get_private_data<CommandListDataContainer>()->sceneInputAllowed = false;
-
+    if (cmd_list->get_private_data<CommandListDataContainer>()->sceneInputPending) {
+        Rendering::BindSceneInput(cmd_list);
+        cmd_list->draw(vertex_count, instance_count, first_vertex, first_instance);
+        Rendering::RestoreSceneInput(cmd_list);
+        return true; // The original draw was issued exactly once through the native API.
+    }
     return false;
 }
 
 static bool onDispatch(command_list* cmd_list, uint32_t group_count_x, uint32_t group_count_y, uint32_t group_count_z) {
-    Rendering::RestoreSceneInput(cmd_list, false);
     if (ShouldSuppressVulkanHuntedCall(cmd_list, Rendering::MATCH_CS))
         return true;
 
@@ -920,7 +920,6 @@ static bool onDrawIndexed(command_list* cmd_list,
                           uint32_t first_index,
                           int32_t vertex_offset,
                           uint32_t first_instance) {
-    Rendering::RestoreSceneInput(cmd_list);
     if (ShouldSuppressVulkanHuntedCall(cmd_list, Rendering::MATCH_PS | Rendering::MATCH_VS) ||
         ShouldSuppressMarkedGraphicsCall(cmd_list, Rendering::MATCH_PS | Rendering::MATCH_VS))
         return true;
@@ -928,14 +927,17 @@ static bool onDrawIndexed(command_list* cmd_list,
     cmd_list->get_private_data<CommandListDataContainer>()->sceneInputAllowed = true;
     CheckDrawCall(cmd_list, Rendering::MATCH_PS | Rendering::MATCH_VS);
     ProducerDiagnostics::RecordDraw(cmd_list);
-    Rendering::BindSceneInput(cmd_list);
     cmd_list->get_private_data<CommandListDataContainer>()->sceneInputAllowed = false;
-
+    if (cmd_list->get_private_data<CommandListDataContainer>()->sceneInputPending) {
+        Rendering::BindSceneInput(cmd_list);
+        cmd_list->draw_indexed(index_count, instance_count, first_index, vertex_offset, first_instance);
+        Rendering::RestoreSceneInput(cmd_list);
+        return true; // The original draw was issued exactly once through the native API.
+    }
     return false;
 }
 
 static bool onDrawOrDispatchIndirect(command_list* cmd_list, indirect_command type, resource buffer, uint64_t offset, uint32_t draw_count, uint32_t stride) {
-    Rendering::RestoreSceneInput(cmd_list, type != indirect_command::dispatch);
     switch (type) {
         case indirect_command::unknown:
             ProducerDiagnostics::Invalidate(cmd_list, "unknown indirect operation: earlier history discarded");
@@ -957,7 +959,6 @@ static bool onDrawOrDispatchIndirect(command_list* cmd_list, indirect_command ty
             break;
     }
 
-    Rendering::BindSceneInput(cmd_list);
     return false;
 }
 
@@ -1012,8 +1013,6 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID) {
             reshade::register_event<reshade::addon_event::clear_unordered_access_view_float>(ProducerDiagnostics::clear_unordered_access_view_float);
             reshade::register_event<reshade::addon_event::execute_secondary_command_list>(ProducerDiagnostics::Secondary);
             reshade::register_event<reshade::addon_event::execute_secondary_command_list>(Rendering::SceneInputSecondary);
-            reshade::register_event<reshade::addon_event::dispatch_mesh>(Rendering::SceneInputMesh);
-            reshade::register_event<reshade::addon_event::dispatch_rays>(Rendering::SceneInputRays);
             reshade::register_event<reshade::addon_event::destroy_pipeline>(onDestroyPipeline);
             reshade::register_event<reshade::addon_event::reshade_overlay>(onReShadeOverlay);
             reshade::register_event<reshade::addon_event::reshade_present>(onReShadePresent);
@@ -1068,8 +1067,6 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID) {
             reshade::unregister_event<reshade::addon_event::clear_unordered_access_view_float>(ProducerDiagnostics::clear_unordered_access_view_float);
             reshade::unregister_event<reshade::addon_event::execute_secondary_command_list>(ProducerDiagnostics::Secondary);
             reshade::unregister_event<reshade::addon_event::execute_secondary_command_list>(Rendering::SceneInputSecondary);
-            reshade::unregister_event<reshade::addon_event::dispatch_mesh>(Rendering::SceneInputMesh);
-            reshade::unregister_event<reshade::addon_event::dispatch_rays>(Rendering::SceneInputRays);
             reshade::unregister_event<reshade::addon_event::init_device>(onInitDevice);
             reshade::unregister_event<reshade::addon_event::destroy_device>(onDestroyDevice);
             reshade::unregister_event<reshade::addon_event::bind_render_targets_and_depth_stencil>(onBindRenderTargetsAndDepthStencil);

@@ -142,6 +142,8 @@ std::shared_ptr<SceneInputLease> PrepareSceneInput(command_list* cmd, uint32_t s
     descriptor_heap originalResourceHeap = { 0 }, originalSamplerHeap = { 0 };
     for (uint32_t i = 0; i < paramCount; ++i) {
         const auto param = tracking.get_pipeline_layout_param(layout, i);
+        if (IsStaticSamplerParameter(param))
+            continue; // SDK appends static samplers as a virtual parameter.
         if (param.type != pipeline_layout_param_type::descriptor_table && param.type != pipeline_layout_param_type::descriptor_table_with_flags)
             continue;
         if (i >= roots.size() || roots[i].type != StateTracking::root_entry_type::descriptor_table || roots[i].descriptor_table == 0)
@@ -180,6 +182,21 @@ std::shared_ptr<SceneInputLease> PrepareSceneInput(command_list* cmd, uint32_t s
     }
     if (slot >= sizes.size() || index >= sizes[slot])
         return {};
+    for (const auto& stage : state.root_tables) {
+        for (const auto& root : stage.second) {
+            if (root.type != StateTracking::root_entry_type::descriptor_table || root.descriptor_table == 0)
+                continue;
+            descriptor_heap heap = { 0 };
+            uint32_t offset = 0;
+            dev->get_descriptor_heap_offset(root.descriptor_table, 0, 0, &heap, &offset);
+            const bool sampler = root.coverage.ranges != 0 && root.coverage.samplers == root.coverage.ranges;
+            const auto expected = sampler ? originalSamplerHeap : originalResourceHeap;
+            if (expected == 0 || heap != expected) {
+                status = "Scene input: graphics/compute descriptor heap pair cannot be restored safely";
+                return {};
+            }
+        }
+    }
     const auto selectedParam = tracking.get_pipeline_layout_param(layout, slot);
     const bool flagged = selectedParam.type == pipeline_layout_param_type::descriptor_table_with_flags;
     const uint32_t ranges = flagged ? selectedParam.descriptor_table_with_flags.count : selectedParam.descriptor_table.count;
@@ -270,6 +287,13 @@ std::shared_ptr<SceneInputLease> PrepareSceneInput(command_list* cmd, uint32_t s
     }
     // Keep even an unsuccessful attempt alive until recording retirement.
     recording.sceneInputLeases.push_back(lease);
+    descriptor_heap privateHeap = { 0 };
+    uint32_t privateOffset = 0;
+    dev->get_descriptor_heap_offset(lease->tables[slot], 0, 0, &privateHeap, &privateOffset);
+    if (privateHeap == originalResourceHeap) {
+        status = "Scene input: game and private descriptor heaps must be distinct";
+        return {};
+    }
     for (uint32_t i = 0; i < paramCount; ++i) {
         for (uint32_t j = 0; j < sizes[i]; ++j) {
             const auto* descriptor = state.get_descriptor_at(0, i, j);
@@ -301,7 +325,23 @@ void BindSceneInput(command_list* cmd) {
     if (!recording.sceneInputPending)
         return;
     const auto& lease = *recording.sceneInputPending;
-    const auto& [layout, roots] = cmd->get_private_data<state_tracking>()->root_tables[0];
+    auto& state = *cmd->get_private_data<state_tracking>();
+    const auto& [layout, roots] = state.root_tables[0];
+    // First move BOTH heap types away from the game's pair. ReShade's zero-table
+    // restore can then recover even an otherwise unobserved sampler heap from
+    // its native SetDescriptorHeaps cache. No game command can interleave here.
+    {
+        auto& shaders = cmd->get_device()->get_private_data<DeviceDataContainer>()->customShader;
+        std::lock_guard lock(shaders.pipelineMutex);
+        const auto& copy = shaders.sceneFormatPipelines.at(static_cast<uint32_t>(lease.format));
+        cmd->push_descriptors(
+          shader_stage::pixel, copy.pipelineLayout, 0, descriptor_table_update{ {}, 0, 0, 1, descriptor_type::sampler, &copy.pipelineSampler });
+        cmd->push_descriptors(
+          shader_stage::pixel, copy.pipelineLayout, 1, descriptor_table_update{ {}, 0, 0, 1, descriptor_type::shader_resource_view, &lease.views->srv });
+    }
+    state.apply_descriptors_dx12_vulkan(cmd);
+    // D3D12 has one active PSO, even when graphics and compute roots coexist.
+    cmd->bind_pipeline(pipeline_stage::all_graphics, state.current_pipeline[0]);
     // Establish both heaps before setting root tables: switching either heap
     // invalidates all its root-table bindings. Preserve the game's sampler heap.
     for (int pass = 0; pass < 2; ++pass)
@@ -314,21 +354,13 @@ void BindSceneInput(command_list* cmd) {
     recording.sceneInputPending.reset();
     recording.sceneInputPatched = true;
 }
-void RestoreSceneInput(command_list* cmd, bool graphics) {
+void RestoreSceneInput(command_list* cmd) {
     auto& recording = *cmd->get_private_data<CommandListDataContainer>();
     if (!recording.sceneInputPatched)
         return;
-    // The tracker contains the game's latest bindings, never REST's private tables.
+    // Called immediately after the replacement draw, before ANY game command
+    // can change root state/heaps. All observed tables share the validated pair.
     cmd->get_private_data<state_tracking>()->apply_descriptors_dx12_vulkan(cmd);
-    // Graphics and compute share descriptor heaps. The general state replay
-    // restores both signatures; finish with the heaps needed by the NEXT call.
-    const auto& [layout, roots] = cmd->get_private_data<state_tracking>()->root_tables[graphics ? 0 : 2];
-    const auto stages = graphics ? shader_stage::all_graphics : shader_stage::compute;
-    if (layout != 0)
-        for (int pass = 0; pass < 2; ++pass)
-            for (uint32_t i = 0; i < roots.size(); ++i)
-                if (roots[i].type == StateTracking::root_entry_type::descriptor_table && roots[i].descriptor_table != 0)
-                    cmd->bind_descriptor_tables(stages, layout, i, 1, &roots[i].descriptor_table);
     recording.sceneInputPatched = false;
 }
 void RetireSceneInputs(command_list* cmd) {
@@ -391,31 +423,5 @@ void SceneInputSecondary(command_list* cmd, command_list*) {
     RestoreSceneInput(cmd);
     if (cmd->get_device()->get_api() == device_api::d3d12)
         cmd->get_private_data<CommandListDataContainer>()->sceneInputTainted = true;
-}
-bool SceneInputMesh(command_list* cmd, uint32_t, uint32_t, uint32_t) {
-    RestoreSceneInput(cmd);
-    return false;
-}
-bool SceneInputRays(command_list* cmd,
-                    resource,
-                    uint64_t,
-                    uint64_t,
-                    resource,
-                    uint64_t,
-                    uint64_t,
-                    uint64_t,
-                    resource,
-                    uint64_t,
-                    uint64_t,
-                    uint64_t,
-                    resource,
-                    uint64_t,
-                    uint64_t,
-                    uint64_t,
-                    uint32_t,
-                    uint32_t,
-                    uint32_t) {
-    RestoreSceneInput(cmd, false);
-    return false;
 }
 }

@@ -3,6 +3,18 @@
 #include "RenderingSafety.h"
 
 namespace Rendering {
+inline bool IsStaticSamplerParameter(const reshade::api::pipeline_layout_param& param) {
+    using namespace reshade::api;
+    if (param.type != pipeline_layout_param_type::descriptor_table_with_flags || param.descriptor_table_with_flags.count == 0 ||
+        param.descriptor_table_with_flags.ranges == nullptr)
+        return false;
+    for (uint32_t i = 0; i < param.descriptor_table_with_flags.count; ++i) {
+        const auto& range = param.descriptor_table_with_flags.ranges[i];
+        if (range.type != descriptor_type::sampler || range.static_samplers == nullptr)
+            return false;
+    }
+    return true;
+}
 inline bool IsSceneInputFormat(reshade::api::format f) {
     using reshade::api::format;
     return f == format::r11g11b10_float || f == format::r16g16b16a16_float || f == format::r8g8b8a8_unorm || f == format::b8g8r8a8_unorm ||

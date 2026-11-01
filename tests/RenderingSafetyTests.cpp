@@ -90,6 +90,7 @@ struct TestRoot {
     int32_t buffer_index = -1;
     uint64_t descriptor_table = 0;
     Rendering::DescriptorTableCoverage coverage;
+
 };
 
 static void TestDescriptorTables() {
@@ -224,6 +225,17 @@ static void TestSceneInputPolicy() {
     require(!Rendering::IsSceneInputFormat(format::r10g10b10a2_uint));
     require(!Rendering::IsSceneInputFormat(format::d32_float));
     require(!Rendering::IsSceneInputFormat(format::r8g8b8a8_unorm_srgb));
+    sampler_desc staticSampler;
+    descriptor_range_with_flags staticRange;
+    staticRange.type = descriptor_type::sampler;
+    staticRange.static_samplers = &staticSampler;
+    pipeline_layout_param staticParam;
+    staticParam.type = pipeline_layout_param_type::descriptor_table_with_flags;
+    staticParam.descriptor_table_with_flags.count = 1;
+    staticParam.descriptor_table_with_flags.ranges = &staticRange;
+    require(Rendering::IsStaticSamplerParameter(staticParam));
+    staticRange.static_samplers = nullptr;
+    require(!Rendering::IsStaticSamplerParameter(staticParam));
     Rendering::DescriptorTableCoverage coverage;
     coverage.supported = true; coverage.ranges = 1;
     require(Rendering::CanCloneSceneTable(coverage, 255));
