@@ -737,7 +737,7 @@ static void displaySettings(effect_runtime* runtime) {
 }
 
 static void Init() {
-    reshade::log::message(reshade::log::level::info, "HDR diagnostics 6 (pre-release): read-only texture-input metadata; not a confirmed HDR fix.");
+    reshade::log::message(reshade::log::level::info, "Scene input preview 1 (pre-release): opt-in D3D12 scene-input processing; runtime validation required.");
     resourceManager.SetResourceShim(g_addonUIData.GetResourceShim());
     resourceManager.Init();
     constantManager.Init(g_addonUIData, groupResourceManager, &constantCopy, &constantHandler);
