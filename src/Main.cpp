@@ -348,7 +348,7 @@ static void onDestroyEffectRuntime(effect_runtime* runtime) {
 
 static void onInitPipeline(device* device, pipeline_layout, uint32_t subobjectCount, const pipeline_subobject* subobjects, pipeline pipelineHandle) {
     if (device->get_api() == device_api::d3d12) {
-        bool classic = true, pixel = false;
+        bool supported = true, pixel = false;
         for (uint32_t i = 0; i < subobjectCount; ++i) {
             switch (subobjects[i].type) {
                 case pipeline_subobject_type::pixel_shader: pixel = true; [[fallthrough]];
@@ -356,9 +356,9 @@ static void onInitPipeline(device* device, pipeline_layout, uint32_t subobjectCo
                 case pipeline_subobject_type::geometry_shader:
                 case pipeline_subobject_type::hull_shader:
                 case pipeline_subobject_type::domain_shader: {
-                    if (subobjects[i].count != 1 || subobjects[i].data == nullptr) { classic = false; break; }
+                    if (subobjects[i].count != 1 || subobjects[i].data == nullptr) { supported = false; break; }
                     const auto& code = *static_cast<const shader_desc*>(subobjects[i].data);
-                    classic &= Rendering::IsClassicDxbc(code.code, code.code_size);
+                    supported &= Rendering::SupportsSceneInputShader(code.code, code.code_size);
                     break;
                 }
                 default: break;
@@ -366,7 +366,7 @@ static void onInitPipeline(device* device, pipeline_layout, uint32_t subobjectCo
         }
         auto& data = *device->get_private_data<DeviceDataContainer>();
         std::lock_guard lock(data.scenePipelineMutex);
-        if (pixel && classic) data.classicGraphicsPipelines.insert(pipelineHandle.handle);
+        if (pixel && supported) data.supportedSceneInputPipelines.insert(pipelineHandle.handle);
     }
     // shader has been created, we will now create a hash and store it with the handle we got.
     for (uint32_t i = 0; i < subobjectCount; ++i) {
@@ -388,7 +388,7 @@ static void onDestroyPipeline(device* device, pipeline pipelineHandle) {
     {
         auto& data = *device->get_private_data<DeviceDataContainer>();
         std::lock_guard lock(data.scenePipelineMutex);
-        data.classicGraphicsPipelines.erase(pipelineHandle.handle);
+        data.supportedSceneInputPipelines.erase(pipelineHandle.handle);
     }
     g_pixelShaderManager.removeHandle(pipelineHandle.handle);
     g_vertexShaderManager.removeHandle(pipelineHandle.handle);

@@ -203,7 +203,7 @@ struct __declspec(uuid("C63E95B1-4E2F-46D6-A276-E8B4612C069A")) DeviceDataContai
     std::shared_ptr<Rendering::SceneInputPool> sceneInputPool;
     std::atomic_bool sceneInputAttempted{false};
     std::mutex scenePipelineMutex;
-    std::unordered_set<uint64_t> classicGraphicsPipelines;
+    std::unordered_set<uint64_t> supportedSceneInputPipelines;
     reshade::api::effect_runtime* current_runtime = nullptr;
     std::atomic_bool rendered_effects = false;
     std::shared_mutex binding_mutex;

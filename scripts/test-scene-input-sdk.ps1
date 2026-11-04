@@ -10,3 +10,8 @@ cl /nologo /EHsc /std:c++20 /W3 /DNOMINMAX /DWIN32_LEAN_AND_MEAN /Isrc /Ideps/re
 if ($LASTEXITCODE -ne 0) { throw 'Scene-input SDK integration test failed to compile.' }
 & ./tests/out/scene-input-sdk.exe
 if ($LASTEXITCODE -ne 0) { throw 'Scene-input SDK integration regression.' }
+
+cl /nologo /EHsc /std:c++20 /W4 /WX /Isrc tests/SceneInputShaderTests.cpp /Fotests/out/sdk/ /Fetests/out/scene-input-shaders.exe
+if ($LASTEXITCODE -ne 0) { throw 'Scene-input shader tests failed to compile.' }
+& ./tests/out/scene-input-shaders.exe
+if ($LASTEXITCODE -ne 0) { throw 'Scene-input shader eligibility regression.' }

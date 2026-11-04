@@ -97,8 +97,8 @@ std::shared_ptr<SceneInputLease> PrepareSceneInput(command_list* cmd, uint32_t s
     }
     {
         std::lock_guard lock(data.scenePipelineMutex);
-        if (!data.classicGraphicsPipelines.contains(state.current_pipeline[0].handle)) {
-            status = "Scene input: DXIL or unobserved graphics pipeline is unsupported";
+        if (!data.supportedSceneInputPipelines.contains(state.current_pipeline[0].handle)) {
+            status = "Scene input: shader model, heap indexing or unobserved pipeline is unsupported";
             return {};
         }
     }

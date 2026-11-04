@@ -22,7 +22,7 @@ REST's experimental path samples the selected input into a private texture, runs
 ### Deliberate limits
 
 - Direct graphics draws on direct command lists only; compute, indirect draws, bundles and active D3D12 render passes are skipped. Scene input remains disabled for a recording after a secondary command list executes.
-- Classic DXBC graphics pipelines only. DXIL pipelines are skipped because direct descriptor-heap indexing cannot be established safely from the available layout metadata.
+- Classic DXBC and validated Shader Model 6.0–6.5 DXIL graphics pipelines. DXIL requires a shader-feature record without resource/sampler heap-indexing requirements; SM 6.6+ and malformed/unknown containers are skipped. See the Preview 2 guide for the captured Warframe shader checks.
 - The selected SRV must be visible only to the pixel shader. Shared-stage bindings are skipped.
 - One scene-input group per draw, applied with the existing once-per-frame technique scheduling.
 - Single-sample, single-mip, single-layer 2D textures with a complete view. Supported typed formats are R11G11B10 FLOAT, RGBA16 FLOAT, RGBA8 UNORM, BGRA8 UNORM and RGB10A2 UNORM. Integer, depth, sRGB, array, partial and multisampled views are skipped.

@@ -8,6 +8,10 @@ The reported **Pixel / Slot 2 / Binding 0** settings identify the correct full-r
 
 Preview 2 checks the resource's actual topology and the view type, and ignores array-only fields for a plain 2D view. Array textures/views, MSAA, multiple mips and partial-mip views remain unsupported. A regression test now compiles the pinned ReShade SDK conversion implementation, reproduces its zero-layer representation, and checks both accepted and rejected cases. Preview/status reports also identify the exact failed eligibility check and whether a retained CPU descriptor is available.
 
+Checking the saved compositor bytecode exposed a second Preview 1 blocker: Warframe uses **Shader Model 6.0 DXIL**, while the original filter accepted only classic DXBC. Preview 2 also accepts validated DXIL 6.0–6.5 containers with a shader-feature record that does not request direct descriptor-heap indexing. SM 6.6+ remains rejected: [direct heap indexing was introduced with Shader Model 6.6](https://microsoft.github.io/DirectX-Specs/d3d/HLSL_SM_6_6_DynamicResources.html) and cannot use this descriptor-table redirection path. Bounds, program/bitcode headers and feature flags are checked; malformed or unknown containers fail closed.
+
+The local shader-policy test accepts the actual no-TAA, TAA and FSR compositor bytecode from the previously supplied captures; the old classic-only filter rejects all three. Those game shader files are not redistributed. CI exercises accepted models and rejected direct-indexing, newer-model, malformed and truncated containers with synthetic fixtures.
+
 ## Repeat the existing test
 
 1. Back up and replace the add-on with **REST-Scene-Input-Preview-2-Modern.zip**; use `.addon64` for Warframe and restart normally without RenderDoc. Requires ReShade 6.8+ with add-on support. Confirm **Scene input preview 2 (pre-release)** appears in REST. File version remains 1.7.3.680; `BUILD-INFO.txt` identifies the exact source commit.
