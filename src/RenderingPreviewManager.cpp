@@ -110,6 +110,13 @@ static void RecordPreviewDiagnostics(command_list* cmd_list, HuntPreview& previe
           slot, binding, type, desc.texture.width, desc.texture.height, desc.texture.depth_or_layers,
           desc.texture.levels, desc.texture.samples, RenderingManager::FormatName(desc.texture.format),
           RenderingManager::FormatName(snapshot ? snapshot->description.format : device->get_resource_view_desc(view).format), static_cast<uint32_t>(desc.usage), res.handle);
+        if (device->get_api() == device_api::d3d12) {
+            if (snapshot) {
+                const auto& v = snapshot->description;
+                preview.bound_inputs += std::format("  Retained CPU view: present | type {} | first mip {} | mips {} | first layer {} | layers {} (array fields ignored for plain 2D)\n",
+                  static_cast<uint32_t>(v.type), v.texture.first_level, v.texture.levels, v.texture.first_layer, v.texture.layers);
+            } else preview.bound_inputs += "  Retained CPU view: unavailable (metadata alone cannot enable scene-input processing)\n";
+        }
         if (traceEnabled) {
             if (const auto* producer = producerTrace.Find(res.handle)) {
                 preview.bound_inputs += std::format("  Earlier bound-target draw: PS 0x{:08x}; VS 0x{:08x}; RTV {}; recording draw {} (before selected draw).\n",
@@ -342,7 +349,8 @@ void RenderingPreviewManager::UpdatePreview(command_list* cmd_list, uint64_t cal
             deviceData.huntPreview.width = desc.texture.width;
             deviceData.huntPreview.height = desc.texture.height;
         } else {
-            deviceData.huntPreview.status = "Preview unavailable: no eligible target resolved for selected shader";
+            deviceData.huntPreview.status = active_target.rejection_reason != nullptr ? active_target.rejection_reason :
+              "Preview unavailable: no eligible target resolved for selected shader";
             return;
         }
     }

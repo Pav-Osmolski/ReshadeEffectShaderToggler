@@ -22,3 +22,5 @@ if ($compilerVersion.Major -eq 14 -and $compilerVersion.Minor -lt 30) {
   if ($LASTEXITCODE -ne 0) { throw 'Tracking registration integration test failed.' }
   Write-Output 'Production tracking registration integration test passed.'
 }
+
+& ./scripts/test-scene-input-sdk.ps1

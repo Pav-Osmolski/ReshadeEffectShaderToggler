@@ -134,8 +134,8 @@ std::shared_ptr<SceneInputLease> PrepareSceneInput(command_list* cmd, uint32_t s
         return {};
     const auto desc = dev->get_resource_desc(res);
     const auto viewDesc = selected->nativeSnapshot->description;
-    if (!IsSceneInputShape(desc, viewDesc)) {
-        status = "Scene input: unsupported format or texture view";
+    if (const char* reason = SceneInputShapeRejection(desc, viewDesc)) {
+        status = reason;
         return {};
     }
     if (!dev->check_format_support(viewDesc.format, resource_usage::render_target | resource_usage::shader_resource)) {

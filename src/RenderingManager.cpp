@@ -374,22 +374,36 @@ const ResourceViewData RenderingManager::GetCurrentResourceView(command_list* cm
     } else if (action & (MATCH_EFFECT | MATCH_PREVIEW) && !autoSceneColour &&
                group->getRenderToResourceViews()) {
         if (device->get_api() == device_api::d3d12) {
-            if (commandListData.sceneInputTainted) return active_data;
+            auto reject = [&](const char* reason) {
+                group->setDebugAutoStatus(reason);
+                return ResourceViewData{{0}, format::unknown, reason};
+            };
+            if (commandListData.sceneInputTainted)
+                return reject("Scene input rejected: secondary command-list state is unsupported");
+            if (!state_tracking::descriptor_tracking_enabled())
+                return reject("Scene input rejected: enable descriptor tracking, save and restart the game");
+            if (group->getRenderSRVShaderStage() != 0)
+                return reject("Scene input rejected: select the Pixel shader stage");
             RefreshSceneInputDescriptors(cmd_list);
             // Scene input uses an exact pixel SRV. Never silently select a nearby
             // table/descriptor or interpret a CBV/UAV payload as a texture view.
             const uint32_t slot = group->getRenderSRVSlotIndex(), index = group->getRenderSRVDescriptorIndex();
-            if (!state_tracking::descriptor_tracking_enabled() || group->getRenderSRVShaderStage() != 0 ||
-                slot >= state.get_root_table_size_at(0) || index >= state.get_root_table_entry_size_at(0, slot)) return active_data;
+            if (slot >= state.get_root_table_size_at(0) || index >= state.get_root_table_entry_size_at(0, slot))
+                return reject("Scene input rejected: selected slot/binding is outside the tracked table");
             const auto* input = state.get_descriptor_at(0, slot, index);
-            if (!input || input->type != descriptor_type::shader_resource_view || input->view == 0) return active_data;
-            if (!input->nativeSnapshot) return active_data;
+            if (!input || input->type != descriptor_type::shader_resource_view || input->view == 0)
+                return reject("Scene input rejected: selected binding is not a tracked texture SRV");
+            if (!input->nativeSnapshot)
+                return reject("Scene input rejected: retained CPU descriptor snapshot is unavailable");
             const auto texture = input->nativeSnapshot->resource;
-            if (texture == 0) return active_data;
+            if (texture == 0)
+                return reject("Scene input rejected: selected SRV is null or has no resource");
             const auto view = input->nativeSnapshot->description;
             const auto description = device->get_resource_desc(texture);
-            if (!IsSceneInputShape(description, view) ||
-                !ValidFormat(deviceData.current_runtime, description, group->getMatchSwapchainResolution())) return active_data;
+            if (const char* reason = SceneInputShapeRejection(description, view))
+                return reject(reason);
+            if (!ValidFormat(deviceData.current_runtime, description, group->getMatchSwapchainResolution()))
+                return reject("Scene input rejected: texture does not match the configured colour/resolution rule");
             return {texture, view.format};
         }
         uint32_t stageIndex = std::min(static_cast<uint32_t>(2), group->getRenderSRVShaderStage());
@@ -457,7 +471,8 @@ void RenderingManager::QueueOrDequeue(command_list* cmd_list,
                 data.format = active_data.format;
             } else if (cmd_list->get_device()->get_api() == device_api::d3d12 && (action & MATCH_EFFECT) &&
                        data.group->getRenderToResourceViews() && !data.group->isAutoSceneColourActive(device_api::d3d12)) {
-                data.group->setDebugAutoStatus("Scene input: exact pixel SRV unavailable; effects skipped");
+                data.group->setDebugAutoStatus(active_data.rejection_reason != nullptr ? active_data.rejection_reason :
+                  "Scene input: exact pixel SRV unavailable; effects skipped");
                 name->rendered = true; // Never apply these effects over the UI as a fallback.
                 it = queue.erase(it);
                 continue;

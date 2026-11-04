@@ -218,6 +218,16 @@ static void TestSceneInputPolicy() {
     resource_view_desc view(format::r11g11b10_float, 0, 1, 0, 1);
     view.type = resource_view_type::texture_2d;
     require(Rendering::IsSceneInputShape(desc, view));
+    view.texture.layers = 0; // Native SDK representation for a non-array SRV.
+    require(Rendering::IsSceneInputShape(desc, view));
+    view.texture.first_layer = 17; view.texture.layers = 23; // Ignored fields for this view type.
+    require(Rendering::IsSceneInputShape(desc, view));
+    view.type = resource_view_type::texture_2d_array;
+    require(!Rendering::IsSceneInputShape(desc, view));
+    view.type = resource_view_type::texture_2d;
+    view.texture.first_layer = 0; view.texture.layers = 1;
+    desc.texture.depth_or_layers = 2;
+    require(!Rendering::IsSceneInputShape(desc, view)); desc.texture.depth_or_layers = 1;
     desc.texture.samples = 2; require(!Rendering::IsSceneInputShape(desc, view)); desc.texture.samples = 1;
     desc.texture.levels = 2; require(!Rendering::IsSceneInputShape(desc, view)); desc.texture.levels = 1;
     view.texture.first_level = 1; require(!Rendering::IsSceneInputShape(desc, view)); view.texture.first_level = 0;

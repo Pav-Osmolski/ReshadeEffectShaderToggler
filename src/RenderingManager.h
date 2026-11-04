@@ -59,12 +59,14 @@ struct __declspec(novtable) ResourceViewData final {
     constexpr ResourceViewData()
       : resource({ 0 })
       , format(reshade::api::format::unknown) {}
-    constexpr ResourceViewData(reshade::api::resource r, reshade::api::format f)
+    constexpr ResourceViewData(reshade::api::resource r, reshade::api::format f, const char* reason = nullptr)
       : resource(r)
-      , format(f) {}
+      , format(f)
+      , rejection_reason(reason) {}
 
     reshade::api::resource resource;
     reshade::api::format format;
+    const char* rejection_reason = nullptr;
 };
 
 class __declspec(novtable) RenderingManager final {
