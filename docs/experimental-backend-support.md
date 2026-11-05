@@ -20,6 +20,8 @@ The same shader subsequently applies grading through a 3D lookup texture and com
 
 Remaining work concerns complete scene-contribution coverage and effect colour/placement compatibility. Processing a second input alone would not provide a general post-grading, pre-UI boundary for arbitrary techniques. No further capture was requested for this analysis; the supplied captures already expose the blend and grading stages.
 
+The subsequent [compositor-boundary investigation](compositor-boundary-research.md) GPU-tested a later hook inside the captured shaders. Its identity hook is bit-exact and its tint survives full secondary-colour replacement. This remains a research experiment, not a live add-on implementation or another pre-release.
+
 ### Setup
 
 1. Use the Modern experimental build matching your game architecture. Back up your REST configuration first.

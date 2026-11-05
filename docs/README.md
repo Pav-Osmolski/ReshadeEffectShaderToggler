@@ -9,6 +9,7 @@ Start with [Getting started](getting-started.md) for installation, upgrading and
 | Understand HDR formats, preview colour and tone-map clamping | [HDR handling and validation](HDR.md) |
 | Diagnose missing effects, configuration problems or crashes | [Troubleshooting](troubleshooting.md) |
 | Test the Warframe HDR pre-release with exact settings | [Scene input preview 3](scene-input-preview-3.md) |
+| Review the post-grading/pre-UI GPU experiment and implementation limits | [Compositor boundary research](compositor-boundary-research.md) |
 | Test D3D12 scene-input redirection or D3D9 reset improvements | [Experimental backend support and fork audit](experimental-backend-support.md) |
 | Build or package locally | [Building](BUILDING.md) |
 | Maintain CI or publish a release | [Release process](RELEASING.md) |

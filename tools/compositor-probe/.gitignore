@@ -1,0 +1,11 @@
+# Local research outputs and game-derived data must not be committed.
+*.raw
+*.shader
+*.dxil
+*.ll
+*.png
+*.exe
+*.obj
+*.lib
+*.exp
+__pycache__/
