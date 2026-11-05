@@ -201,6 +201,15 @@ class ToggleGroup {
     }
 
     uint64_t getDebugEffectRenderCalls() const { return _debugEffectRenderCalls; }
+    uint64_t getSceneInputAttempts() const { return _sceneInputAttempts; }
+    uint64_t getSceneInputTechniqueEvents() const { return _sceneInputTechniqueEvents; }
+    uint64_t getSceneInputDraws() const { return _sceneInputDraws; }
+    void recordSceneInputAttempt() { ++_sceneInputAttempts; }
+    void recordSceneInputTechniqueEvent() { ++_sceneInputTechniqueEvents; }
+    void recordSceneInputDraw() {
+        ++_sceneInputDraws;
+        setDebugAutoStatus("Scene input: compositor draw recorded with processed input");
+    }
     uint32_t getDebugLastRenderedTechniqueCount() const { return _debugLastRenderedTechniqueCount; }
     uint64_t getDebugLastRenderTarget() const { return _debugLastRenderTarget; }
     uint32_t getDebugSceneWidth() const { return _debugSceneWidth; }
@@ -249,6 +258,7 @@ class ToggleGroup {
         }
 
         _debugEffectRenderCalls = 0;
+        _sceneInputAttempts = _sceneInputTechniqueEvents = _sceneInputDraws = 0;
         _debugLastRenderedTechniqueCount = 0;
         _debugLastRenderTarget = 0;
         _debugLastTechniqueOrder.clear();
@@ -432,6 +442,7 @@ class ToggleGroup {
     bool _autoRenderSRV = false;
     bool _hideMarkedShaders = false;
     uint64_t _debugEffectRenderCalls = 0;
+    uint64_t _sceneInputAttempts = 0, _sceneInputTechniqueEvents = 0, _sceneInputDraws = 0;
     uint32_t _debugLastRenderedTechniqueCount = 0;
     uint64_t _debugLastRenderTarget = 0;
     uint32_t _debugSceneWidth = 0;

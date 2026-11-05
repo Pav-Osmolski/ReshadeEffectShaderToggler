@@ -15,3 +15,8 @@ cl /nologo /EHsc /std:c++20 /W4 /WX /Isrc tests/SceneInputShaderTests.cpp /Fotes
 if ($LASTEXITCODE -ne 0) { throw 'Scene-input shader tests failed to compile.' }
 & ./tests/out/scene-input-shaders.exe
 if ($LASTEXITCODE -ne 0) { throw 'Scene-input shader eligibility regression.' }
+
+cl /nologo /EHsc /std:c++20 /W4 /WX /Isrc /Ideps/reshade/include tests/SceneInputProcessingTests.cpp /Fotests/out/sdk/ /Fetests/out/scene-input-processing.exe
+if ($LASTEXITCODE -ne 0) { throw 'Scene-input processing contract tests failed to compile.' }
+& ./tests/out/scene-input-processing.exe
+if ($LASTEXITCODE -ne 0) { throw 'Scene-input processing contract regression.' }

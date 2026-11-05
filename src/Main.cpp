@@ -40,6 +40,7 @@
 #include "RenderingEffectManager.h"
 #include "SceneInput.h"
 #include "ClassicShader.h"
+#include "SceneTechniqueObservation.h"
 #include "RenderingManager.h"
 #include "RenderingPreviewManager.h"
 #include "RenderingQueueManager.h"
@@ -737,7 +738,7 @@ static void displaySettings(effect_runtime* runtime) {
 }
 
 static void Init() {
-    reshade::log::message(reshade::log::level::info, "Scene input preview 2 (pre-release): opt-in D3D12 scene-input processing; runtime validation required.");
+    reshade::log::message(reshade::log::level::info, "Scene input preview 3 (pre-release): opt-in D3D12 scene-input processing; runtime validation required.");
     resourceManager.SetResourceShim(g_addonUIData.GetResourceShim());
     resourceManager.Init();
     constantManager.Init(g_addonUIData, groupResourceManager, &constantCopy, &constantHandler);
@@ -1018,6 +1019,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID) {
             reshade::register_event<reshade::addon_event::reshade_present>(onReShadePresent);
             reshade::register_event<reshade::addon_event::reshade_reloaded_effects>(onReShadeReloadedEffects);
             reshade::register_event<reshade::addon_event::reshade_set_technique_state>(onReShadeSetTechniqueState);
+            reshade::register_event<reshade::addon_event::reshade_render_technique>(Rendering::SceneTechniqueObservation::OnRendered);
             reshade::register_event<reshade::addon_event::reshade_reorder_techniques>(onReShadeReorderTechniques);
             reshade::register_event<reshade::addon_event::bind_pipeline>(onBindPipeline);
             reshade::register_event<reshade::addon_event::init_device>(onInitDevice);
@@ -1051,6 +1053,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID) {
             reshade::unregister_event<reshade::addon_event::reshade_overlay>(onReShadeOverlay);
             reshade::unregister_event<reshade::addon_event::reshade_reloaded_effects>(onReShadeReloadedEffects);
             reshade::unregister_event<reshade::addon_event::reshade_set_technique_state>(onReShadeSetTechniqueState);
+            reshade::unregister_event<reshade::addon_event::reshade_render_technique>(Rendering::SceneTechniqueObservation::OnRendered);
             reshade::unregister_event<reshade::addon_event::reshade_reorder_techniques>(onReShadeReorderTechniques);
             reshade::unregister_event<reshade::addon_event::bind_pipeline>(onBindPipeline);
             reshade::unregister_event<reshade::addon_event::init_command_queue>(onInitCommandQueue);

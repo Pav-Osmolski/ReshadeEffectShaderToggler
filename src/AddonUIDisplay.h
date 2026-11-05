@@ -247,7 +247,7 @@ static void DisplayPreview(AddonImGui::AddonUIData& instance,
 
         DeviceDataContainer& deviceData = *runtime->get_device()->get_private_data<DeviceDataContainer>();
         const auto& preview = deviceData.huntPreview;
-        ImGui::TextUnformatted("Scene input preview 2 (pre-release)");
+        ImGui::TextUnformatted("Scene input preview 3 (pre-release)");
         if (runtime->get_device()->get_api() == reshade::api::device_api::d3d12) {
             bool trace = deviceData.traceProducers.load(std::memory_order_relaxed);
             if (ImGui::Checkbox("Trace earlier colour-target draws (diagnostic)", &trace)) {
@@ -291,13 +291,19 @@ static void DisplayPreview(AddonImGui::AddonUIData& instance,
                 ImGui::TextWrapped("Timing: %s", preview.capture_timing.c_str());
             if (!preview.capture_path.empty())
                 ImGui::TextWrapped("Path: %s", preview.capture_path.c_str());
+            if (runtime->get_device()->get_api() == reshade::api::device_api::d3d12 && group->getRenderToResourceViews()) {
+                ImGui::TextWrapped("Scene-input processing: %s", group->getDebugAutoStatus().empty() ? "Not attempted" : group->getDebugAutoStatus().c_str());
+                ImGui::Text("Technique completion events: %llu | Redirected draws: %llu",
+                  static_cast<unsigned long long>(group->getSceneInputTechniqueEvents()), static_cast<unsigned long long>(group->getSceneInputDraws()));
+                ImGui::TextWrapped("Raw input preview; this may precede the game's grading/tone mapping.");
+            }
             if (ImGui::Button("Copy preview diagnostics")) {
                 const auto api = runtime->get_device()->get_api();
                 const char* apiName = api == reshade::api::device_api::d3d9 ? "D3D9" :
                   api == reshade::api::device_api::d3d10 ? "D3D10" : api == reshade::api::device_api::d3d11 ? "D3D11" :
                   api == reshade::api::device_api::d3d12 ? "D3D12" : api == reshade::api::device_api::vulkan ? "Vulkan" : "OpenGL";
-                const std::string diagnostics = std::format(
-                  "REST {} | Scene input preview 2 (pre-release)\nGroup: {}\nAPI: {}\n"
+                std::string diagnostics = std::format(
+                  "REST {} | Scene input preview 3 (pre-release)\nGroup: {}\nAPI: {}\n"
                   "Selected shader: 0x{:08x} ({})\nSelection: {}\nStatus: {}\n"
                   "Source: {}x{} | storage {} | view {} | 0x{:x}\n"
                   "Capture timing: {}\nCapture path: {}\nSource colour space: unknown (not inferred from format)\n"
@@ -315,6 +321,21 @@ static void DisplayPreview(AddonImGui::AddonUIData& instance,
                   group->isAutoSceneColourActive(api), group->getRenderTargetIndex(), group->getInvocationLocation(),
                   clearAlpha, group->getToneMap(), group->getFlipBuffer(), group->getRenderToResourceViews(),
                   group->getRenderSRVShaderStage(), group->getRenderSRVSlotIndex(), group->getRenderSRVDescriptorIndex());
+                if (api == reshade::api::device_api::d3d12 && group->getRenderToResourceViews()) {
+                    diagnostics += std::format(
+                      "\nScene-input effect processing (separate from preview capture)\n"
+                      "Group active: {} | Global effects enabled: {} | Hunting PS/VS/CS: {}/{}/{}\n"
+                      "Allow all techniques: {} | Exceptions: {} | Assigned group entries: {} | Globally enabled techniques: {}\n"
+                      "Processing status: {}\nAttempts: {} | ReShade technique completion events: {} | Redirected draws recorded: {}\n"
+                      "Last issued technique count: {} | Order: {}\nCounters are cumulative; recorded commands do not verify GPU pixels.\n",
+                      group->isActive(), runtime->get_effects_state(), instance.GetPixelShaderManager()->isInHuntingMode(),
+                      instance.GetVertexShaderManager()->isInHuntingMode(), instance.GetComputeShaderManager()->isInHuntingMode(),
+                      group->getAllowAllTechniques(), group->getHasTechniqueExceptions(), group->GetPreferredTechniqueData().size(),
+                      runtime->get_private_data<RuntimeDataContainer>()->allEnabledTechniques.size(),
+                      group->getDebugAutoStatus().empty() ? "(not attempted)" : group->getDebugAutoStatus(), group->getSceneInputAttempts(),
+                      group->getSceneInputTechniqueEvents(), group->getSceneInputDraws(), group->getDebugLastRenderedTechniqueCount(),
+                      group->getDebugLastTechniqueOrder().empty() ? "(none)" : group->getDebugLastTechniqueOrder());
+                }
                 ImGui::SetClipboardText(diagnostics.c_str());
             }
             ImGui::Separator();

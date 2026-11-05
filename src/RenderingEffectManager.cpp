@@ -3,6 +3,7 @@
 #include "StateTracking.h"
 #include "Util.h"
 #include "SceneInput.h"
+#include "SceneTechniqueObservation.h"
 
 using namespace Rendering;
 using namespace ShaderToggler;
@@ -93,6 +94,7 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
         const bool sceneInput = cmd_list->get_device()->get_api() == device_api::d3d12 &&
                                 group->getRenderToResourceViews() && !group->isAutoSceneColourActive(device_api::d3d12);
         if (sceneInput && !sceneCopyView) {
+            group->recordSceneInputAttempt();
             // Claim selected techniques even on failure: a skipped scene input
             // must never fall back onto the final frame and tint its UI.
             auto suppressFallback = [&] {
@@ -123,9 +125,10 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
             lease->shaderReadable = true;
             if (copied) {
                 cmdData.sceneInputPending = lease;
-                group->setDebugAutoStatus("Experimental scene input: private copy supplied to selected draw");
+                cmdData.sceneInputGroup = group;
+                group->setDebugAutoStatus("Scene input: processed copy prepared for compositor draw");
                 rendered = true;
-            } else group->setDebugAutoStatus("Scene input: effects skipped");
+            } else group->setDebugAutoStatus("Scene input: no ReShade technique completion observed (loading/reload or skipped call)");
             suppressFallback();
             continue;
         }
@@ -383,11 +386,15 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
             size_t techniqueNameSize = sizeof(techniqueName);
             runtime->get_technique_name(effectTech->technique, techniqueName, &techniqueNameSize);
 
-            if (!renderedTechniqueOrder.empty())
-                renderedTechniqueOrder += " -> ";
-            renderedTechniqueOrder += techniqueName;
+            if (sceneCopyView) {
+                SceneTechniqueObservation observation(runtime, effectTech->technique, cmd_list, view_non_srgb);
+                runtime->render_technique(effectTech->technique, cmd_list, view_non_srgb, view_srgb);
+                if (!observation.recorded) continue;
+                group->recordSceneInputTechniqueEvent();
+            } else runtime->render_technique(effectTech->technique, cmd_list, view_non_srgb, view_srgb);
 
-            runtime->render_technique(effectTech->technique, cmd_list, view_non_srgb, view_srgb);
+            if (!renderedTechniqueOrder.empty()) renderedTechniqueOrder += " -> ";
+            renderedTechniqueOrder += techniqueName;
 
             effectTech->rendered = true;
             ++renderedTechniqueCount;

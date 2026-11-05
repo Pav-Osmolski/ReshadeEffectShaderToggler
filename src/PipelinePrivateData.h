@@ -66,6 +66,7 @@ struct __declspec(uuid("222F7169-3C09-40DB-9BC9-EC53842CE537")) CommandListDataC
     bool d3d12InsideRenderPass = false;
     std::vector<std::shared_ptr<Rendering::SceneInputLease>> sceneInputLeases;
     std::shared_ptr<Rendering::SceneInputLease> sceneInputPending;
+    ShaderToggler::ToggleGroup* sceneInputGroup = nullptr; // Only until the immediate replacement draw.
     bool sceneInputPatched = false;
     bool sceneInputAllowed = false;
     bool sceneInputTainted = false;
@@ -76,6 +77,7 @@ struct __declspec(uuid("222F7169-3C09-40DB-9BC9-EC53842CE537")) CommandListDataC
     void Reset() {
         sceneInputTainted = false;
         sceneInputAllowed = false;
+        sceneInputGroup = nullptr;
         producerTrace.Reset();
         ps.Reset();
         vs.Reset();

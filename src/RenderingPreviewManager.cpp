@@ -73,6 +73,23 @@ static void RecordPreviewDiagnostics(command_list* cmd_list, HuntPreview& previe
               "Layout {}: {} table 0x{:x}; ranges {}; skipped unbounded {}; sampler-only {}; missing/partial {}; clipped {}; cached entries {}\n",
               slot, c.flagged ? "flagged" : "plain", root.descriptor_table.handle, c.ranges, c.unbounded,
               c.samplers, c.missing, c.clipped, state.get_root_table_entry_size_at(stage, static_cast<uint32_t>(slot)));
+            if (device->get_api() == device_api::d3d12) {
+                uint32_t resources = 0, retained = 0;
+                int32_t firstMissing = -1;
+                const auto entries = std::min(state.get_root_table_entry_size_at(stage, static_cast<uint32_t>(slot)), size_t{256});
+                for (uint32_t binding = 0; binding < entries; ++binding) {
+                    const auto* descriptor = state.get_descriptor_at(stage, static_cast<uint32_t>(slot), binding);
+                    if (!descriptor || (descriptor->type != descriptor_type::shader_resource_view &&
+                        descriptor->type != descriptor_type::unordered_access_view && descriptor->type != descriptor_type::buffer_shader_resource_view &&
+                        descriptor->type != descriptor_type::buffer_unordered_access_view)) continue;
+                    ++resources;
+                    if (descriptor->nativeSnapshot) ++retained;
+                    else if (firstMissing < 0) firstMissing = static_cast<int32_t>(binding);
+                }
+                if (resources != 0) preview.bound_inputs += std::format(
+                  "  Retained resource descriptors (first 256): {}/{} | first missing binding: {}\n", retained, resources,
+                  firstMissing < 0 ? "none" : std::to_string(firstMissing));
+            }
         } else {
             preview.bound_inputs += std::format("Layout {}: {}\n", slot,
               root.type == StateTracking::root_entry_type::push_constants ? "root constants (not descriptors)" :

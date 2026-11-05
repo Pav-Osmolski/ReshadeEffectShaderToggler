@@ -186,6 +186,8 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="SceneInput.h" />
+    <ClInclude Include="SceneInputAllocation.h" />
+    <ClInclude Include="SceneTechniqueObservation.h" />
     <ClInclude Include="SceneInputPolicy.h" />
     <ClInclude Include="ClassicShader.h" />
     <ClInclude Include="NativeDescriptorSnapshot.h" />

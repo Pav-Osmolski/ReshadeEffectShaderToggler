@@ -1,6 +1,7 @@
 #include "SceneInput.h"
 #include "PipelinePrivateData.h"
 #include "SceneInputPolicy.h"
+#include "SceneInputAllocation.h"
 #include "StateTracking.h"
 #include <algorithm>
 #include <d3d12.h>
@@ -271,14 +272,14 @@ std::shared_ptr<SceneInputLease> PrepareSceneInput(command_list* cmd, uint32_t s
         lease->views = std::make_shared<GlobalResourceView>(dev, lease->texture, lease->format);
         if (lease->views->rtv == 0 || lease->views->srv == 0)
             return {};
+        if (!AllocateSceneInputTables(*dev, sizes, lease->tables)) {
+            status = "Scene input: REST-owned descriptor allocation failed";
+            return {};
+        }
         descriptor_heap commonHeap = { 0 };
         for (uint32_t i = 0; i < paramCount; ++i) {
             if (sizes[i] == 0)
                 continue;
-            if (!dev->allocate_descriptor_table(layout, i, &lease->tables[i])) {
-                status = "Scene input: private descriptor allocation failed";
-                return {};
-            }
             descriptor_heap heap = { 0 };
             uint32_t offset = 0;
             dev->get_descriptor_heap_offset(lease->tables[i], 0, 0, &heap, &offset);
@@ -365,6 +366,11 @@ void RestoreSceneInput(command_list* cmd) {
     // Called immediately after the replacement draw, before ANY game command
     // can change root state/heaps. All observed tables share the validated pair.
     cmd->get_private_data<state_tracking>()->apply_descriptors_dx12_vulkan(cmd);
+    if (recording.sceneInputGroup) {
+        std::unique_lock<std::shared_mutex> lock(cmd->get_device()->get_private_data<DeviceDataContainer>()->render_mutex);
+        recording.sceneInputGroup->recordSceneInputDraw();
+    }
+    recording.sceneInputGroup = nullptr;
     recording.sceneInputPatched = false;
 }
 void RetireSceneInputs(command_list* cmd) {
@@ -409,6 +415,7 @@ void RetireSceneInputs(command_list* cmd) {
     recording.sceneInputLeases.clear();
     recording.sceneInputPending.reset();
     recording.sceneInputPatched = false;
+    recording.sceneInputGroup = nullptr;
 }
 void DisposeSceneInputs(device* dev) {
     auto& data = *dev->get_private_data<DeviceDataContainer>();
