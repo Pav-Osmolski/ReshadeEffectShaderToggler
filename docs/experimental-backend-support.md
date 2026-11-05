@@ -10,6 +10,16 @@ Some games combine scene colour and UI in one final draw. Injecting into that dr
 
 REST's experimental path samples the selected input into a private texture, runs the group's effects on that copy, then supplies the processed texture to the selected compositor draw. REST issues the selected direct draw once with the private input, then restores bindings immediately before returning control to the game. It leaves the original scene texture unchanged, including history or output owned by an upscaler. This also permits a graphics compositor to consume an input previously produced by compute on another command list. It does not inject inside the upscaler itself.
 
+### Warframe Preview 3 result and remaining limits
+
+On 5 November 2026, the [reporter confirmed](https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler/issues/22#issuecomment-6660706352) that Preview 3 tints the scene behind the UI using `0x418d71b1` with TAA and `0x7dcef337` with DLSS. This is live placement evidence for those reported configurations. It does not establish general effect colour accuracy or complete motion-blur coverage.
+
+The reporter also found weaker tint and loss of tint on moving objects with motion blur enabled. The saved TAA compositor reads the selected full-resolution scene from `t0`, then blends it with another half-resolution colour input at `t2` using that input's alpha. In simplified form, this stage is `lerp(processed_main_scene, secondary_colour, secondary_alpha)`. Only the main input is redirected by the current implementation. As the secondary weight approaches one, the main input's effect contribution approaches zero. This is consistent with the reported motion-blur behaviour; the existing capture does not measure the live moving pixels or independently label every secondary contribution.
+
+The same shader subsequently applies grading through a 3D lookup texture and composites UI. Effects applied to the earlier scene input therefore need not match their final-frame appearance. Changing R11G11B10 FLOAT storage to RGB10A2 UNORM, or enabling the optional tone-map clamping pair, does not reproduce those game-specific operations. The companion `t2` texture also has multiple mips and must not be selected by simply relaxing the current single-mip checks.
+
+Remaining work concerns complete scene-contribution coverage and effect colour/placement compatibility. Processing a second input alone would not provide a general post-grading, pre-UI boundary for arbitrary techniques. No further capture was requested for this analysis; the supplied captures already expose the blend and grading stages.
+
 ### Setup
 
 1. Use the Modern experimental build matching your game architecture. Back up your REST configuration first.

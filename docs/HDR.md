@@ -18,7 +18,7 @@ REST selects where ReShade effects run. It does not select a game's HDR presenta
 
 ## Experimental D3D12 scene input
 
-The separate development branch can sample a selected pixel-shader scene input into a private RGBA-preserving texture and redirect the selected compositor draw to that processed copy. The game texture is not transitioned or written. This is distinct from rendering into a bound output or Automatic Scene Colour. It is opt-in and skips incomplete layouts rather than falling back over the UI. See [setup, supported formats and remaining tests](experimental-backend-support.md); the Warframe captures establish producer differences, not live DLSS or universal HDR compatibility.
+The separate development branch can sample a selected pixel-shader scene input into a private RGBA-preserving texture and redirect the selected compositor draw to that processed copy. The game texture is not transitioned or written. This is distinct from rendering into a bound output or Automatic Scene Colour. It is opt-in and skips incomplete layouts rather than falling back over the UI. Preview 3 now has reporter confirmation of scene tint behind the UI in Warframe TAA and DLSS. Motion-blur contributions and general effect colour compatibility remain unresolved; this is not universal HDR validation. See [setup, confirmed results and remaining limits](experimental-backend-support.md).
 
 ## Backend coverage
 
