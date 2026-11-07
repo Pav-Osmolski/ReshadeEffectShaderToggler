@@ -3,9 +3,11 @@
 #include "SceneInputPolicy.h"
 #include "SceneInputAllocation.h"
 #include "StateTracking.h"
+#include "WarframeCompositor.h"
 #include <algorithm>
 #include <d3d12.h>
 #include <mutex>
+#include <optional>
 #include <wrl/client.h>
 
 using namespace reshade::api;
@@ -42,6 +44,9 @@ void SceneInputLease::Dispose() {
     if (views)
         views->Dispose();
     views.reset();
+    if (alphaViews)
+        alphaViews->Dispose();
+    alphaViews.reset();
     for (auto table : tables)
         if (table != 0)
             device->free_descriptor_table(table);
@@ -49,6 +54,10 @@ void SceneInputLease::Dispose() {
     if (texture != 0)
         device->destroy_resource(texture);
     texture = { 0 };
+    if (alpha != 0)
+        device->destroy_resource(alpha);
+    alpha = {0};
+    split.reset();
     device = nullptr;
 }
 
@@ -83,6 +92,57 @@ class SceneInputPool {
     }
 };
 
+namespace {
+struct PixelBinding {
+    uint32_t slot, offset;
+};
+
+std::optional<PixelBinding> FindPixelBinding(const descriptor_tracking& tracking, pipeline_layout layout,
+                                            uint32_t paramCount, uint32_t shaderRegister) {
+    std::optional<PixelBinding> result;
+    for (uint32_t slot = 0; slot < paramCount; ++slot) {
+        const auto param = tracking.get_pipeline_layout_param(layout, slot);
+        const bool flagged = param.type == pipeline_layout_param_type::descriptor_table_with_flags;
+        if (!flagged && param.type != pipeline_layout_param_type::descriptor_table)
+            continue;
+        const uint32_t count = flagged ? param.descriptor_table_with_flags.count : param.descriptor_table.count;
+        for (uint32_t i = 0; i < count; ++i) {
+            const descriptor_range range = flagged ? param.descriptor_table_with_flags.ranges[i] : param.descriptor_table.ranges[i];
+            if (range.type != descriptor_type::shader_resource_view || range.dx_register_space != 0 ||
+                range.visibility != shader_stage::pixel || range.dx_register_index > shaderRegister ||
+                shaderRegister - range.dx_register_index >= range.count)
+                continue;
+            const uint64_t offset = uint64_t(range.binding) + shaderRegister - range.dx_register_index;
+            if (result || offset >= 255)
+                return {};
+            result = PixelBinding{slot, static_cast<uint32_t>(offset)};
+        }
+    }
+    return result;
+}
+
+bool SplitTargetMatches(device* dev, const state_tracking& state, uint32_t width, uint32_t height) {
+    if (state.render_targets.size() != 1 || state.render_targets[0] == 0 || state.depth_stencil != 0 ||
+        state.viewports.size() != 1 || state.scissor_rects.size() != 1 ||
+        state.primitive_topology != primitive_topology::triangle_list)
+        return false;
+    const auto view = dev->get_resource_view_desc(state.render_targets[0]);
+    const auto target = dev->get_resource_from_view(state.render_targets[0]);
+    if (target == 0 || view.format != format::r10g10b10a2_unorm ||
+        view.type != resource_view_type::texture_2d || view.texture.first_level != 0)
+        return false;
+    const auto desc = dev->get_resource_desc(target);
+    if (!SupportsWholePreviewCopy(desc) || desc.texture.width != width || desc.texture.height != height)
+        return false;
+    const auto& vp = state.viewports[0];
+    const auto& scissor = state.scissor_rects[0];
+    return vp.x == 0 && vp.y == 0 && vp.width == static_cast<float>(width) && vp.height == static_cast<float>(height) &&
+           vp.min_depth == 0 && vp.max_depth == 1 &&
+           scissor.left == 0 && scissor.top == 0 && scissor.right == static_cast<int32_t>(width) &&
+           scissor.bottom == static_cast<int32_t>(height);
+}
+}
+
 std::shared_ptr<SceneInputLease> PrepareSceneInput(command_list* cmd, uint32_t slot, uint32_t index, resource_view& source, const char*& status) {
     status = "Scene input: incomplete descriptor tracking";
     source = { 0 };
@@ -96,8 +156,25 @@ std::shared_ptr<SceneInputLease> PrepareSceneInput(command_list* cmd, uint32_t s
         status = "Scene input: direct graphics draws only";
         return {};
     }
+    std::shared_ptr<WarframeSplitPipeline> split;
     {
         std::lock_guard lock(data.scenePipelineMutex);
+        if (WarframeSplitEnabled()) {
+            const auto found = data.warframePipelines.find(state.current_pipeline[0].handle);
+            if (found == data.warframePipelines.end()) {
+                status = "Warframe split: compositor shader revision or pipeline is unsupported";
+                return {};
+            }
+            split = found->second;
+            if (split->scene == 0 || split->ui == 0) {
+                status = split->status;
+                return {};
+            }
+            if (!recording.warframeSplitDraw) {
+                status = "Warframe split: expected one direct three-vertex draw";
+                return {};
+            }
+        }
         if (!data.supportedSceneInputPipelines.contains(state.current_pipeline[0].handle)) {
             status = "Scene input: shader model, heap indexing or unobserved pipeline is unsupported";
             return {};
@@ -139,7 +216,36 @@ std::shared_ptr<SceneInputLease> PrepareSceneInput(command_list* cmd, uint32_t s
         status = reason;
         return {};
     }
-    if (!dev->check_format_support(viewDesc.format, resource_usage::render_target | resource_usage::shader_resource)) {
+    const format targetFormat = split ? format::r32g32b32a32_float : viewDesc.format;
+    std::optional<PixelBinding> alphaBinding;
+    if (split) {
+        const auto colorBinding = FindPixelBinding(tracking, layout, paramCount, 0);
+        alphaBinding = FindPixelBinding(tracking, layout, paramCount, 1);
+        const auto uiBinding = FindPixelBinding(tracking, layout, paramCount, 8);
+        if (layout != split->layout || !colorBinding || colorBinding->slot != slot || colorBinding->offset != index ||
+            !alphaBinding || !uiBinding) {
+            status = "Warframe split: select the tracked pixel t0 scene and keep the original compositor layout";
+            return {};
+        }
+        const auto* ui = state.get_descriptor_at(0, uiBinding->slot, uiBinding->offset);
+        if (!ui || ui->type != descriptor_type::shader_resource_view || !ui->nativeSnapshot ||
+            !ui->nativeSnapshot->resource.handle || ui->nativeSnapshot->description.format != format::r8g8b8a8_unorm) {
+            status = "Warframe split: expected the original UI texture at pixel t8";
+            return {};
+        }
+        const auto uiDesc = dev->get_resource_desc(ui->nativeSnapshot->resource);
+        if (viewDesc.format != format::r11g11b10_float || !SupportsWholePreviewCopy(uiDesc) ||
+            ui->nativeSnapshot->description.type != resource_view_type::texture_2d ||
+            ui->nativeSnapshot->description.texture.first_level != 0 ||
+            !SplitTargetMatches(dev, state, desc.texture.width, desc.texture.height) ||
+            uiDesc.texture.width != desc.texture.width || uiDesc.texture.height != desc.texture.height) {
+            status = "Warframe split: expected matching scene, UI and full HDR10 viewport";
+            return {};
+        }
+    }
+    constexpr auto privateUsage = resource_usage::render_target | resource_usage::shader_resource;
+    if (!dev->check_format_support(targetFormat, privateUsage) ||
+        (split && !dev->check_format_support(format::r32_float, privateUsage))) {
         status = "Scene input: format lacks render-target support";
         return {};
     }
@@ -185,7 +291,8 @@ std::shared_ptr<SceneInputLease> PrepareSceneInput(command_list* cmd, uint32_t s
         }
         sizes[i] = static_cast<uint32_t>(size);
     }
-    if (slot >= sizes.size() || index >= sizes[slot])
+    if (slot >= sizes.size() || index >= sizes[slot] ||
+        (alphaBinding && alphaBinding->offset >= sizes[alphaBinding->slot]))
         return {};
     for (const auto& stage : state.root_tables) {
         for (const auto& root : stage.second) {
@@ -225,8 +332,8 @@ std::shared_ptr<SceneInputLease> PrepareSceneInput(command_list* cmd, uint32_t s
     std::shared_ptr<SceneInputLease> lease;
     for (auto& entry : pool.entries) {
         auto& item = *entry.lease;
-        if (SceneInputPool::Complete(entry) && item.width == desc.texture.width && item.height == desc.texture.height && item.format == viewDesc.format &&
-            item.sizes == sizes) {
+        if (SceneInputPool::Complete(entry) && item.width == desc.texture.width && item.height == desc.texture.height &&
+            item.format == targetFormat && static_cast<bool>(item.split) == static_cast<bool>(split) && item.sizes == sizes) {
             lease = entry.lease;
             entry.retired = entry.reusable = false;
             entry.tickets.clear();
@@ -236,12 +343,12 @@ std::shared_ptr<SceneInputLease> PrepareSceneInput(command_list* cmd, uint32_t s
     if (!lease) {
         // Allow a bounded number of recordings in flight. Never stall a draw
         // waiting for a fence or recycle a texture referenced by a GPU command.
-        const uint64_t bytes = static_cast<uint64_t>(desc.texture.width) * desc.texture.height * (viewDesc.format == format::r16g16b16a16_float ? 8 : 4);
-        constexpr uint64_t budget = 256ull * 1024 * 1024;
+        const uint64_t bytes = static_cast<uint64_t>(desc.texture.width) * desc.texture.height *
+                               (split ? 20 : targetFormat == format::r16g16b16a16_float ? 8 : 4);
+        const uint64_t budget = (split ? 512ull : 256ull) * 1024 * 1024;
         for (auto it = pool.entries.begin(); it != pool.entries.end();) {
             if ((pool.bytes + bytes > budget || pool.entries.size() >= 64) && SceneInputPool::Complete(*it)) {
-                const auto& old = *it->lease;
-                pool.bytes -= static_cast<uint64_t>(old.width) * old.height * (old.format == format::r16g16b16a16_float ? 8 : 4);
+                pool.bytes -= it->lease->bytes;
                 it = pool.entries.erase(it);
             } else
                 ++it;
@@ -254,7 +361,8 @@ std::shared_ptr<SceneInputLease> PrepareSceneInput(command_list* cmd, uint32_t s
         lease->device = dev;
         lease->width = desc.texture.width;
         lease->height = desc.texture.height;
-        lease->format = viewDesc.format;
+        lease->format = targetFormat;
+        lease->bytes = bytes;
         lease->sizes = sizes;
         lease->tables.resize(paramCount);
         resource_desc target(lease->width,
@@ -272,6 +380,19 @@ std::shared_ptr<SceneInputLease> PrepareSceneInput(command_list* cmd, uint32_t s
         lease->views = std::make_shared<GlobalResourceView>(dev, lease->texture, lease->format);
         if (lease->views->rtv == 0 || lease->views->srv == 0)
             return {};
+        if (split) {
+            target.texture.format = format::r32_float;
+            target.usage = privateUsage;
+            if (!dev->create_resource(target, nullptr, resource_usage::render_target, &lease->alpha)) {
+                status = "Warframe split: private alpha allocation failed";
+                return {};
+            }
+            lease->alphaViews = std::make_shared<GlobalResourceView>(dev, lease->alpha, format::r32_float);
+            if (lease->alphaViews->rtv == 0 || lease->alphaViews->srv == 0) {
+                status = "Warframe split: private alpha views unavailable";
+                return {};
+            }
+        }
         if (!AllocateSceneInputTables(*dev, sizes, lease->tables)) {
             status = "Scene input: REST-owned descriptor allocation failed";
             return {};
@@ -290,6 +411,7 @@ std::shared_ptr<SceneInputLease> PrepareSceneInput(command_list* cmd, uint32_t s
         pool.bytes += bytes;
         pool.entries.push_back({ lease, false, false, {} });
     }
+    lease->split = split;
     // Keep even an unsuccessful attempt alive until recording retirement.
     recording.sceneInputLeases.push_back(lease);
     descriptor_heap privateHeap = { 0 };
@@ -321,8 +443,32 @@ std::shared_ptr<SceneInputLease> PrepareSceneInput(command_list* cmd, uint32_t s
     update.type = descriptor_type::shader_resource_view;
     update.descriptors = &lease->views->srv;
     dev->update_descriptor_tables(1, &update);
+    if (alphaBinding) {
+        update.table = lease->tables[alphaBinding->slot];
+        update.binding = alphaBinding->offset;
+        update.descriptors = &lease->alphaViews->srv;
+        dev->update_descriptor_tables(1, &update);
+    }
     status = "Scene input: private copy prepared";
     return lease;
+}
+
+void RecordWarframeSplitScene(command_list* cmd, SceneInputLease& lease) {
+    auto& recording = *cmd->get_private_data<CommandListDataContainer>();
+    auto& state = *cmd->get_private_data<state_tracking>();
+    if (lease.alphaReadable)
+        cmd->barrier(lease.alpha, resource_usage::shader_resource, resource_usage::render_target);
+    const resource_view targets[]{lease.views->rtv, lease.alphaViews->rtv};
+    const float clear[4]{};
+    for (auto target : targets)
+        cmd->clear_render_target_view(target, clear);
+    cmd->bind_render_targets_and_depth_stencil(2, targets);
+    cmd->bind_pipeline(pipeline_stage::all_graphics, lease.split->scene);
+    cmd->draw(3, 1, recording.warframeFirstVertex, recording.warframeFirstInstance);
+    cmd->bind_render_targets_and_depth_stencil(1, state.render_targets.data());
+    cmd->bind_pipeline(pipeline_stage::all_graphics, state.current_pipeline[0]);
+    cmd->barrier(lease.alpha, resource_usage::render_target, resource_usage::shader_resource);
+    lease.alphaReadable = true;
 }
 
 void BindSceneInput(command_list* cmd) {
@@ -346,7 +492,7 @@ void BindSceneInput(command_list* cmd) {
     }
     state.apply_descriptors_dx12_vulkan(cmd);
     // D3D12 has one active PSO, even when graphics and compute roots coexist.
-    cmd->bind_pipeline(pipeline_stage::all_graphics, state.current_pipeline[0]);
+    cmd->bind_pipeline(pipeline_stage::all_graphics, lease.split ? lease.split->ui : state.current_pipeline[0]);
     // Establish both heaps before setting root tables: switching either heap
     // invalidates all its root-table bindings. Preserve the game's sampler heap.
     for (int pass = 0; pass < 2; ++pass)
@@ -365,10 +511,12 @@ void RestoreSceneInput(command_list* cmd) {
         return;
     // Called immediately after the replacement draw, before ANY game command
     // can change root state/heaps. All observed tables share the validated pair.
-    cmd->get_private_data<state_tracking>()->apply_descriptors_dx12_vulkan(cmd);
+    auto& state = *cmd->get_private_data<state_tracking>();
+    state.apply_descriptors_dx12_vulkan(cmd);
+    cmd->bind_pipeline(pipeline_stage::all_graphics, state.current_pipeline[0]);
     if (recording.sceneInputGroup) {
         std::unique_lock<std::shared_mutex> lock(cmd->get_device()->get_private_data<DeviceDataContainer>()->render_mutex);
-        recording.sceneInputGroup->recordSceneInputDraw();
+        recording.sceneInputGroup->recordSceneInputDraw(WarframeSplitEnabled());
     }
     recording.sceneInputGroup = nullptr;
     recording.sceneInputPatched = false;

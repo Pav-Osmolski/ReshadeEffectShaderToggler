@@ -7,6 +7,7 @@ import numpy as np
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--root', type=Path, required=True)
+parser.add_argument('--runtime-pair', action='store_true')
 args = parser.parse_args()
 
 
@@ -84,6 +85,13 @@ for mode in ('taa', 'no-taa', 'fsr'):
         'full secondary identity': measurements['full_secondary_weight']['identity_vs_inline'],
         'full secondary tint': measurements['full_secondary_weight']['tint_vs_inline'],
     }
+    if args.runtime_pair:
+        measurements['runtime_pair'] = {
+            'identity_vs_original': difference(original, pixels(folder, 'runtime-identity', count)),
+            'tint_overwrite_alpha_vs_inline': difference(
+                inline_tint, pixels(folder, 'runtime-tint-overwrite-alpha', count)),
+        }
+        exact_checks.update(measurements['runtime_pair'])
     for check, metrics in exact_checks.items():
         if metrics['changed_pixels']:
             failures.append(f'{mode}: {check} differs by {metrics["changed_pixels"]} pixels')
@@ -99,5 +107,7 @@ for mode, measurements in report.items():
     for precision in ('fp32', 'fp16', 'rgb10'):
         print(precision, measurements[precision])
     print('full secondary:', measurements['full_secondary_weight'])
+    if args.runtime_pair:
+        print('runtime pair:', measurements['runtime_pair'])
 if failures:
     raise SystemExit('\n'.join(failures))

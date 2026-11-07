@@ -32,6 +32,7 @@
 
 #pragma once
 #include "RenderingSafety.h"
+#include "WarframeCompositor.h"
 #include "AddonUIAbout.h"
 #include "AddonUIConstants.h"
 #include "ConstantManager.h"
@@ -247,7 +248,7 @@ static void DisplayPreview(AddonImGui::AddonUIData& instance,
 
         DeviceDataContainer& deviceData = *runtime->get_device()->get_private_data<DeviceDataContainer>();
         const auto& preview = deviceData.huntPreview;
-        ImGui::TextUnformatted("Scene input preview 3 (pre-release)");
+        ImGui::TextUnformatted("Scene input preview 4 (pre-release)");
         if (runtime->get_device()->get_api() == reshade::api::device_api::d3d12) {
             bool trace = deviceData.traceProducers.load(std::memory_order_relaxed);
             if (ImGui::Checkbox("Trace earlier colour-target draws (diagnostic)", &trace)) {
@@ -303,7 +304,7 @@ static void DisplayPreview(AddonImGui::AddonUIData& instance,
                   api == reshade::api::device_api::d3d10 ? "D3D10" : api == reshade::api::device_api::d3d11 ? "D3D11" :
                   api == reshade::api::device_api::d3d12 ? "D3D12" : api == reshade::api::device_api::vulkan ? "Vulkan" : "OpenGL";
                 std::string diagnostics = std::format(
-                  "REST {} | Scene input preview 3 (pre-release)\nGroup: {}\nAPI: {}\n"
+                  "REST {} | Scene input preview 4 (pre-release)\nGroup: {}\nAPI: {}\n"
                   "Selected shader: 0x{:08x} ({})\nSelection: {}\nStatus: {}\n"
                   "Source: {}x{} | storage {} | view {} | 0x{:x}\n"
                   "Capture timing: {}\nCapture path: {}\nSource colour space: unknown (not inferred from format)\n"
@@ -1764,6 +1765,15 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, reshade::api::eff
         ImGui::TextDisabled("Active after last restart: %s%s", registeredTracking ? "on" : "off",
           trackDescriptors != registeredTracking ? " - save and restart to apply" : "");
         instance.SetTrackDescriptors(trackDescriptors);
+
+        if (Rendering::WarframeSplitAvailable()) {
+            bool split = instance.GetWarframeCompositorSplit();
+            ImGui::Checkbox("Warframe HDR compositor split (experimental)", &split);
+            const bool splitActive = Rendering::WarframeSplitEnabled();
+            ImGui::TextDisabled("Active after last restart: %s%s", splitActive ? "on" : "off",
+              split != splitActive ? " - save and restart to apply" : "");
+            instance.SetWarframeCompositorSplit(split);
+        }
 
         bool runtimeReload = instance.GetPreventRuntimeReload();
         ImGui::Checkbox("Prevent runtime reload", &runtimeReload);

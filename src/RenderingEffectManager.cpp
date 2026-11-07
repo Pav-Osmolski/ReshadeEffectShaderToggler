@@ -3,6 +3,7 @@
 #include "StateTracking.h"
 #include "Util.h"
 #include "SceneInput.h"
+#include "WarframeCompositor.h"
 #include "SceneTechniqueObservation.h"
 
 using namespace Rendering;
@@ -103,6 +104,11 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
             if (active_resource.resource == 0 || group->getRenderSRVShaderStage() != 0) {
                 group->setDebugAutoStatus("Scene input: exact pixel SRV unavailable"); suppressFallback(); continue;
             }
+            if (WarframeSplitEnabled() && (group->getToneMap() || group->getFlipBuffer())) {
+                group->setDebugAutoStatus("Warframe split: disable tone-map clamping and flip for this group");
+                suppressFallback();
+                continue;
+            }
             resource_view source = {0}; const char* status = nullptr;
             auto lease = PrepareSceneInput(cmd_list, group->getRenderSRVSlotIndex(), group->getRenderSRVDescriptorIndex(), source, status);
             group->setDebugAutoStatus(status);
@@ -110,7 +116,14 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
             if (lease->shaderReadable)
                 cmd_list->barrier(lease->texture, resource_usage::shader_resource, resource_usage::render_target);
             lease->shaderReadable = false;
-            if (!shaderManager.CopySceneInput(cmd_list, source, lease->views->rtv, lease->width, lease->height)) {
+            if (lease->split) {
+                if (!shaderManager.PrepareSceneInputCopy(cmd_list->get_device(), lease->format)) {
+                    group->setDebugAutoStatus("Warframe split: descriptor heap restoration unavailable");
+                    suppressFallback();
+                    continue;
+                }
+                RecordWarframeSplitScene(cmd_list, *lease);
+            } else if (!shaderManager.CopySceneInput(cmd_list, source, lease->views->rtv, lease->width, lease->height)) {
                 group->setDebugAutoStatus("Scene input: copy shader unavailable"); suppressFallback(); continue;
             }
             effect_queue copiedQueue;
@@ -119,15 +132,22 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
                 copiedQueue.emplace(effect, ResourceRenderData{group, CALL_DRAW, lease->texture, lease->format});
                 copiedNames.insert(effect);
             }
+            const uint64_t before = group->getSceneInputTechniqueEvents();
             const bool copied = _RenderEffects(cmd_list, deviceData, runtimeData, copiedQueue, removalList,
                                                copiedNames, false, nullptr, lease->views);
             cmd_list->barrier(lease->texture, resource_usage::render_target, resource_usage::shader_resource);
             lease->shaderReadable = true;
-            if (copied) {
+            if (copied && (!lease->split || group->getSceneInputTechniqueEvents() - before == effectList.size())) {
                 cmdData.sceneInputPending = lease;
                 cmdData.sceneInputGroup = group;
-                group->setDebugAutoStatus("Scene input: processed copy prepared for compositor draw");
+                group->setDebugAutoStatus(lease->split ? "Warframe split: processed graded scene prepared for UI composition" :
+                                                        "Scene input: processed copy prepared for compositor draw");
                 rendered = true;
+            } else if (lease->split) {
+                auto& state = *cmd_list->get_private_data<state_tracking>();
+                state.apply(cmd_list, true);
+                cmd_list->bind_pipeline(pipeline_stage::all_graphics, state.current_pipeline[0]);
+                group->setDebugAutoStatus("Warframe split: waiting for every selected ReShade technique");
             } else group->setDebugAutoStatus("Scene input: no ReShade technique completion observed (loading/reload or skipped call)");
             suppressFallback();
             continue;

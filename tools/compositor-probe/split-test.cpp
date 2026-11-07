@@ -249,7 +249,7 @@ static ComPtr<ID3D12RootSignature> Root(Gpu &gpu) {
 }
 
 static ComPtr<ID3D12PipelineState> Pipeline(Gpu &gpu, ID3D12RootSignature *root,
-                                           const Bytes &vs, const Path &ps, DXGI_FORMAT format) {
+                                           const Bytes &vs, const Path &ps, DXGI_FORMAT format, bool splitAlpha = false) {
   const auto pixel = Read(ps);
   const D3D12_INPUT_ELEMENT_DESC input[]{
       {"POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
@@ -268,6 +268,12 @@ static ComPtr<ID3D12PipelineState> Pipeline(Gpu &gpu, ID3D12RootSignature *root,
   desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
   desc.NumRenderTargets = 1;
   desc.RTVFormats[0] = format;
+  if (splitAlpha) {
+    desc.NumRenderTargets = 2;
+    desc.RTVFormats[1] = DXGI_FORMAT_R32_FLOAT;
+    desc.BlendState.IndependentBlendEnable = TRUE;
+    desc.BlendState.RenderTarget[1].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_RED;
+  }
   desc.SampleDesc.Count = 1;
   ComPtr<ID3D12PipelineState> pipeline;
   Check(gpu.device->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(&pipeline)), ps.filename().string().c_str());
@@ -275,8 +281,8 @@ static ComPtr<ID3D12PipelineState> Pipeline(Gpu &gpu, ID3D12RootSignature *root,
 }
 
 int wmain(int argc, wchar_t **argv) {
-  if (argc != 4) {
-    fprintf(stderr, "Usage: split-test mode-directory replay-vertex.dxil tint-scene.dxil\n");
+  if (argc != 4 && argc != 5) {
+    fprintf(stderr, "Usage: split-test mode-directory replay-vertex.dxil tint-scene.dxil [overwrite-alpha.dxil]\n");
     return 2;
   }
   try {
@@ -291,9 +297,9 @@ int wmain(int argc, wchar_t **argv) {
     constants.resize(512, 0);
     auto *vertexBuffer = gpu.Buffer(vertices.size(), D3D12_HEAP_TYPE_UPLOAD, vertices.data());
     auto *constantBuffer = gpu.Buffer(constants.size(), D3D12_HEAP_TYPE_UPLOAD, constants.data());
-    const auto srvs = Heap(gpu, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 70, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
+    const auto srvs = Heap(gpu, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 90, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
     const auto samplers = Heap(gpu, D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, 10, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
-    const auto rtvs = Heap(gpu, D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 7, D3D12_DESCRIPTOR_HEAP_FLAG_NONE);
+    const auto rtvs = Heap(gpu, D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 8, D3D12_DESCRIPTOR_HEAP_FLAG_NONE);
     const UINT srvStep = gpu.device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
     const UINT samplerStep = gpu.device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
     const UINT rtvStep = gpu.device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
@@ -353,10 +359,14 @@ int wmain(int argc, wchar_t **argv) {
     if (width != inputs[8].width || height != inputs[8].height || viewport.TopLeftX || viewport.TopLeftY)
       throw std::runtime_error("Unexpected output viewport");
 
-    auto table = [&](UINT index, ID3D12Resource *scene, TextureInput input) {
+    auto table = [&](UINT index, ID3D12Resource *scene, TextureInput input, ID3D12Resource *alpha = nullptr) {
       for (UINT slot = 0; slot < textures.size(); ++slot) {
         ID3D12Resource *resource = slot == 0 ? scene : textures[slot];
-        const TextureInput &info = slot == 0 ? input : inputs[slot];
+        TextureInput info = slot == 0 ? input : inputs[slot];
+        if (slot == 1 && alpha) {
+          resource = alpha;
+          info = {DXGI_FORMAT_R32_FLOAT, DXGI_FORMAT_R32_FLOAT, width, height, 1, 1, 4};
+        }
         D3D12_SHADER_RESOURCE_VIEW_DESC desc{};
         desc.Format = resource ? info.view : DXGI_FORMAT_R8G8B8A8_UNORM;
         desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
@@ -392,9 +402,10 @@ int wmain(int argc, wchar_t **argv) {
     const D3D12_VERTEX_BUFFER_VIEW vertexView{vertexBuffer->GetGPUVirtualAddress(), 144, 48};
     gpu.list->IASetVertexBuffers(0, 1, &vertexView);
     gpu.list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-    auto draw = [&](ID3D12PipelineState *pipeline, UINT target, UINT descriptors) {
-      const D3D12_CPU_DESCRIPTOR_HANDLE rtv{rtvs->GetCPUDescriptorHandleForHeapStart().ptr + target * rtvStep};
-      gpu.list->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
+    auto draw = [&](ID3D12PipelineState *pipeline, UINT target, UINT descriptors, UINT alpha = 0) {
+      const auto base = rtvs->GetCPUDescriptorHandleForHeapStart().ptr;
+      const D3D12_CPU_DESCRIPTOR_HANDLE targets[]{{base + target * rtvStep}, {base + alpha * rtvStep}};
+      gpu.list->OMSetRenderTargets(alpha ? 2 : 1, targets, FALSE, nullptr);
       gpu.list->SetGraphicsRootDescriptorTable(0, {srvs->GetGPUDescriptorHandleForHeapStart().ptr + descriptors * 10 * srvStep});
       gpu.list->SetPipelineState(pipeline);
       gpu.list->DrawInstanced(3, 1, 0, 0);
@@ -433,6 +444,26 @@ int wmain(int argc, wchar_t **argv) {
         gpu.Transition(processed, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
         draw(ui.Get(), 0, slot + 1);
         gpu.SaveTarget(output, folder / "split-secondary-tint.raw");
+        if (argc == 5) {
+          auto *alpha = createTarget(DXGI_FORMAT_R32_FLOAT, 7);
+          table(7, scene, input, alpha);
+          table(8, processed, input, alpha);
+          passes.push_back(Pipeline(gpu, root.Get(), vertexShader, folder / "runtime-scene.dxil", format, true));
+          gpu.Transition(scene, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
+          draw(passes.back().Get(), slot, 0, 7);
+          gpu.Transition(scene, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+          gpu.Transition(alpha, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+          passes.push_back(Pipeline(gpu, root.Get(), vertexShader, folder / "runtime-ui.dxil", outputFormat));
+          auto *runtimeUi = passes.back().Get();
+          draw(runtimeUi, 0, 7);
+          gpu.SaveTarget(output, folder / "runtime-identity.raw");
+          passes.push_back(Pipeline(gpu, root.Get(), vertexShader, argv[4], format));
+          gpu.Transition(processed, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
+          draw(passes.back().Get(), slot + 1, slot);
+          gpu.Transition(processed, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+          draw(runtimeUi, 0, 8);
+          gpu.SaveTarget(output, folder / "runtime-tint-overwrite-alpha.raw");
+        }
       }
       slot += 2;
     }

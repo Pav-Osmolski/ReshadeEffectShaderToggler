@@ -11,7 +11,7 @@
 #include <tuple>
 #include <unordered_map>
 #include <vector>
-namespace Rendering { struct SceneInputLease; class SceneInputPool; }
+namespace Rendering { struct SceneInputLease; class SceneInputPool; struct WarframeSplitPipeline; }
 
 struct __declspec(novtable) ResourceRenderData final {
     constexpr ResourceRenderData()
@@ -69,6 +69,9 @@ struct __declspec(uuid("222F7169-3C09-40DB-9BC9-EC53842CE537")) CommandListDataC
     ShaderToggler::ToggleGroup* sceneInputGroup = nullptr; // Only until the immediate replacement draw.
     bool sceneInputPatched = false;
     bool sceneInputAllowed = false;
+    bool warframeSplitDraw = false;
+    uint32_t warframeFirstVertex = 0;
+    uint32_t warframeFirstInstance = 0;
     bool sceneInputTainted = false;
     ShaderData ps{ 0 };
     ShaderData vs{ 1 };
@@ -77,6 +80,7 @@ struct __declspec(uuid("222F7169-3C09-40DB-9BC9-EC53842CE537")) CommandListDataC
     void Reset() {
         sceneInputTainted = false;
         sceneInputAllowed = false;
+        warframeSplitDraw = false;
         sceneInputGroup = nullptr;
         producerTrace.Reset();
         ps.Reset();
@@ -206,6 +210,7 @@ struct __declspec(uuid("C63E95B1-4E2F-46D6-A276-E8B4612C069A")) DeviceDataContai
     std::atomic_bool sceneInputAttempted{false};
     std::mutex scenePipelineMutex;
     std::unordered_set<uint64_t> supportedSceneInputPipelines;
+    std::unordered_map<uint64_t, std::shared_ptr<Rendering::WarframeSplitPipeline>> warframePipelines;
     reshade::api::effect_runtime* current_runtime = nullptr;
     std::atomic_bool rendered_effects = false;
     std::shared_mutex binding_mutex;

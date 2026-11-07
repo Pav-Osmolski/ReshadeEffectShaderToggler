@@ -229,16 +229,24 @@ bool RenderingShaderManager::ApplyShader(command_list* cmd_list,
     return true;
 }
 
-bool RenderingShaderManager::CopySceneInput(command_list* cmd, resource_view source, resource_view target, uint32_t width, uint32_t height) {
-    if (source == 0 || target == 0 || cmd->get_device()->get_api() != device_api::d3d12) return false;
-    auto* dev = cmd->get_device();
+bool RenderingShaderManager::PrepareSceneInputCopy(device* dev, format targetFormat) {
     auto& data = *dev->get_private_data<DeviceDataContainer>();
-    const auto targetFormat = dev->get_resource_view_desc(target).format;
     std::lock_guard lock(data.customShader.pipelineMutex);
     auto& instance = data.customShader.sceneFormatPipelines[static_cast<uint32_t>(targetFormat)];
     InitShader(dev, SHADER_SCENE_COPY_PS_4_0, SHADER_FULLSCREEN_VS_4_0,
                instance.pipeline, instance.pipelineLayout, instance.pipelineSampler,
                data.customShader.fullscreenQuadVertexBuffer, 0xF, targetFormat);
+    return instance.pipeline != 0;
+}
+
+bool RenderingShaderManager::CopySceneInput(command_list* cmd, resource_view source, resource_view target, uint32_t width, uint32_t height) {
+    if (source == 0 || target == 0 || cmd->get_device()->get_api() != device_api::d3d12) return false;
+    auto* dev = cmd->get_device();
+    const auto targetFormat = dev->get_resource_view_desc(target).format;
+    if (!PrepareSceneInputCopy(dev, targetFormat)) return false;
+    auto& data = *dev->get_private_data<DeviceDataContainer>();
+    std::lock_guard lock(data.customShader.pipelineMutex);
+    auto& instance = data.customShader.sceneFormatPipelines.at(static_cast<uint32_t>(targetFormat));
     const bool rendered = ApplyShader(cmd, source, target, instance.pipeline, instance.pipelineLayout,
                                       instance.pipelineSampler, data.customShader.fullscreenQuadVertexBuffer, width, height);
     if (rendered) cmd->get_private_data<state_tracking>()->apply(cmd, true);

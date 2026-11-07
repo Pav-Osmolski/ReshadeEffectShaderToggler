@@ -12,6 +12,13 @@
 // deliberately kept outside the repository alongside the original capture.
 inline void ExportSplitInputs(IReplayController &controller, const std::string &directory) {
   const auto &state = *controller.GetD3D12PipelineState();
+  const auto &om = state.outputMerger;
+  if (om.renderTargets.empty() || om.blendState.blends.empty() ||
+      om.depthTarget.resource != ResourceId() || om.depthStencilState.depthEnable ||
+      om.depthStencilState.stencilEnable || om.blendState.alphaToCoverage ||
+      om.blendState.blends[0].enabled || om.blendState.blends[0].logicOperationEnabled ||
+      om.blendState.blends[0].writeMask != 15)
+    throw std::runtime_error("Captured compositor output state does not fit the live profile");
   const auto &rasterizer = state.rasterizer;
   if (rasterizer.viewports.size() != 1 || rasterizer.scissors.size() != 1)
     throw std::runtime_error("Expected one viewport and scissor");
@@ -36,6 +43,7 @@ inline void ExportSplitInputs(IReplayController &controller, const std::string &
   manifest << "mesh " << mesh.numIndices << ' ' << mesh.vertexByteStride << ' ' << unsigned(mesh.topology) << '\n';
   write("vertices.raw", controller.GetBufferData(mesh.vertexResourceId, mesh.vertexByteOffset,
                                                 uint64_t(mesh.vertexByteStride) * mesh.numIndices));
+  write("vertex.shader", state.vertexShader.reflection->rawBytes);
   const auto &reflection = *state.pixelShader.reflection;
   const auto textures = controller.GetTextures();
   for (const auto &access : controller.GetDescriptorAccess()) {

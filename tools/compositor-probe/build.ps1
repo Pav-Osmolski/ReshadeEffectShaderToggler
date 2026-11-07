@@ -17,3 +17,5 @@ if ($LASTEXITCODE -ne 0) { throw 'DXIL tool compile failed.' }
 if ($LASTEXITCODE -ne 0) { throw 'Replay tool compile failed.' }
 & cl /nologo /EHsc /std:c++17 /W4 "$PSScriptRoot/split-test.cpp" d3d12.lib "/Fo$out/split-test.obj" "/Fe$out/split-test.exe"
 if ($LASTEXITCODE -ne 0) { throw 'D3D12 split test compile failed.' }
+& cl /nologo /EHsc /std:c++17 /W4 "$PSScriptRoot/runtime-split-variants.cpp" "$PSScriptRoot/../../src/WarframeShaders.cpp" "/Fo$out/" "/Fe$out/runtime-split-variants.exe"
+if ($LASTEXITCODE -ne 0) { throw 'Runtime shader tool compile failed.' }

@@ -4,15 +4,21 @@
 #include <vector>
 
 namespace Rendering {
+struct WarframeSplitPipeline;
 struct SceneInputLease {
     reshade::api::device* device = nullptr;
     reshade::api::resource texture = { 0 };
     std::shared_ptr<GlobalResourceView> views;
+    reshade::api::resource alpha = {0};
+    std::shared_ptr<GlobalResourceView> alphaViews;
+    std::shared_ptr<WarframeSplitPipeline> split;
     std::vector<reshade::api::descriptor_table> tables;
     std::vector<uint32_t> sizes;
     uint32_t width = 0, height = 0;
+    uint64_t bytes = 0;
     reshade::api::format format = reshade::api::format::unknown;
     bool shaderReadable = false;
+    bool alphaReadable = false;
     void Dispose();
     ~SceneInputLease() { Dispose(); }
 };
@@ -27,6 +33,7 @@ std::shared_ptr<SceneInputLease> PrepareSceneInput(reshade::api::command_list*,
                                                    reshade::api::resource_view& source,
                                                    const char*& status);
 void BindSceneInput(reshade::api::command_list*);
+void RecordWarframeSplitScene(reshade::api::command_list*, SceneInputLease&);
 void RestoreSceneInput(reshade::api::command_list*);
 void RetireSceneInputs(reshade::api::command_list*);
 void DisposeSceneInputs(reshade::api::device*);

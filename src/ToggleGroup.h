@@ -206,9 +206,10 @@ class ToggleGroup {
     uint64_t getSceneInputDraws() const { return _sceneInputDraws; }
     void recordSceneInputAttempt() { ++_sceneInputAttempts; }
     void recordSceneInputTechniqueEvent() { ++_sceneInputTechniqueEvents; }
-    void recordSceneInputDraw() {
+    void recordSceneInputDraw(bool warframeSplit) {
         ++_sceneInputDraws;
-        setDebugAutoStatus("Scene input: compositor draw recorded with processed input");
+        setDebugAutoStatus(warframeSplit ? "Warframe split: graded effects and original UI composition recorded" :
+                                         "Scene input: compositor draw recorded with processed input");
     }
     uint32_t getDebugLastRenderedTechniqueCount() const { return _debugLastRenderedTechniqueCount; }
     uint64_t getDebugLastRenderTarget() const { return _debugLastRenderTarget; }

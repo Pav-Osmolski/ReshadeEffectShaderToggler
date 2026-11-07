@@ -255,6 +255,7 @@ void AddonUIData::LoadShaderTogglerIniFile(const string& fileName)
     }
 
     _trackDescriptors = iniFile.GetBoolOrDefault("TrackDescriptors", "General", true);
+    _warframeCompositorSplit = iniFile.GetBoolOrDefault("WarframeCompositorSplit", "General", false);
 
     const float overlayOpacity = iniFile.GetFloat("OverlayOpacity", "General");
     if (overlayOpacity != FLT_MIN)
@@ -346,6 +347,7 @@ void AddonUIData::SaveShaderTogglerIniFile(const string& fileName)
     iniFile.SetValue("ConstantBufferHookType", _constHookType, "", "General");
     iniFile.SetValue("ConstantBufferHookCopyType", _constHookCopyType, "", "General");
     iniFile.SetBool("TrackDescriptors", _trackDescriptors, "", "General");
+    iniFile.SetBool("WarframeCompositorSplit", _warframeCompositorSplit, "", "General");
     iniFile.SetFloat("OverlayOpacity", _overlayOpacity, "", "General");
     iniFile.SetInt("ShaderCollectionFrames", _startValueFramecountCollectionPhase, "", "General");
     iniFile.SetBool("PreventRuntimeReload", _preventRuntimeReload, "", "General");

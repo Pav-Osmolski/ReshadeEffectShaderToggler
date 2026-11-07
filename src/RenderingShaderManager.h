@@ -13,6 +13,7 @@ class __declspec(novtable) RenderingShaderManager final {
 
     bool CopySceneInput(reshade::api::command_list*, reshade::api::resource_view source,
                         reshade::api::resource_view target, uint32_t width, uint32_t height);
+    bool PrepareSceneInputCopy(reshade::api::device*, reshade::api::format);
     bool CopyResource(reshade::api::command_list* cmd_list,
                       reshade::api::resource_view srv_src,
                       reshade::api::resource_view rtv_dst,

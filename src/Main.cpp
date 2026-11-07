@@ -39,6 +39,7 @@
 #include "RenderingBindingManager.h"
 #include "RenderingEffectManager.h"
 #include "SceneInput.h"
+#include "WarframeCompositor.h"
 #include "ClassicShader.h"
 #include "SceneTechniqueObservation.h"
 #include "RenderingManager.h"
@@ -347,7 +348,8 @@ static void onDestroyEffectRuntime(effect_runtime* runtime) {
     runtime->destroy_private_data<RuntimeDataContainer>();
 }
 
-static void onInitPipeline(device* device, pipeline_layout, uint32_t subobjectCount, const pipeline_subobject* subobjects, pipeline pipelineHandle) {
+static void onInitPipeline(device* device, pipeline_layout layout, uint32_t subobjectCount, const pipeline_subobject* subobjects, pipeline pipelineHandle) {
+    Rendering::InitWarframeSplitPipeline(device, layout, subobjectCount, subobjects, pipelineHandle);
     if (device->get_api() == device_api::d3d12) {
         bool supported = true, pixel = false;
         for (uint32_t i = 0; i < subobjectCount; ++i) {
@@ -386,10 +388,13 @@ static void onInitPipeline(device* device, pipeline_layout, uint32_t subobjectCo
 }
 
 static void onDestroyPipeline(device* device, pipeline pipelineHandle) {
+    std::shared_ptr<Rendering::WarframeSplitPipeline> split;
     {
         auto& data = *device->get_private_data<DeviceDataContainer>();
         std::lock_guard lock(data.scenePipelineMutex);
         data.supportedSceneInputPipelines.erase(pipelineHandle.handle);
+        if (auto entry = data.warframePipelines.extract(pipelineHandle.handle); !entry.empty())
+            split = std::move(entry.mapped());
     }
     g_pixelShaderManager.removeHandle(pipelineHandle.handle);
     g_vertexShaderManager.removeHandle(pipelineHandle.handle);
@@ -738,7 +743,7 @@ static void displaySettings(effect_runtime* runtime) {
 }
 
 static void Init() {
-    reshade::log::message(reshade::log::level::info, "Scene input preview 3 (pre-release): opt-in D3D12 scene-input processing; runtime validation required.");
+    reshade::log::message(reshade::log::level::info, "Scene input preview 4 (pre-release): opt-in Warframe HDR compositor split available on x64.");
     resourceManager.SetResourceShim(g_addonUIData.GetResourceShim());
     resourceManager.Init();
     constantManager.Init(g_addonUIData, groupResourceManager, &constantCopy, &constantHandler);
@@ -892,11 +897,16 @@ static bool onDraw(command_list* cmd_list, uint32_t vertex_count, uint32_t insta
         ShouldSuppressMarkedGraphicsCall(cmd_list, Rendering::MATCH_PS | Rendering::MATCH_VS))
         return true;
 
-    cmd_list->get_private_data<CommandListDataContainer>()->sceneInputAllowed = true;
+    auto& recording = *cmd_list->get_private_data<CommandListDataContainer>();
+    recording.sceneInputAllowed = true;
+    recording.warframeSplitDraw = vertex_count == 3 && instance_count == 1;
+    recording.warframeFirstVertex = first_vertex;
+    recording.warframeFirstInstance = first_instance;
     CheckDrawCall(cmd_list, Rendering::MATCH_PS | Rendering::MATCH_VS);
     ProducerDiagnostics::RecordDraw(cmd_list);
-    cmd_list->get_private_data<CommandListDataContainer>()->sceneInputAllowed = false;
-    if (cmd_list->get_private_data<CommandListDataContainer>()->sceneInputPending) {
+    recording.sceneInputAllowed = false;
+    recording.warframeSplitDraw = false;
+    if (recording.sceneInputPending) {
         Rendering::BindSceneInput(cmd_list);
         cmd_list->draw(vertex_count, instance_count, first_vertex, first_instance);
         Rendering::RestoreSceneInput(cmd_list);
@@ -983,6 +993,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID) {
 
             g_addonUIData.SetBasePath(g_dllPath.parent_path());
             g_addonUIData.LoadShaderTogglerIniFile();
+            Rendering::ConfigureWarframeSplit(getModulePath(nullptr), g_dllPath, g_addonUIData.GetWarframeCompositorSplit());
 
             state_tracking::register_events(g_addonUIData.GetTrackDescriptors());
             Init();

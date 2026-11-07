@@ -136,6 +136,7 @@ class AddonUIData {
     std::string _constHookCopyType = "gpu_readback";
     std::string _resourceShim = "none";
     bool _trackDescriptors = true;
+    bool _warframeCompositorSplit = false;
     bool _preventRuntimeReload = false;
     std::filesystem::path _basePath;
     TabType _currentTab = TabType::TAB_NONE;
@@ -205,6 +206,13 @@ class AddonUIData {
         return _constantHandler->GetRESTVariables();
     };
     bool GetTrackDescriptors() const { return _trackDescriptors; }
+    bool GetWarframeCompositorSplit() const { return _warframeCompositorSplit; }
+    void SetWarframeCompositorSplit(bool enabled) {
+        if (_warframeCompositorSplit != enabled) {
+            _warframeCompositorSplit = enabled;
+            MarkConfigDirty();
+        }
+    }
     void SetTrackDescriptors(bool track) { if (_trackDescriptors != track) { _trackDescriptors = track; MarkConfigDirty(); } }
     void AddToggleGroupRemovalCallback(std::function<void(reshade::api::effect_runtime*, ShaderToggler::ToggleGroup*)> callback);
     void RetireToggleGroup(int id);

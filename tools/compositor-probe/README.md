@@ -35,3 +35,5 @@ The full-secondary-weight case is a controlled shader experiment, **not** a new 
 5. Run `python verify-split.py --root <external-output>`. It writes `split-verification.json` and fails if the reconstructed original, full-precision identity, full-precision tint or forced-secondary comparisons differ from their reference.
 
 The original shader and full-precision split matched the saved frames bit-for-bit. The standalone test uses a dedicated tint pass. Arbitrary ReShade effects, live state restoration, resource lifetime, performance and native DLSS require integration testing. See the [engineering results and implementation requirements](../../docs/compositor-boundary-research.md).
+
+To exercise the add-on's runtime shader generator, run `runtime-split-variants.exe <mode-directory> <DXC/bin/x64>` for each mode. Compile `TintSceneOverwriteAlpha` from `split-test.hlsl` as `ps_6_0`, pass its output as the fourth argument to `split-test.exe`, and run `verify-split.py --runtime-pair --root <external-output>`. This compares both runtime variants and verifies that alpha overwritten by the test effect is recovered from the separate alpha target.
