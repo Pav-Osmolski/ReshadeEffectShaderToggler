@@ -2,6 +2,8 @@
 #include <windows.h>
 
 #include <bcrypt.h>
+#include <objidl.h>
+#include <oleauto.h>
 #include <dxcapi.h>
 #include <wrl/client.h>
 #include <array>

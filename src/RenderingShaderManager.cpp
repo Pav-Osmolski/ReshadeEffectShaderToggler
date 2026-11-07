@@ -229,7 +229,7 @@ bool RenderingShaderManager::ApplyShader(command_list* cmd_list,
     return true;
 }
 
-bool RenderingShaderManager::PrepareSceneInputCopy(device* dev, format targetFormat) {
+bool RenderingShaderManager::PrepareSceneInputCopy(device* dev, reshade::api::format targetFormat) {
     auto& data = *dev->get_private_data<DeviceDataContainer>();
     std::lock_guard lock(data.customShader.pipelineMutex);
     auto& instance = data.customShader.sceneFormatPipelines[static_cast<uint32_t>(targetFormat)];
