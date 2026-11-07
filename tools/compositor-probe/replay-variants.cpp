@@ -1,4 +1,5 @@
 #include "renderdoc_replay.h"
+#include "split-inputs.h"
 #include <cstdio>
 #include <fstream>
 #include <functional>
@@ -84,7 +85,17 @@ int main(int argc, char **argv) {
     fflush(stdout);
   };
   save(std::string(argv[3]) + "/original");
-  for (int i = 4; i < argc; ++i) {
+  int firstVariant = 4;
+  if (argc > 4 && std::string(argv[4]) == "--split-inputs") {
+    try {
+      ExportSplitInputs(*ctrl, argv[3]);
+    } catch (const std::exception &error) {
+      fprintf(stderr, "Input export failed: %s\n", error.what());
+      return 9;
+    }
+    ++firstVariant;
+  }
+  for (int i = firstVariant; i < argc; ++i) {
     std::string name = argv[i];
     std::ifstream f(name + ".dxil", std::ios::binary);
     std::vector<char> input((std::istreambuf_iterator<char>(f)), {});

@@ -1,6 +1,6 @@
 # Local compositor boundary experiment
 
-Developer research tools for the exact saved Warframe HDR captures in issue #22. They are **not loaded by REST**, not included in release packages, and do not implement a live compositor split or arbitrary ReShade technique execution. No game shaders, captures or generated image data are included.
+Standalone developer research tools for the exact saved Warframe HDR captures in issue #22. The prototype runs the split in its own D3D12 process. Keep captures, game shaders and generated data in the external output directory.
 
 ## Dependencies
 
@@ -20,8 +20,18 @@ Build with `build.ps1 -RenderDocHeaders <headers> -RenderDocLibrary <renderdoc.l
 
 The full-secondary-weight case is a controlled shader experiment, **not** a new recording of in-game motion. A five-by-five opaque-alpha interior mask avoids drawing conclusions from bilinear sampling at UI edges. Transparent UI backgrounds are expected to reveal the changed scene. Raw PNG exports are not colour-managed HDR reference images.
 
-## Meaning of the result
+## Run the two-pass D3D12 test
 
-The experiment locates a post-blend/post-grading, pre-UI hook in two exact compositor shaders. The identity hook is bit-exact in the saved frames; the late tint survives when the secondary colour fully replaces the main scene. See [the engineering results and implementation requirements](../../docs/compositor-boundary-research.md).
+1. Append `--split-inputs` to each capture export command in step 1 above. This additionally exports post-vertex geometry, original sampled textures and mip levels, samplers, viewport and scissor.
+2. Generate the shader variants and replay the inline references as above. The generator also creates the two-pass UI shader and a scene-only shader with full secondary weight.
+3. Use the pinned `dxc.exe` to build the two test entry points in `split-test.hlsl`.
 
-It does not validate a two-pass texture round trip, a live add-on's state restoration, GPU lifetimes, resize/reload behaviour, performance, arbitrary effects or live DLSS. The saved DLSS capture did not contain valid DLSS execution. A production implementation must preserve those distinctions and retain the original composition code rather than guessing a generic UI formula.
+   ```powershell
+   & $dxc -E ReplayVertex -T vs_6_0 split-test.hlsl -Fo "$output/replay-vertex.dxil"
+   & $dxc -E TintScene -T ps_6_0 split-test.hlsl -Fo "$output/tint-scene.dxil"
+   ```
+
+4. Run `split-test.exe <mode-directory> <replay-vertex.dxil> <tint-scene.dxil>` for each mode. It compares the original draw and the split across three intermediate formats. Enable the Windows Graphics Tools feature to collect D3D12 debug messages.
+5. Run `python verify-split.py --root <external-output>`. It writes `split-verification.json` and fails if the reconstructed original, full-precision identity, full-precision tint or forced-secondary comparisons differ from their reference.
+
+The original shader and full-precision split matched the saved frames bit-for-bit. The standalone test uses a dedicated tint pass. Arbitrary ReShade effects, live state restoration, resource lifetime, performance and native DLSS require integration testing. See the [engineering results and implementation requirements](../../docs/compositor-boundary-research.md).

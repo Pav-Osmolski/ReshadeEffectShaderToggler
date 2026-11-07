@@ -15,3 +15,5 @@ Enter-VsDevShell -VsInstallPath $vsPath -SkipAutomaticLocation -DevCmdArguments 
 if ($LASTEXITCODE -ne 0) { throw 'DXIL tool compile failed.' }
 & cl /nologo /EHsc /std:c++17 /DRENDERDOC_PLATFORM_WIN32 /DNOMINMAX "/I$RenderDocHeaders" "$PSScriptRoot/replay-variants.cpp" $RenderDocLibrary "/Fo$out/replay-variants.obj" "/Fe$out/replay-variants.exe"
 if ($LASTEXITCODE -ne 0) { throw 'Replay tool compile failed.' }
+& cl /nologo /EHsc /std:c++17 /W4 "$PSScriptRoot/split-test.cpp" d3d12.lib "/Fo$out/split-test.obj" "/Fe$out/split-test.exe"
+if ($LASTEXITCODE -ne 0) { throw 'D3D12 split test compile failed.' }

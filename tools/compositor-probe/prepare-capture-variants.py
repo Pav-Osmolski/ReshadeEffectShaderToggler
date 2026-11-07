@@ -39,6 +39,38 @@ for mode,digest in sources.items():
       'scene-only':ir.replace(branch[0],re.sub(r'br i1 %\d+', 'br i1 true',branch[0])),
       'identity-hook':hook(['1.000000e+00']*3),
       'post-grade-tint':hook(['1.000000e+00','2.500000e-01','2.500000e-01'])}
+    # Read the complete graded scene at the destination pixel. Reuse t0 for the
+    # intermediate and retain the original t8 sample, branch and UI arithmetic.
+    load = """  %restX = call float @dx.op.loadInput.f32(i32 4, i32 0, i32 0, i8 0, i32 undef)
+  %restY = call float @dx.op.loadInput.f32(i32 4, i32 0, i32 0, i8 1, i32 undef)
+  %restPixelX = fptosi float %restX to i32
+  %restPixelY = fptosi float %restY to i32
+  %restScene = call %dx.types.ResRet.f32 @dx.op.textureLoad.f32(i32 66, %dx.types.Handle %7, i32 0, i32 %restPixelX, i32 %restPixelY, i32 undef, i32 0, i32 0, i32 undef)
+  %restR = extractvalue %dx.types.ResRet.f32 %restScene, 0
+  %restG = extractvalue %dx.types.ResRet.f32 %restScene, 1
+  %restB = extractvalue %dx.types.ResRet.f32 %restScene, 2
+  %restAlpha = extractvalue %dx.types.ResRet.f32 %restScene, 3
+"""
+    ui = prefix + load + marker[0] + modified
+    ui, count = re.subn(r'(call void @dx.op.storeOutput.f32\(i32 5, i32 0, i32 0, i8 3, float )%\d+', r'\g<1>%restAlpha', ui)
+    assert count == 1
+    # Keep only the original root handles and UI UVs at the entry point. Rename
+    # numeric SSA IDs and blocks so removing the original scene does not leave
+    # gaps in LLVM's unnamed-value numbering.
+    setup = ''.join(line + '\n' for line in prefix.splitlines()
+                    if re.match(r'^  %(1|7|8|15|17|18) = ', line))
+    entry = 'define void @main() {\n'
+    assert ui.count(entry) == 1
+    body, declarations = (load + marker[0] + ui.split(marker[0], 1)[1]).split('\n}\n', 1)
+    body = re.sub(r'^; <label>:(\d+).*$', r'restV\1:', setup + body, flags=re.M)
+    body = re.sub(r'%(\d+)\b', r'%restV\1', body)
+    ui = ir.split(entry, 1)[0] + entry + 'restV0:\n' + body + '\n}\n' + declarations
+    ui = ui.replace('\nattributes #0', '\ndeclare %dx.types.ResRet.f32 @dx.op.textureLoad.f32(i32, %dx.types.Handle, i32, i32, i32, i32, i32, i32, i32) #2\n\nattributes #0')
+    ui = re.sub(r'^declare [^\n]*(@dx\.op\.[\w.]+)\([^\n]+\n',
+                lambda m: m[0] if m[1] + '(' in body else '', ui, flags=re.M)
+    # The assembler derives dependency information for the modified inputs.
+    ui = re.sub(r'^!dx.viewIdState = .*\n', '', ui, flags=re.M)
+    variants['split-ui'] = ui
     # Controlled condition: the secondary colour fully replaces the main scene.
     secondary=re.findall(r'^  (%\d+) = call %dx.types.ResRet.f32 @dx.op.sampleLevel.f32\(i32 62, %dx.types.Handle %5,.*',ir,re.M)
     assert secondary
@@ -55,7 +87,8 @@ for mode,digest in sources.items():
             for match in re.finditer(r'^  (%\d+) = extractvalue %dx.types.ResRet.f32 '+re.escape(sample)+rf', {channel}.*',ir,re.M):
                 variable=match.group(1);temp='%restSample'+variable[1:]
                 main_tint=main_tint.replace(match.group(0),match.group(0).replace(variable+' =',temp+' =')+f'\n  {variable} = fmul float {temp}, 2.500000e-01')
-    variants.update({'main-input-tint':main_tint,'secondary-only':force(ir),'secondary-only-main-tint':force(main_tint),'secondary-only-post-tint':force(variants['post-grade-tint'])})
+    variants.update({'main-input-tint':main_tint,'secondary-only':force(ir),'secondary-only-main-tint':force(main_tint),'secondary-only-post-tint':force(variants['post-grade-tint']),
+                     'secondary-scene-only':force(variants['scene-only'])})
     for name,text in variants.items():
         (out/f'{name}.ll').write_text(text)
         subprocess.run([str(tool),str(compiler),'assemble',str(out/f'{name}.ll'),str(out/f'{name}.dxil')],check=True)

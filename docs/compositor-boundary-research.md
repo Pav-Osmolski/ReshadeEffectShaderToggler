@@ -1,12 +1,12 @@
 # Warframe compositor boundary investigation
 
-Developer research, 5 November 2026. Related: [reporter's Preview 3 result](https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler/issues/22#issuecomment-6660706352), [current experimental implementation](experimental-backend-support.md), [reproduction tools](../tools/compositor-probe/README.md).
+Developer research, 5–7 November 2026. See the [reporter's Preview 3 result](https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler/issues/22#issuecomment-6660706352), [current experimental implementation](experimental-backend-support.md) and [reproduction tools](../tools/compositor-probe/README.md).
 
 ## Outcome
 
 A later hook exists **inside** the two captured compositor shaders, after the main/secondary scene blend and game grading, before UI composition. This is not a separate game draw that can be selected with another ordinary REST shader boundary. Native GPU replay confirms that an effect inserted there can survive full secondary-colour replacement while retaining the game's UI composition code.
 
-This is a shader-hook feasibility experiment, **not a live REST implementation** or a new pre-release. It does not run arbitrary ReShade techniques or validate a two-pass intermediate texture, state restoration or resource retirement in the game.
+The two-pass prototype now reproduces the original captures through a full-precision intermediate. It runs in a standalone D3D12 test program with a dedicated tint shader. Live REST integration and arbitrary ReShade technique execution remain separate milestones.
 
 ## Replay checks
 
@@ -33,6 +33,20 @@ A separate local GPU prototype reconstructed UI blending in a hand-written HLSL 
 
 The preferred direction retains the original game's UI shader operations and sampling. It must also preserve the original post-grading scene before applying effects; copying an earlier float scene or independently processing both main and secondary inputs is not equivalent.
 
+## Two-pass GPU prototype
+
+The native D3D12 test rebuilt each captured draw using its original pixel shader, captured vertex outputs, viewport, scissor, sampler settings, constants and texture contents. All three reconstructed originals matched the capture bit-for-bit. It then ran the scene-only shader into a real render target, transitioned it for sampling and loaded the graded colour by destination pixel in the UI pass. The UI pass retained the game's original UI sample and composition instructions. A separate tint draw exercised an effect between the two passes.
+
+| Intermediate format | Maximum identity RGB difference | Maximum tinted RGB difference | Identity alpha |
+|---|---:|---:|---|
+| RGBA32 float | 0 | 0 | Exact in all captures |
+| RGBA16 float | 2 | 75 | Changed in all captures |
+| RGB10A2 UNORM | 4 | 65 | Exact in these captures |
+
+The table reports worst-case differences in 10-bit output code values over the TAA, no-TAA and FSR/TAAU frames. Identity compares against the original draw. Tint compares against the single-shader insertion from the first experiment. RGBA32 float was bit-exact for both comparisons across all pixels, including translucent HUD edges. With the secondary contribution forced to full weight, both identity and tint remained bit-exact against their inline references. The tint changed more than six million pixels in each forced-weight frame. The D3D12 debug queue reported zero errors.
+
+RGBA32 float is the reference for integration. One full-resolution surface at 3824×1600 uses about 93 MiB before alignment. The test uses a second surface for the tint output. Live integration needs a bounded allocation strategy and separate protection for game alpha when effects can write it. ReShade's custom-target permutation uses an unknown colour space in the pinned SDK, so live validation must also check how HDR-aware effects interpret the graded values.
+
 ## Requirements for a production implementation
 
 1. **Explicit opt-in profile and strict matching.** Identify the exact compositor bytecode and validated root/target contract. Unknown revisions must skip this path. Do not infer scene/UI roles or colour space from format, size or shader CRC alone.
@@ -40,7 +54,7 @@ The preferred direction retains the original game's UI shader operations and sam
 3. **Preserve target semantics.** Clone and validate the graphics pipeline, draw geometry, root bindings, viewports/scissors and target interpretation. Reject unsupported side effects, depth/stencil writes, multiple outputs, bundles, indirect draws and active render passes. A single-draw shader-hook experiment does not establish safe draw replay.
 4. **Protect alpha and resource lifetime.** Preserve the game's required output alpha across arbitrary techniques. Keep private descriptors, textures and derived pipelines alive until all referencing command recordings and GPU submissions are retired. Reuse the existing bounded resource/fence approach only after extending its ownership contract to both passes.
 5. **Handle effect readiness and state restoration.** Observe actual ReShade technique completion. If a permutation is loading or preparation fails, restore the original draw behaviour without displaying partial processing or applying selected effects over the final UI.
-6. **Validate the real two-pass identity.** Compare original and split/composed outputs, including translucent UI edges, highlights, negative/out-of-gamut intermediate values, alpha, grading and UI brightness changes. An inserted identity multiply inside one shader being bit-exact does not certify an intermediate texture or its precision.
+6. **Repeat the identity comparison in live integration.** Use the RGBA32 float prototype as the capture reference. Extend coverage to changing UI brightness, gamut edge cases and effects that alter alpha.
 7. **Measure live coverage and cost.** Test motion blur, all reported AA/upscaler paths including native DLSS, resize/reload, long sessions, other draw-intercepting add-ons and GPU validation messages. Measure extra draws, memory and GPU time. Applying effects after grading aligns their placement with final-frame usage, but does not make SDR-only techniques universally HDR-correct.
 
 No extra reporter capture is required to establish this hook. Existing captures suffice for the implementation prototype; live verification will be needed once that prototype is integrated. No stable-release readiness follows from this research alone.
