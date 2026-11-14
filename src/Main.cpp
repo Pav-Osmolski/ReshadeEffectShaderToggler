@@ -145,9 +145,15 @@ static void onInitCommandQueue(command_queue* queue) {
 }
 
 static void onDestroyCommandQueue(command_queue* queue) {
-    if (queue->get_device()->get_private_data<DeviceDataContainer>()->sceneInputPool) queue->wait_idle();
     auto& data = *queue->get_device()->get_private_data<DeviceDataContainer>();
+    bool hasSceneInputs;
+    {
+        std::lock_guard lock(data.queueMutex);
+        hasSceneInputs = static_cast<bool>(data.sceneInputPool);
+    }
+    if (hasSceneInputs) queue->wait_idle();
     std::lock_guard lock(data.queueMutex);
+    Rendering::ForgetSceneInputQueue(queue);
     std::erase(data.queues, queue);
 }
 
@@ -743,7 +749,7 @@ static void displaySettings(effect_runtime* runtime) {
 }
 
 static void Init() {
-    reshade::log::message(reshade::log::level::info, "Scene input preview 4 (pre-release): opt-in Warframe HDR compositor split available on x64.");
+    reshade::log::message(reshade::log::level::info, "Scene input preview 5 (pre-release): Warframe compositor split with GPU-ordered scratch reuse.");
     resourceManager.SetResourceShim(g_addonUIData.GetResourceShim());
     resourceManager.Init();
     constantManager.Init(g_addonUIData, groupResourceManager, &constantCopy, &constantHandler);
@@ -1025,6 +1031,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID) {
             reshade::register_event<reshade::addon_event::clear_unordered_access_view_float>(ProducerDiagnostics::clear_unordered_access_view_float);
             reshade::register_event<reshade::addon_event::execute_secondary_command_list>(ProducerDiagnostics::Secondary);
             reshade::register_event<reshade::addon_event::execute_secondary_command_list>(Rendering::SceneInputSecondary);
+            reshade::register_event<reshade::addon_event::execute_command_list>(Rendering::WaitForSceneInputs);
             reshade::register_event<reshade::addon_event::destroy_pipeline>(onDestroyPipeline);
             reshade::register_event<reshade::addon_event::reshade_overlay>(onReShadeOverlay);
             reshade::register_event<reshade::addon_event::reshade_present>(onReShadePresent);
@@ -1081,6 +1088,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID) {
             reshade::unregister_event<reshade::addon_event::clear_unordered_access_view_float>(ProducerDiagnostics::clear_unordered_access_view_float);
             reshade::unregister_event<reshade::addon_event::execute_secondary_command_list>(ProducerDiagnostics::Secondary);
             reshade::unregister_event<reshade::addon_event::execute_secondary_command_list>(Rendering::SceneInputSecondary);
+            reshade::unregister_event<reshade::addon_event::execute_command_list>(Rendering::WaitForSceneInputs);
             reshade::unregister_event<reshade::addon_event::init_device>(onInitDevice);
             reshade::unregister_event<reshade::addon_event::destroy_device>(onDestroyDevice);
             reshade::unregister_event<reshade::addon_event::bind_render_targets_and_depth_stencil>(onBindRenderTargetsAndDepthStencil);

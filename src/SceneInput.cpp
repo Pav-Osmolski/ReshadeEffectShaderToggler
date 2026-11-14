@@ -4,6 +4,8 @@
 #include "SceneInputAllocation.h"
 #include "StateTracking.h"
 #include "WarframeCompositor.h"
+#include "SceneInputSync.h"
+#include <reshade.hpp>
 #include <algorithm>
 #include <d3d12.h>
 #include <mutex>
@@ -38,57 +40,64 @@ void RefreshSceneInputDescriptors(command_list* cmd) {
     }
 }
 
+struct SceneInputStorage {
+    device* dev = nullptr;
+    resource texture = {0}, alpha = {0};
+    std::shared_ptr<GlobalResourceView> views, alphaViews;
+    uint32_t width = 0, height = 0;
+    format pixelFormat = format::unknown;
+    uint64_t bytes = 0;
+    bool shaderReadable = false, alphaReadable = false;
+    SceneInputOwnership lifetime;
+
+    void Dispose() {
+        if (!dev) return;
+        if (views) views->Dispose();
+        if (alphaViews) alphaViews->Dispose();
+        if (texture != 0) dev->destroy_resource(texture);
+        if (alpha != 0) dev->destroy_resource(alpha);
+        texture = alpha = {0};
+        dev = nullptr;
+    }
+    ~SceneInputStorage() { Dispose(); }
+};
+
 void SceneInputLease::Dispose() {
     if (device == nullptr)
         return;
-    if (views)
-        views->Dispose();
     views.reset();
-    if (alphaViews)
-        alphaViews->Dispose();
     alphaViews.reset();
     for (auto table : tables)
         if (table != 0)
             device->free_descriptor_table(table);
     tables.clear();
-    if (texture != 0)
-        device->destroy_resource(texture);
     texture = { 0 };
-    if (alpha != 0)
-        device->destroy_resource(alpha);
     alpha = {0};
     split.reset();
+    storage.reset();
+    dependencies.clear();
     device = nullptr;
 }
 
-struct SceneFence {
-    ComPtr<ID3D12Fence> fence;
-    uint64_t value = 0;
-};
-struct SceneTicket {
-    std::shared_ptr<SceneFence> fence;
-    uint64_t value;
-};
 class SceneInputPool {
   public:
     struct Entry {
         std::shared_ptr<SceneInputLease> lease;
         bool retired = false, reusable = false;
         std::vector<SceneTicket> tickets;
+        std::vector<command_queue*> submissions;
     };
     std::mutex mutex;
     std::vector<Entry> entries;
+    std::vector<std::shared_ptr<SceneInputStorage>> images;
     std::unordered_map<command_queue*, std::shared_ptr<SceneFence>> fences;
     uint64_t bytes = 0;
+    uint64_t imageReuses = 0, gpuHandoffs = 0, pressureSkips = 0;
+    bool waitFailed = false;
     static bool Complete(const Entry& entry) {
         if (!entry.retired || !entry.reusable)
             return false;
-        for (const auto& ticket : entry.tickets) {
-            const uint64_t value = ticket.fence->fence->GetCompletedValue();
-            if (value == UINT64_MAX || value < ticket.value)
-                return false;
-        }
-        return true;
+        return SceneTicketsComplete(entry.tickets);
     }
 };
 
@@ -325,92 +334,129 @@ std::shared_ptr<SceneInputLease> PrepareSceneInput(command_list* cmd, uint32_t s
     }
     if (!pixelOnly)
         return {};
-    if (!data.sceneInputPool)
-        data.sceneInputPool = std::make_shared<SceneInputPool>();
-    auto& pool = *data.sceneInputPool;
+    std::shared_ptr<SceneInputPool> poolOwner;
+    {
+        std::lock_guard queueLock(data.queueMutex);
+        if (!data.sceneInputPool)
+            data.sceneInputPool = std::make_shared<SceneInputPool>();
+        poolOwner = data.sceneInputPool;
+    }
+    auto& pool = *poolOwner;
     std::lock_guard lock(pool.mutex);
-    std::shared_ptr<SceneInputLease> lease;
-    for (auto& entry : pool.entries) {
-        auto& item = *entry.lease;
-        if (SceneInputPool::Complete(entry) && item.width == desc.texture.width && item.height == desc.texture.height &&
-            item.format == targetFormat && static_cast<bool>(item.split) == static_cast<bool>(split) && item.sizes == sizes) {
-            lease = entry.lease;
-            entry.retired = entry.reusable = false;
-            entry.tickets.clear();
+    // Only descriptor tables and pipeline references wait for CPU-observed
+    // completion. Scratch images may be handed off with GPU queue waits.
+    std::erase_if(pool.entries, SceneInputPool::Complete);
+    if (pool.entries.size() >= 64) {
+        ++pool.pressureSkips;
+        status = "Scene input: waiting for immutable descriptor recordings";
+        return {};
+    }
+    std::shared_ptr<SceneInputStorage> image;
+    for (auto& candidate : pool.images) {
+        if (candidate->lifetime.CanAcquire(cmd) && candidate->width == desc.texture.width &&
+            candidate->height == desc.texture.height && candidate->pixelFormat == targetFormat &&
+            (candidate->alpha != 0) == static_cast<bool>(split)) {
+            image = candidate;
             break;
         }
     }
-    if (!lease) {
-        // Allow a bounded number of recordings in flight. Never stall a draw
-        // waiting for a fence or recycle a texture referenced by a GPU command.
+    if (!image) {
         const uint64_t bytes = static_cast<uint64_t>(desc.texture.width) * desc.texture.height *
                                (split ? 20 : targetFormat == format::r16g16b16a16_float ? 8 : 4);
         const uint64_t budget = (split ? 512ull : 256ull) * 1024 * 1024;
-        for (auto it = pool.entries.begin(); it != pool.entries.end();) {
-            if ((pool.bytes + bytes > budget || pool.entries.size() >= 64) && SceneInputPool::Complete(*it)) {
-                pool.bytes -= it->lease->bytes;
-                it = pool.entries.erase(it);
+        for (auto it = pool.images.begin(); it != pool.images.end();) {
+            const auto& candidate = *it;
+            if (pool.bytes + bytes > budget && candidate.use_count() == 1 && candidate->lifetime.owner == nullptr &&
+                SceneTicketsComplete(candidate->lifetime.dependencies)) {
+                pool.bytes -= candidate->bytes;
+                it = pool.images.erase(it);
             } else
                 ++it;
         }
-        if (bytes > budget || pool.bytes + bytes > budget || pool.entries.size() >= 64) {
+        if (bytes > budget || pool.bytes + bytes > budget) {
+            ++pool.pressureSkips;
             status = "Scene input: waiting for private GPU resources";
             return {};
         }
-        lease = std::make_shared<SceneInputLease>();
-        lease->device = dev;
-        lease->width = desc.texture.width;
-        lease->height = desc.texture.height;
-        lease->format = targetFormat;
-        lease->bytes = bytes;
-        lease->sizes = sizes;
-        lease->tables.resize(paramCount);
-        resource_desc target(lease->width,
-                             lease->height,
+        image = std::make_shared<SceneInputStorage>();
+        image->dev = dev;
+        image->width = desc.texture.width;
+        image->height = desc.texture.height;
+        image->pixelFormat = targetFormat;
+        image->bytes = bytes;
+        resource_desc target(image->width,
+                             image->height,
                              1,
                              1,
-                             lease->format,
+                             image->pixelFormat,
                              1,
                              memory_heap::default_,
                              resource_usage::render_target | resource_usage::shader_resource | resource_usage::copy_source);
-        if (!dev->create_resource(target, nullptr, resource_usage::render_target, &lease->texture)) {
+        if (!dev->create_resource(target, nullptr, resource_usage::render_target, &image->texture)) {
             status = "Scene input: private texture allocation failed";
             return {};
         }
-        lease->views = std::make_shared<GlobalResourceView>(dev, lease->texture, lease->format);
-        if (lease->views->rtv == 0 || lease->views->srv == 0)
+        image->views = std::make_shared<GlobalResourceView>(dev, image->texture, image->pixelFormat);
+        if (image->views->rtv == 0 || image->views->srv == 0)
             return {};
         if (split) {
             target.texture.format = format::r32_float;
             target.usage = privateUsage;
-            if (!dev->create_resource(target, nullptr, resource_usage::render_target, &lease->alpha)) {
+            if (!dev->create_resource(target, nullptr, resource_usage::render_target, &image->alpha)) {
                 status = "Warframe split: private alpha allocation failed";
                 return {};
             }
-            lease->alphaViews = std::make_shared<GlobalResourceView>(dev, lease->alpha, format::r32_float);
-            if (lease->alphaViews->rtv == 0 || lease->alphaViews->srv == 0) {
+            image->alphaViews = std::make_shared<GlobalResourceView>(dev, image->alpha, format::r32_float);
+            if (image->alphaViews->rtv == 0 || image->alphaViews->srv == 0) {
                 status = "Warframe split: private alpha views unavailable";
                 return {};
             }
         }
-        if (!AllocateSceneInputTables(*dev, sizes, lease->tables)) {
-            status = "Scene input: REST-owned descriptor allocation failed";
-            return {};
-        }
-        descriptor_heap commonHeap = { 0 };
-        for (uint32_t i = 0; i < paramCount; ++i) {
-            if (sizes[i] == 0)
-                continue;
-            descriptor_heap heap = { 0 };
-            uint32_t offset = 0;
-            dev->get_descriptor_heap_offset(lease->tables[i], 0, 0, &heap, &offset);
-            if (heap == 0 || (commonHeap != 0 && commonHeap != heap))
-                return {};
-            commonHeap = heap;
-        }
         pool.bytes += bytes;
-        pool.entries.push_back({ lease, false, false, {} });
+        pool.images.push_back(image);
+    } else {
+        ++pool.imageReuses;
+        if (!SceneTicketsComplete(image->lifetime.dependencies))
+            ++pool.gpuHandoffs;
     }
+    auto lease = std::make_shared<SceneInputLease>();
+    lease->device = dev;
+    lease->storage = image;
+    lease->texture = image->texture;
+    lease->alpha = image->alpha;
+    lease->views = image->views;
+    lease->alphaViews = image->alphaViews;
+    lease->width = image->width;
+    lease->height = image->height;
+    lease->format = image->pixelFormat;
+    lease->tables.resize(paramCount);
+    if (image->lifetime.owner) {
+        // Prior draw in the same recording. Its commands precede this draw.
+        const auto* previous = static_cast<const SceneInputLease*>(image->lifetime.owner);
+        lease->shaderReadable = previous->shaderReadable;
+        lease->alphaReadable = previous->alphaReadable;
+    } else {
+        lease->shaderReadable = image->shaderReadable;
+        lease->alphaReadable = image->alphaReadable;
+    }
+    lease->dependencies = image->lifetime.dependencies;
+    if (!AllocateSceneInputTables(*dev, sizes, lease->tables)) {
+        status = "Scene input: REST-owned descriptor allocation failed";
+        return {};
+    }
+    descriptor_heap commonHeap = { 0 };
+    for (uint32_t i = 0; i < paramCount; ++i) {
+        if (sizes[i] == 0)
+            continue;
+        descriptor_heap heap = { 0 };
+        uint32_t offset = 0;
+        dev->get_descriptor_heap_offset(lease->tables[i], 0, 0, &heap, &offset);
+        if (heap == 0 || (commonHeap != 0 && commonHeap != heap))
+            return {};
+        commonHeap = heap;
+    }
+    image->lifetime.Acquire(lease.get(), cmd);
+    pool.entries.push_back({ lease, false, false, {}, {} });
     lease->split = split;
     // Keep even an unsuccessful attempt alive until recording retirement.
     recording.sceneInputLeases.push_back(lease);
@@ -526,15 +572,22 @@ void RetireSceneInputs(command_list* cmd) {
     if (recording.sceneInputLeases.empty())
         return;
     auto& data = *cmd->get_device()->get_private_data<DeviceDataContainer>();
+    std::lock_guard queueLock(data.queueMutex);
     auto pool = data.sceneInputPool;
     if (!pool)
         return;
-    std::lock_guard queueLock(data.queueMutex);
     std::lock_guard lock(pool->mutex);
     std::vector<SceneTicket> tickets;
-    bool reusable = !data.queues.empty();
+    bool reusable = true;
+    std::vector<command_queue*> submittedQueues;
+    for (const auto& lease : recording.sceneInputLeases)
+        for (const auto& entry : pool->entries)
+            if (entry.lease == lease)
+                for (auto* queue : entry.submissions)
+                    if (std::find(submittedQueues.begin(), submittedQueues.end(), queue) == submittedQueues.end())
+                        submittedQueues.push_back(queue);
     auto* nativeDevice = reinterpret_cast<ID3D12Device*>(cmd->get_device()->get_native());
-    for (auto* queue : data.queues) {
+    for (auto* queue : submittedQueues) {
         auto& fence = pool->fences[queue];
         if (!fence) {
             fence = std::make_shared<SceneFence>();
@@ -551,31 +604,107 @@ void RetireSceneInputs(command_list* cmd) {
         else
             tickets.push_back({ fence, value });
     }
-    // Called at reset/destruction, when the old recording cannot be submitted
-    // again. execute_command_list is BEFORE submission and is unsafe for this.
+    // Reset/destruction ends possible resubmission of the old recording.
+    // Preserve its immutable tables until these completion tickets pass.
     for (const auto& lease : recording.sceneInputLeases)
         for (auto& entry : pool->entries)
             if (entry.lease == lease) {
                 entry.retired = true;
                 entry.reusable = reusable;
-                entry.tickets = tickets;
+                entry.tickets = lease->dependencies;
+                MergeSceneTickets(entry.tickets, tickets);
+                auto& image = *lease->storage;
+                if (image.lifetime.owner == lease.get()) {
+                    image.shaderReadable = lease->shaderReadable;
+                    image.alphaReadable = lease->alphaReadable;
+                    image.lifetime.Retire(lease.get(), reusable, tickets);
+                }
             }
     recording.sceneInputLeases.clear();
     recording.sceneInputPending.reset();
     recording.sceneInputPatched = false;
     recording.sceneInputGroup = nullptr;
 }
+
+void WaitForSceneInputs(command_queue* queue, command_list* cmd) {
+    if (queue->get_device()->get_api() != device_api::d3d12)
+        return;
+    const auto* recording = cmd->get_private_data<CommandListDataContainer>();
+    if (!recording || recording->sceneInputLeases.empty())
+        return;
+    auto& data = *queue->get_device()->get_private_data<DeviceDataContainer>();
+    std::shared_ptr<SceneInputPool> pool;
+    std::vector<SceneTicket> dependencies;
+    {
+        std::lock_guard queueLock(data.queueMutex);
+        pool = data.sceneInputPool;
+        if (!pool)
+            return;
+        std::lock_guard lock(pool->mutex);
+        for (const auto& lease : recording->sceneInputLeases) {
+            for (auto& entry : pool->entries)
+                if (entry.lease == lease && std::find(entry.submissions.begin(), entry.submissions.end(), queue) == entry.submissions.end())
+                    entry.submissions.push_back(queue);
+            MergeSceneTickets(dependencies, lease->dependencies);
+        }
+    }
+    auto* nativeQueue = reinterpret_cast<ID3D12CommandQueue*>(queue->get_native());
+    if (FAILED(WaitSceneInputTickets(nativeQueue, dependencies))) {
+        std::lock_guard lock(pool->mutex);
+        for (auto& image : pool->images)
+            image->lifetime.reusable = false;
+        if (!pool->waitFailed)
+            reshade::log::message(reshade::log::level::error, "REST scene-input queue wait failed; device recovery is required.");
+        pool->waitFailed = true;
+    }
+}
+
+void ForgetSceneInputQueue(command_queue* queue) {
+    auto& data = *queue->get_device()->get_private_data<DeviceDataContainer>();
+    auto pool = data.sceneInputPool;
+    if (!pool)
+        return;
+    // The caller has waited for this queue and holds queueMutex. Its completed
+    // submissions no longer need a queue object when their recording retires.
+    std::lock_guard lock(pool->mutex);
+    for (auto& entry : pool->entries)
+        std::erase(entry.submissions, queue);
+    pool->fences.erase(queue);
+}
+
+std::string SceneInputPoolDiagnostics(device* dev) {
+    auto& data = *dev->get_private_data<DeviceDataContainer>();
+    std::lock_guard queueLock(data.queueMutex);
+    auto pool = data.sceneInputPool;
+    if (!pool)
+        return "Scene-input pool: not allocated\n";
+    std::lock_guard lock(pool->mutex);
+    size_t active = 0, retained = 0;
+    for (const auto& image : pool->images)
+        active += image->lifetime.owner != nullptr;
+    for (const auto& entry : pool->entries)
+        retained += entry.retired;
+    return "Scene-input pool: " + std::to_string(pool->images.size()) + " image pairs | " +
+           std::to_string(pool->bytes / (1024 * 1024)) + " MiB | active recordings " + std::to_string(active) +
+           " | retained descriptor sets " + std::to_string(pool->entries.size()) + " | retired sets " +
+           std::to_string(retained) + "\nImage reuses: " + std::to_string(pool->imageReuses) +
+           " | GPU handoffs: " + std::to_string(pool->gpuHandoffs) +
+           " | pool pressure skips: " + std::to_string(pool->pressureSkips) + "\n";
+}
+
 void DisposeSceneInputs(device* dev) {
     auto& data = *dev->get_private_data<DeviceDataContainer>();
+    std::lock_guard queueLock(data.queueMutex);
     if (!data.sceneInputPool)
         return;
-    std::lock_guard queueLock(data.queueMutex);
     for (auto* queue : data.queues)
         queue->wait_idle();
     // Invalidate leases also held
     // by command-list private data so their eventual destructor is idempotent.
     for (auto& entry : data.sceneInputPool->entries)
         entry.lease->Dispose();
+    for (auto& image : data.sceneInputPool->images)
+        image->Dispose();
     data.sceneInputPool.reset();
 }
 void SceneInputSecondary(command_list* cmd, command_list*) {

@@ -1,10 +1,13 @@
 #pragma once
 #include "GlobalResourceView.h"
+#include "SceneInputSync.h"
 #include <memory>
+#include <string>
 #include <vector>
 
 namespace Rendering {
 struct WarframeSplitPipeline;
+struct SceneInputStorage;
 struct SceneInputLease {
     reshade::api::device* device = nullptr;
     reshade::api::resource texture = { 0 };
@@ -12,10 +15,10 @@ struct SceneInputLease {
     reshade::api::resource alpha = {0};
     std::shared_ptr<GlobalResourceView> alphaViews;
     std::shared_ptr<WarframeSplitPipeline> split;
+    std::shared_ptr<SceneInputStorage> storage;
+    std::vector<SceneTicket> dependencies;
     std::vector<reshade::api::descriptor_table> tables;
-    std::vector<uint32_t> sizes;
     uint32_t width = 0, height = 0;
-    uint64_t bytes = 0;
     reshade::api::format format = reshade::api::format::unknown;
     bool shaderReadable = false;
     bool alphaReadable = false;
@@ -36,6 +39,9 @@ void BindSceneInput(reshade::api::command_list*);
 void RecordWarframeSplitScene(reshade::api::command_list*, SceneInputLease&);
 void RestoreSceneInput(reshade::api::command_list*);
 void RetireSceneInputs(reshade::api::command_list*);
+void WaitForSceneInputs(reshade::api::command_queue*, reshade::api::command_list*);
+void ForgetSceneInputQueue(reshade::api::command_queue*);
+std::string SceneInputPoolDiagnostics(reshade::api::device*);
 void DisposeSceneInputs(reshade::api::device*);
 void SceneInputSecondary(reshade::api::command_list*, reshade::api::command_list*);
 }

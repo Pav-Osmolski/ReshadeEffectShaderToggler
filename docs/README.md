@@ -8,7 +8,7 @@ Start with [Getting started](getting-started.md) for installation, upgrading and
 | Inject effects before later fog/UI or work with DLSS/upscaling | [Automatic Scene Colour](automatic-scene-colour.md) |
 | Understand HDR formats, preview colour and tone-map clamping | [HDR handling and validation](HDR.md) |
 | Diagnose missing effects, configuration problems or crashes | [Troubleshooting](troubleshooting.md) |
-| Test the Warframe HDR compositor split | [Scene input preview 4](scene-input-preview-4.md) |
+| Test the Warframe HDR compositor split and flicker fix | [Scene input preview 5](scene-input-preview-5.md) |
 | Review the post-grading/pre-UI GPU experiment and implementation limits | [Compositor boundary research](compositor-boundary-research.md) |
 | Test D3D12 scene-input redirection or D3D9 reset improvements | [Experimental backend support and fork audit](experimental-backend-support.md) |
 | Build or package locally | [Building](BUILDING.md) |

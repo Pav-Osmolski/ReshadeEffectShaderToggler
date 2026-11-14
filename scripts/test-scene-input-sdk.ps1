@@ -20,3 +20,8 @@ cl /nologo /EHsc /std:c++20 /W4 /WX /Isrc /Ideps/reshade/include tests/SceneInpu
 if ($LASTEXITCODE -ne 0) { throw 'Scene-input processing contract tests failed to compile.' }
 & ./tests/out/scene-input-processing.exe
 if ($LASTEXITCODE -ne 0) { throw 'Scene-input processing contract regression.' }
+
+cl /nologo /EHsc /std:c++20 /W4 /WX /DNOMINMAX /Isrc tests/SceneInputReuseTests.cpp /Fotests/out/sdk/ /Fetests/out/scene-input-reuse.exe
+if ($LASTEXITCODE -ne 0) { throw 'Scene-input GPU reuse tests failed to compile.' }
+& ./tests/out/scene-input-reuse.exe
+if ($LASTEXITCODE -ne 0) { throw 'Scene-input GPU reuse regression.' }
