@@ -61,6 +61,11 @@ int main() {
     require(Rendering::CheckVulkanManualEffect(false, desc, true) == Block::none);
     require(Rendering::IsVulkanSceneTransferCandidate(device_api::vulkan, desc));
     require(!Rendering::IsVulkanSceneTransferCandidate(device_api::d3d11, desc));
+    desc.heap = memory_heap::unknown;
+    require(Rendering::IsVulkanSceneTransferCandidate(device_api::vulkan, desc));
+    desc.heap = memory_heap::readback;
+    require(!Rendering::IsVulkanSceneTransferCandidate(device_api::vulkan, desc));
+    desc.heap = memory_heap::default_;
     desc.flags = resource_flags::shared;
     require(!Rendering::IsVulkanSceneTransferCandidate(device_api::vulkan, desc));
     desc.flags = resource_flags::sparse_binding;
@@ -107,3 +112,4 @@ int main() {
     require(!Rendering::SaveDynamicOffsets(set1, 1, cursor, 1, nullptr));
     require(Rendering::SaveDynamicOffsets(set1, 0, cursor, 0, nullptr));
 }
+

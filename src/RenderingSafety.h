@@ -39,7 +39,8 @@ inline bool IsVulkanSceneTransferCandidate(reshade::api::device_api api,
            desc.texture.format == format::r16g16b16a16_float &&
            desc.texture.width != 0 && desc.texture.height != 0 &&
            desc.texture.samples == 1 && desc.texture.depth_or_layers == 1 && desc.texture.levels == 1 &&
-           desc.heap == memory_heap::default_ && desc.flags == resource_flags::none &&
+           // Vulkan create_image runs before memory is bound, so heap is unknown.
+           (desc.heap == memory_heap::unknown || desc.heap == memory_heap::default_) && desc.flags == resource_flags::none &&
            (desc.usage & resource_usage::render_target) != resource_usage::undefined &&
            (desc.usage & resource_usage::depth_stencil) == resource_usage::undefined;
 }
