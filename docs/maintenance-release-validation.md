@@ -1,6 +1,6 @@
 # Maintenance release validation
 
-This candidate selects general compatibility and lifecycle improvements from the development work. It starts at the maintained stable branch rather than merging the experimental branch. Modern targets v1.7.4.680; Legacy targets v1.6.8.580. Publication remains pending the game-level checks below.
+This release selects general compatibility and lifecycle improvements from the development work. It starts at the maintained stable branch rather than merging the experimental branch. Modern targets v1.7.4.680; Legacy targets v1.6.8.580. The game results below were confirmed on 16 November 2026.
 
 ## Scope
 
@@ -29,20 +29,20 @@ The earlier Modern candidate crashed in Resident Evil 4 Ultimate HD Edition, x86
 
 REST's old D3D9 copy-state restoration combined a native state block with event-tracked target/depth handles. That event history is cleared at presentation and need not reflect persistent native bindings. A native test reproduces the loss of a bound depth surface with this path. The replacement captures actual native render-target/depth bindings and restores them before applying the other state, preserving viewport/scissor as well. It handles an originally absent depth surface, rejects nested capture and releases snapshot references before Reset. A failed capture skips the copy before it alters native state.
 
-Local x86/x64 tests pass for both SDK lines. These tests establish a concrete restoration defect and fix, not that the new build has already passed in RE4. Game retesting remains required. Hunting selections now log `REST hunting selection: PS shader 0x...` (or VS/CS) before publication to rendering threads. Direct, keyboard and marked navigation and suppression of repeated-selection log flooding are tested against the production ShaderManager.
+Local x86/x64 tests pass for both SDK lines. The fixed Modern x86 build subsequently passed RE4 hunting, normal effects/group operations and resolution/fullscreen changes. The retained ReShade log records 440 hunting selections across 19 pixel shaders, no REST snapshot/copy errors and a clean exit. This RE4 result applies to Modern/ReShade 6.8.0.2156, not Legacy. Hunting selections now log `REST hunting selection: PS shader 0x...` (or VS/CS) before publication to rendering threads. Direct, keyboard and marked navigation and suppression of repeated-selection log flooding are tested against the production ShaderManager.
 
-## Game checks before publication
+## Recorded game coverage
 
 Use the candidate matching the installed ReShade line and the game's architecture. Back up the current add-on and INI; keep the same working configuration for comparison.
 
 | Configuration | Required observation | Recorded result |
 | --- | --- | --- |
-| D3D9 x86 representative title | Hunt/mark shaders, place a visible effect, toggle and remove groups, change resolution, Alt-Tab and switch window/fullscreen repeatedly; no crash, failed reset or missing effects after recreation. | RE4 failed on prior candidate; native restoration fix requires game retest |
-| D3D9 x64 title where available | Repeat the reset/hunting checks; report if no suitable title is available. | Pending game test |
-| D3D10 representative title where available | Hunting, effect placement, group removal and reload retain their normal behaviour. | Pending game test |
-| D3D11, preferably BG3 | Existing configured effects and hunting work; remove/recreate groups, reload effects and change resolution. | Pending game test |
-| D3D12 representative title | Existing stable effect-placement/hunting workflow works without experimental scene-input features. | Pending game test |
-| Vulkan, preferably BG3 | Existing injection, preview/hunting, group removal and resolution/reload behaviour remain stable. | Pending game test |
+| D3D9 x86 representative title | Hunt/mark shaders, place a visible effect, toggle and remove groups, change resolution, Alt-Tab and switch window/fullscreen repeatedly; no crash, failed reset or missing effects after recreation. | Modern v1.7.4.680 / ReShade 6.8.0.2156: RE4 Ultimate HD Edition passed hunting, effects/groups and resolution/fullscreen changes after the native state fix. Legacy RE4 was not tested. |
+| D3D9 x64 title where available | Repeat the reset/hunting checks; report if no suitable title is available. | Not freshly game-tested |
+| D3D10 representative title where available | Hunting, effect placement, group removal and reload retain their normal behaviour. | Not freshly game-tested |
+| D3D11, BG3 (x64) | Existing configured effects and hunting work; remove/recreate groups, reload effects and change resolution. | Maintainer reports both Modern v1.7.4.680 and Legacy v1.6.8.580 work perfectly, including with `renodx-dlss5.addon64` active. Exact ReShade patch versions and individual matrix steps were not separately recorded. |
+| D3D12 representative title | Existing stable effect-placement/hunting workflow works without experimental scene-input features. | Not freshly game-tested |
+| Vulkan, BG3 (x64) | Existing injection, preview/hunting, group removal and resolution/reload behaviour remain stable. | Maintainer reports both Modern v1.7.4.680 and Legacy v1.6.8.580 work perfectly, including with `renodx-dlss5.addon64` active. Exact ReShade patch versions and individual matrix steps were not separately recorded. |
 
 For each tested case, record game, graphics API, ReShade version, REST candidate commit and architecture. A pass on Modern does not automatically certify Legacy. There are no Automatic Scene Colour algorithm changes in this maintenance selection, but existing configured behaviour remains a smoke-test target. Do not claim every matrix row has passed if only some titles are available.
 

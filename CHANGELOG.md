@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.6.8.580 — release candidate
+## v1.6.8.580 — 2026-11-16
 
 - Adapt D3D9 standalone-surface targets and pre-Reset cleanup from BadassBaboon/CrazyDaifu.
 - Release views before resources, make cleanup repeat-safe, and isolate typed view caches by device.
@@ -10,7 +10,7 @@
 - Restore native D3D9 target/depth bindings after copies and previews; reproduce the old missing-depth failure in native tests.
 - Log hunting stage/hash before user selection becomes active.
 - Add x86/x64 production lifecycle and native D3D9 reset regressions, attribution and a release-validation record.
-- Keep Warframe/scene-input processing separate; no issue #22 resolution is claimed. Game-level validation remains pending.
+- Keep Warframe/scene-input processing separate; no issue #22 resolution is claimed. BG3 D3D11/Vulkan passed on both lines, including with renodx-dlss5; Modern x86 RE4 hunting, effects/groups and resolution/fullscreen checks passed.
 
 
 ## v1.6.7.580 — 2026-10-19
