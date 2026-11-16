@@ -30,6 +30,20 @@ inline VulkanManualEffectBlock CheckVulkanManualEffect(bool insideRenderPass,
     return VulkanManualEffectBlock::none;
 }
 
+// Conservative opt-in experiment: ordinary FP16 scene colour only. Shared,
+// sparse, layered, mipmapped and multisampled images retain their original usage.
+inline bool IsVulkanSceneTransferCandidate(reshade::api::device_api api,
+                                          const reshade::api::resource_desc& desc) {
+    using namespace reshade::api;
+    return api == device_api::vulkan && desc.type == resource_type::texture_2d &&
+           desc.texture.format == format::r16g16b16a16_float &&
+           desc.texture.width != 0 && desc.texture.height != 0 &&
+           desc.texture.samples == 1 && desc.texture.depth_or_layers == 1 && desc.texture.levels == 1 &&
+           desc.heap == memory_heap::default_ && desc.flags == resource_flags::none &&
+           (desc.usage & resource_usage::render_target) != resource_usage::undefined &&
+           (desc.usage & resource_usage::depth_stencil) == resource_usage::undefined;
+}
+
 struct ColorViewFormats {
     reshade::api::format linear;
     reshade::api::format srgb;

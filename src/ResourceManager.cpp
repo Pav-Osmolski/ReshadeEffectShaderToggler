@@ -104,6 +104,23 @@ bool ResourceManager::OnCreateResource(device* device, resource_desc& desc, subr
         ret |= rShim->OnCreateResource(device, desc, initial_data, initial_state);
     }
 
+    static const bool sceneTransfers = [] {
+        char value[2] = {};
+        return GetEnvironmentVariableA("REST_VULKAN_SCENE_TRANSFERS", value, sizeof(value)) == 1 && value[0] == '1';
+    }();
+    const auto transfers = resource_usage::copy_source | resource_usage::copy_dest;
+    if (sceneTransfers && IsVulkanSceneTransferCandidate(device->get_api(), desc) &&
+        (desc.usage & transfers) != transfers &&
+        device->check_format_support(desc.texture.format, desc.usage | transfers)) {
+        desc.usage |= transfers;
+        ret = true;
+        static std::atomic_uint32_t logged{0};
+        if (logged.fetch_add(1, std::memory_order_relaxed) < 16)
+            reshade::log::message(reshade::log::level::info,
+              std::format("REST Vulkan scene transfers: opted in FP16 {}x{} target at creation (usage 0x{:x}).",
+                          desc.texture.width, desc.texture.height, static_cast<uint32_t>(desc.usage)).c_str());
+    }
+
     return ret;
 }
 
