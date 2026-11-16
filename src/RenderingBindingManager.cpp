@@ -32,11 +32,6 @@ void RenderingBindingManager::DisposeTextureBindings(device* device, std::unorde
 
     unique_lock<shared_mutex> lock(data.binding_mutex);
 
-    if (data.bindingManagerData.empty_res != 0) {
-        device->destroy_resource(data.bindingManagerData.empty_res);
-        data.bindingManagerData.empty_res = { 0 };
-    }
-
     if (data.bindingManagerData.empty_rtv != 0) {
         device->destroy_resource_view(data.bindingManagerData.empty_rtv);
         data.bindingManagerData.empty_rtv = { 0 };
@@ -45,6 +40,11 @@ void RenderingBindingManager::DisposeTextureBindings(device* device, std::unorde
     if (data.bindingManagerData.empty_srv != 0) {
         device->destroy_resource_view(data.bindingManagerData.empty_srv);
         data.bindingManagerData.empty_srv = { 0 };
+    }
+
+    if (data.bindingManagerData.empty_res != 0) {
+        device->destroy_resource(data.bindingManagerData.empty_res);
+        data.bindingManagerData.empty_res = { 0 };
     }
 
     effect_runtime* runtime = data.current_runtime;
@@ -150,6 +150,7 @@ void RenderingBindingManager::_QueueOrDequeue(command_list* cmd_list,
                                               uint64_t action) {
     for (auto it = queue.begin(); it != queue.end();) {
         auto& [group, data] = *it;
+        if (group == nullptr || group->isRetired()) { it = queue.erase(it); continue; }
         // Set views during draw call since we can be sure the correct ones are bound at that point
         if (!callLocation && data.resource == 0) {
             ResourceViewData active_data = RenderingManager::GetCurrentResourceView(cmd_list, deviceData, group, commandListData, layoutIndex, action);
@@ -189,6 +190,7 @@ void RenderingBindingManager::_UpdateTextureBindings(command_list* cmd_list,
     auto& runtimeData = runtime->get_private_data<RuntimeDataContainer>();
 
     for (auto& [group, bindingData] : bindingsToUpdate) {
+        if (group == nullptr || group->isRetired()) continue;
         if (toUpdateBindings.contains(group) && !deviceData.bindingsUpdated.contains(group)) {
             if (bindingData.resource == 0) {
                 continue;

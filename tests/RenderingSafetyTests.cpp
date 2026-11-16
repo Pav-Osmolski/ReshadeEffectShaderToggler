@@ -7,6 +7,9 @@ static void require(bool condition) {
 
 int main() {
     using namespace reshade::api;
+    require(Rendering::IsColorTargetType(device_api::d3d9, resource_type::surface));
+    require(!Rendering::IsColorTargetType(device_api::d3d11, resource_type::surface));
+    require(!Rendering::IsColorTargetType(device_api::d3d12, resource_type::surface));
     require(Rendering::SupportsShaderCopy(device_api::d3d9));
     require(Rendering::SupportsShaderCopy(device_api::d3d10));
     require(Rendering::SupportsShaderCopy(device_api::d3d11));

@@ -197,9 +197,15 @@ See [Release Process](docs/RELEASING.md) for the release checklist and packaging
 - [Marty McFly](https://github.com/martymcmodding) - constant-buffer extraction idea.
 - [darkarchan](https://github.com/darkarchan) - testing and contributions.
 
+- [BadassBaboon](https://github.com/BadassBaboon) / CrazyDaifu - adapted D3D9 surface/reset and removed-group lifetime fixes; see [fork attribution](docs/maintenance-release-validation.md#attribution) and [license notice](docs/fork-license.txt).
+
 ## Licence
 
 This project retains the licence and notices from the upstream project. See [LICENSE](LICENSE).
+
+## D3D9 compatibility
+
+REST accepts standalone D3D9 surface render targets and releases its owned resources for device resets. Surface targets do not necessarily support shader sampling or previews. Automatic Scene Colour and modern HDR presentation are not added to D3D9. See [maintenance release validation](docs/maintenance-release-validation.md) for the candidate scope and recorded testing.
 
 ## HDR notes
 

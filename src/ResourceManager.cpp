@@ -68,16 +68,13 @@ void ResourceManager::ClearBackbuffer(reshade::api::swapchain* runtime) {
     device* dev = runtime->get_device();
     DeviceDataContainer& data = dev->get_private_data<DeviceDataContainer>();
 
-    uint32_t count = runtime->get_back_buffer_count();
-
-    if (data.resourceManagerData.dummy_res != 0) {
-        runtime->get_device()->destroy_resource(data.resourceManagerData.dummy_res);
-        data.resourceManagerData.dummy_res = { 0 };
-    }
-
     if (data.resourceManagerData.dummy_rtv != 0) {
-        runtime->get_device()->destroy_resource_view(data.resourceManagerData.dummy_rtv);
+        dev->destroy_resource_view(data.resourceManagerData.dummy_rtv);
         data.resourceManagerData.dummy_rtv = { 0 };
+    }
+    if (data.resourceManagerData.dummy_res != 0) {
+        dev->destroy_resource(data.resourceManagerData.dummy_res);
+        data.resourceManagerData.dummy_res = { 0 };
     }
 }
 
@@ -130,9 +127,11 @@ void ResourceManager::OnDestroyResource(device* device, resource res) {
     if (!in_destroy_device) {
         std::unique_lock<shared_mutex> lock_view(view_mutex);
 
-        const auto& views = global_resources.find(res.handle);
+        const auto deviceViews = global_resources.find(device);
+        if (deviceViews == global_resources.end()) return;
+        const auto views = deviceViews->second.find(res.handle);
 
-        if (views != global_resources.end()) {
+        if (views != deviceViews->second.end()) {
             for (const auto& [_, view] : views->second)
                 view->state = GlobalResourceState::RESOURCE_INVALID;
         }
@@ -144,14 +143,16 @@ void ResourceManager::OnDestroyDevice(device* device, bool validDevice) {
 
     std::unique_lock<shared_mutex> lock_view(view_mutex);
 
-    for (const auto& view : global_resources) {
-        for (const auto& [_, typedView] : view.second)
-            typedView->Dispose(validDevice);
+    const auto found = global_resources.find(device);
+    if (found != global_resources.end()) {
+        for (const auto& [_, formats] : found->second)
+            for (const auto& [__, view] : formats)
+                view->Dispose(validDevice);
+        global_resources.erase(found);
     }
 
-    global_resources.clear();
-
-    DisposePreview(nullptr);
+    // D3D9 Reset requires every REST-owned default-pool resource to be released.
+    if (validDevice) DisposePreview(device);
 
     in_destroy_device = false;
 }
@@ -184,8 +185,8 @@ const std::shared_ptr<GlobalResourceView>& ResourceManager::GetResourceView(devi
     // interpretation separately instead of reusing whichever was requested first.
     const auto desc = device->get_resource_desc(resource{ handle });
     const auto selectedFormat = format != reshade::api::format::unknown ? format :
-        (desc.type == resource_type::texture_2d ? format_to_default_typed(desc.texture.format) : reshade::api::format::unknown);
-    auto& res = global_resources[handle][static_cast<uint32_t>(selectedFormat)];
+        (IsColorTargetType(device->get_api(), desc.type) ? format_to_default_typed(desc.texture.format) : reshade::api::format::unknown);
+    auto& res = global_resources[device][handle][static_cast<uint32_t>(selectedFormat)];
 
     if (res == nullptr) {
         res = std::make_shared<GlobalResourceView>(device, resource{ handle }, selectedFormat);
@@ -241,7 +242,10 @@ void ResourceManager::OnEffectsReloaded(effect_runtime* runtime) {
 void ResourceManager::CheckResourceViews(reshade::api::effect_runtime* runtime) {
     if (!effects_reloading) {
         std::unique_lock<shared_mutex> lock_view(view_mutex);
-        for (auto resourceViews = global_resources.begin(); resourceViews != global_resources.end();) {
+        const auto found = global_resources.find(runtime->get_device());
+        if (found == global_resources.end()) return;
+        auto& deviceViews = found->second;
+        for (auto resourceViews = deviceViews.begin(); resourceViews != deviceViews.end();) {
             auto& typedViews = resourceViews->second;
             for (auto view = typedViews.begin(); view != typedViews.end();) {
                 const bool referenced = view->second.use_count() > 1;
@@ -255,7 +259,7 @@ void ResourceManager::CheckResourceViews(reshade::api::effect_runtime* runtime) 
                 ++view;
             }
             if (typedViews.empty())
-                resourceViews = global_resources.erase(resourceViews);
+                resourceViews = deviceViews.erase(resourceViews);
             else
                 ++resourceViews;
         }

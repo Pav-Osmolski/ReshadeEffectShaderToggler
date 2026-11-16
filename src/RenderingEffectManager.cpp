@@ -70,7 +70,7 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
     for (const auto& aTech : runtimeData.allSortedTechniques) {
         const auto& sTech = techniquesToRender.find(aTech);
 
-        if (sTech == techniquesToRender.end()) {
+        if (sTech == techniquesToRender.end() || sTech->second.group == nullptr || sTech->second.group->isRetired()) {
             continue;
         }
 
@@ -96,7 +96,7 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
         resource_view view_srgb = {};
         resource_view group_view = {};
         resource_desc desc = cmd_list->get_device()->get_resource_desc(active_resource.resource);
-        if (desc.type != resource_type::texture_2d || desc.texture.samples != 1 || desc.texture.depth_or_layers != 1) {
+        if (!IsColorTargetType(cmd_list->get_device()->get_api(), desc.type) || desc.texture.samples != 1 || desc.texture.depth_or_layers != 1) {
             group->setDebugAutoStatus("Unsupported effect target topology");
             continue;
         }
@@ -640,12 +640,9 @@ void RenderingEffectManager::RenderEffects(command_list* cmd_list, uint64_t call
     }
 
     shared_lock<shared_mutex> techLock(runtimeData.technique_mutex);
-    rendered =
-      (psToRenderNames.size() > 0) &&
-        _RenderEffects(cmd_list, deviceData, runtimeData, commandListData.ps.techniquesToRender, psRemovalList, psToRenderNames) ||
-      (vsToRenderNames.size() > 0) &&
-        _RenderEffects(cmd_list, deviceData, runtimeData, commandListData.vs.techniquesToRender, vsRemovalList, vsToRenderNames) ||
-      (csToRenderNames.size() > 0) && _RenderEffects(cmd_list, deviceData, runtimeData, commandListData.cs.techniquesToRender, csRemovalList, csToRenderNames);
+    if (!psToRenderNames.empty()) rendered |= _RenderEffects(cmd_list, deviceData, runtimeData, commandListData.ps.techniquesToRender, psRemovalList, psToRenderNames);
+    if (!vsToRenderNames.empty()) rendered |= _RenderEffects(cmd_list, deviceData, runtimeData, commandListData.vs.techniquesToRender, vsRemovalList, vsToRenderNames);
+    if (!csToRenderNames.empty()) rendered |= _RenderEffects(cmd_list, deviceData, runtimeData, commandListData.cs.techniquesToRender, csRemovalList, csToRenderNames);
     techLock.unlock();
 
     for (auto& g : psRemovalList) {
