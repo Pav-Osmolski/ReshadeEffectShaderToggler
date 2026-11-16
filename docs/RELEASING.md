@@ -21,6 +21,12 @@ The final component preserves the upstream convention used for the ReShade basel
 
 The source tree contains a human-readable default version in `src/version.h`. During a tagged release, the workflow validates the tag and runs `src/set_release_version.ps1` so the packaged binaries are stamped from the tag itself.
 
+## Release display names
+
+GitHub release titles use **REST Enhanced vMAJOR.MINOR.PATCH.RESHADE** on Modern and **REST Enhanced vMAJOR.MINOR.PATCH.RESHADE (ReShade 5.x)** on Legacy. For example: `REST Enhanced v1.7.4.680` and `REST Enhanced v1.6.8.580 (ReShade 5.x)`.
+
+The release workflow supplies these display names automatically. Tags remain `vMAJOR.MINOR.PATCH.RESHADE`; the tagger still requires the exact release commit first line `Release vMAJOR.MINOR.PATCH.RESHADE`. These commit/tag rules are separate from the public display title. The manually maintained Testing Only pre-release keeps its own name.
+
 ## Pre-release checklist
 
 Before tagging a release:

@@ -131,14 +131,12 @@ void state_block::apply_descriptors(command_list* cmd_list) const {
     }
 }
 
-void state_block::capture(command_list* cmd_list, bool force_restore) {
-    if (force_restore && cmd_list->get_device()->get_api() == device_api::d3d9 && dx_state == nullptr) {
-        IDirect3DDevice9* device = reinterpret_cast<IDirect3DDevice9*>(cmd_list->get_device()->get_native());
-
-        if (SUCCEEDED(device->CreateStateBlock(D3DSBT_ALL, &dx_state))) {
-            dx_state->Capture();
-        }
+bool state_block::capture(command_list* cmd_list, bool force_restore) {
+    if (force_restore && cmd_list->get_device()->get_api() == device_api::d3d9) {
+        auto* native = reinterpret_cast<IDirect3DDevice9*>(cmd_list->get_device()->get_native());
+        return dx_state.Capture(native);
     }
+    return true;
 }
 
 void state_block::apply(command_list* cmd_list, bool force_restore) {
@@ -152,19 +150,10 @@ void state_block::apply(command_list* cmd_list, bool force_restore) {
 }
 
 void state_block::apply_dx9(reshade::api::command_list* cmd_list, bool force_restore) {
-    if (!force_restore) {
-        return;
-    }
-
-    // ???
-    if (!render_targets.empty() || depth_stencil != 0)
-        cmd_list->bind_render_targets_and_depth_stencil(static_cast<uint32_t>(render_targets.size()), render_targets.data(), depth_stencil);
-
-    if (dx_state != nullptr) {
-        dx_state->Apply();
-        dx_state->Release();
-        dx_state = nullptr;
-    }
+    if (!force_restore) return;
+    auto* native = reinterpret_cast<IDirect3DDevice9*>(cmd_list->get_device()->get_native());
+    if (!dx_state.Restore(native))
+        reshade::log::message(reshade::log::level::error, "REST D3D9 native state restoration failed or no snapshot was captured.");
 }
 
 void state_block::apply_default(reshade::api::command_list* cmd_list, bool force_restore) const {

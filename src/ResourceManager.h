@@ -86,7 +86,8 @@ class __declspec(novtable) ResourceManager final {
     std::shared_mutex resource_mutex;
     std::shared_mutex view_mutex;
 
-    std::unordered_map<uint64_t, std::unordered_map<uint32_t, std::shared_ptr<GlobalResourceView>>> global_resources;
+    using DeviceViews = std::unordered_map<uint64_t, std::unordered_map<uint32_t, std::shared_ptr<GlobalResourceView>>>;
+    std::unordered_map<reshade::api::device*, DeviceViews> global_resources;
     std::unordered_set<uint64_t> resources;
 };
 }

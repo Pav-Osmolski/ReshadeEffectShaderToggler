@@ -152,10 +152,6 @@ void RenderingShaderManager::DestroyShaders(reshade::api::device* device) {
         }
         cache->clear();
     }
-    if (shader.customShader.fullscreenQuadVertexBuffer != 0) {
-        device->destroy_resource(shader.customShader.fullscreenQuadVertexBuffer);
-        shader.customShader.fullscreenQuadVertexBuffer = { 0 };
-    }
 
     if (shader.customShader.copyPipeline.pipeline != 0) {
         device->destroy_pipeline(shader.customShader.copyPipeline.pipeline);
@@ -186,6 +182,11 @@ void RenderingShaderManager::DestroyShaders(reshade::api::device* device) {
         device->destroy_sampler(shader.customShader.alphaPreservingCopyPipeline.pipelineSampler);
         shader.customShader.alphaPreservingCopyPipeline.pipelineSampler = { 0 };
     }
+    if (shader.customShader.fullscreenQuadVertexBuffer != 0) {
+        device->destroy_resource(shader.customShader.fullscreenQuadVertexBuffer);
+        shader.customShader.fullscreenQuadVertexBuffer = { 0 };
+    }
+
 }
 
 bool RenderingShaderManager::ApplyShader(command_list* cmd_list,
@@ -203,7 +204,10 @@ bool RenderingShaderManager::ApplyShader(command_list* cmd_list,
         return false;
     }
 
-    cmd_list->get_private_data<state_tracking>()->capture(cmd_list, true);
+    if (!cmd_list->get_private_data<state_tracking>()->capture(cmd_list, true)) {
+        reshade::log::message(reshade::log::level::warning, "REST copy skipped: native D3D9 state could not be captured.");
+        return false;
+    }
 
     cmd_list->bind_render_targets_and_depth_stencil(1, &rtv_dst);
 

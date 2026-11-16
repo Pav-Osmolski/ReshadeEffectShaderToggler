@@ -49,7 +49,7 @@ namespace ShaderToggler {
 /// </summary>
 class ShaderManager {
   public:
-    ShaderManager();
+    explicit ShaderManager(const char* stageName = "unknown");
 
     void addHashHandlePair(uint32_t shaderHash, uint64_t pipelineHandle);
     void removeHandle(uint64_t handle);
@@ -157,6 +157,8 @@ class ShaderManager {
     }
 
   private:
+    void publishHuntedShader(uint32_t hash);
+    const char* _stageName;
     void setActiveHuntedShaderHandle();
 
     std::unordered_set<uint32_t> _shaderHashes; // all shader hashes added through init pipeline

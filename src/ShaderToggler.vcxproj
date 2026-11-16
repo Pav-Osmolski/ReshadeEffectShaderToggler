@@ -206,6 +206,7 @@
     <ClInclude Include="GameHookT.h" />
     <ClInclude Include="KeyMonitor.h" />
     <ClInclude Include="GlobalResourceView.h" />
+    <ClInclude Include="D3D9StateSnapshot.h" />
     <ClInclude Include="RenderingBindingManager.h" />
     <ClInclude Include="RenderingEffectManager.h" />
     <ClInclude Include="RenderingPreviewManager.h" />

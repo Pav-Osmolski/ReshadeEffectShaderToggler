@@ -8,6 +8,7 @@
 #include "DescriptorTracking.h"
 #include <array>
 #include <d3d9.h>
+#include "D3D9StateSnapshot.h"
 #include <shared_mutex>
 #include <mutex>
 #include <unordered_map>
@@ -73,7 +74,7 @@ struct state_block {
     /// </summary>
     /// <param name="cmd_list">Target command list to bind the state on.</param>
 
-    void capture(reshade::api::command_list* cmd_list, bool force_restore = false);
+    bool capture(reshade::api::command_list* cmd_list, bool force_restore = false);
 
     void apply(reshade::api::command_list* cmd_list, bool force_restore = false);
     void apply_dx9(reshade::api::command_list* cmd_list, bool force_restore);
@@ -117,7 +118,7 @@ struct state_block {
     std::mutex resourceBarrierMutex;
     std::unordered_map<uint64_t, barrier_track> resource_barrier_track;
 
-    IDirect3DStateBlock9* dx_state = nullptr;
+    Rendering::D3D9StateSnapshot dx_state;
 };
 
 struct __declspec(uuid("EE0C0141-E361-42E5-AF64-25F2F677F37F")) DeviceStateTracking {

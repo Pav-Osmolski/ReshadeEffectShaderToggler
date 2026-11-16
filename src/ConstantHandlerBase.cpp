@@ -235,6 +235,7 @@ void ConstantHandlerBase::UpdateConstants(command_list* cmd_list) {
     vector<ToggleGroup*> csRemovalList;
 
     for (const auto& cb : commandListData.ps.constantBuffersToUpdate) {
+        if (cb->isRetired()) continue;
         if (!deviceData.constantsUpdated.contains(cb)) {
             if (!cb->getCBIsPushMode() && UpdateConstantBufferEntries(cmd_list, commandListData, deviceData, cb, cb->getCBShaderStage()) ||
                 cb->getCBIsPushMode() && UpdateConstantEntries(cmd_list, commandListData, deviceData, cb, cb->getCBShaderStage())) {
@@ -244,6 +245,7 @@ void ConstantHandlerBase::UpdateConstants(command_list* cmd_list) {
     }
 
     for (const auto& cb : commandListData.vs.constantBuffersToUpdate) {
+        if (cb->isRetired()) continue;
         if (!deviceData.constantsUpdated.contains(cb)) {
             if (!cb->getCBIsPushMode() && UpdateConstantBufferEntries(cmd_list, commandListData, deviceData, cb, cb->getCBShaderStage()) ||
                 cb->getCBIsPushMode() && UpdateConstantEntries(cmd_list, commandListData, deviceData, cb, cb->getCBShaderStage())) {
@@ -253,6 +255,7 @@ void ConstantHandlerBase::UpdateConstants(command_list* cmd_list) {
     }
 
     for (const auto& cb : commandListData.cs.constantBuffersToUpdate) {
+        if (cb->isRetired()) continue;
         if (!deviceData.constantsUpdated.contains(cb)) {
             if (!cb->getCBIsPushMode() && UpdateConstantBufferEntries(cmd_list, commandListData, deviceData, cb, cb->getCBShaderStage()) ||
                 cb->getCBIsPushMode() && UpdateConstantEntries(cmd_list, commandListData, deviceData, cb, cb->getCBShaderStage())) {

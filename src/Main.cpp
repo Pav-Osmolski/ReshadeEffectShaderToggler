@@ -78,9 +78,9 @@ constexpr auto REST_VAR_ANNOTATION = "source";
 static filesystem::path g_dllPath;
 static filesystem::path g_basePath;
 
-static ShaderToggler::ShaderManager g_pixelShaderManager;
-static ShaderToggler::ShaderManager g_vertexShaderManager;
-static ShaderToggler::ShaderManager g_computeShaderManager;
+static ShaderToggler::ShaderManager g_pixelShaderManager("PS");
+static ShaderToggler::ShaderManager g_vertexShaderManager("VS");
+static ShaderToggler::ShaderManager g_computeShaderManager("CS");
 
 static ConstantManager constantManager;
 static ConstantHandlerBase* constantHandler = nullptr;
@@ -118,6 +118,8 @@ static uint32_t calculateShaderHash(void* shaderData) {
 }
 
 static void onInitDevice(device* device) {
+    if (device->get_api() == device_api::d3d9)
+        reshade::log::message(reshade::log::level::info, "D3D9 copy/preview state: native target and depth snapshots enabled.");
     device->create_private_data<DeviceDataContainer>();
 }
 
@@ -289,7 +291,20 @@ static void onInitEffectRuntime(effect_runtime* runtime) {
 static void onDestroyEffectRuntime(effect_runtime* runtime) {
     DeviceDataContainer& data = *runtime->get_device()->get_private_data<DeviceDataContainer>();
 
-    renderingBindingManager.DisposeTextureBindings(runtime->get_device(), g_addonUIData.GetToggleGroups());
+    device* dev = runtime->get_device();
+    const bool otherRuntimeOnDevice = std::any_of(runtimes.begin(), runtimes.end(), [=](effect_runtime* other) {
+        return other != runtime && other->get_device() == dev;
+    });
+    if (!otherRuntimeOnDevice) {
+        Rendering::ResourceManager::SynchronizeGpu(runtime);
+        renderingBindingManager.DisposeTextureBindings(dev, g_addonUIData.GetToggleGroups());
+        if (dev->get_api() == device_api::d3d9) {
+            // Adapted from the CrazyDaifu/BadassBaboon D3D9 reset fixes.
+            groupResourceManager.DisposeGroupBuffers(dev, g_addonUIData.GetToggleGroups());
+            resourceManager.OnDestroyDevice(dev, true);
+            renderingShaderManager.DestroyShaders(dev);
+        }
+    }
 
     // Remove runtime from stack
     for (auto it = runtimes.begin(); it != runtimes.end();) {
@@ -303,8 +318,11 @@ static void onDestroyEffectRuntime(effect_runtime* runtime) {
 
     // Pick the runtime on top of our stack if there are any
     if (runtime == data.current_runtime) {
-        if (runtimes.size() > 0) {
-            data.current_runtime = runtimes[runtimes.size() - 1];
+        const auto replacement = std::find_if(runtimes.rbegin(), runtimes.rend(), [=](effect_runtime* other) {
+            return other->get_device() == dev;
+        });
+        if (replacement != runtimes.rend()) {
+            data.current_runtime = *replacement;
 
             if (constantHandler != nullptr) {
                 constantHandler->ReloadConstantVariables(data.current_runtime);

@@ -91,6 +91,14 @@ unordered_map<int, ToggleGroup>& AddonUIData::GetToggleGroups()
     return _toggleGroups;
 }
 
+void AddonUIData::RetireToggleGroup(int id)
+{
+    auto node = _toggleGroups.extract(id);
+    if (node.empty()) return;
+    node.mapped().retire();
+    _retiredGroups.push_back(std::move(node));
+}
+
 void AddonUIData::AddToggleGroupRemovalCallback(std::function<void(reshade::api::effect_runtime*, ShaderToggler::ToggleGroup*)> callback)
 {
     _removalCallbacks.push_back(callback);
@@ -98,6 +106,8 @@ void AddonUIData::AddToggleGroupRemovalCallback(std::function<void(reshade::api:
 
 void AddonUIData::SignalToggleGroupRemoved(reshade::api::effect_runtime* runtime, ShaderToggler::ToggleGroup* group)
 {
+    // Stop stale CPU work before callbacks synchronize and release GPU resources.
+    group->retire();
     for (auto& func : _removalCallbacks)
     {
         func(runtime, group);

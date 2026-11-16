@@ -103,5 +103,5 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           # Existing releases are immutable: retries must never replace assets.
-          gh release create $env:RELEASE_TAG "release.zip" "SHA256SUMS.txt" "BG3-Configs-D3D11+Vulkan.zip" "BG3-Configs-SHA256SUMS.txt" "BG3-Configs-PROVENANCE.txt" --verify-tag --latest --title $env:RELEASE_TAG --notes-file "docs/releases/$env:RELEASE_TAG.md"
+          gh release create $env:RELEASE_TAG "release.zip" "SHA256SUMS.txt" "BG3-Configs-D3D11+Vulkan.zip" "BG3-Configs-SHA256SUMS.txt" "BG3-Configs-PROVENANCE.txt" --verify-tag --latest --title "REST Enhanced $env:RELEASE_TAG" --notes-file "docs/releases/$env:RELEASE_TAG.md"
           if ($LASTEXITCODE -ne 0) { throw "Release publication failed; existing releases are never overwritten." }

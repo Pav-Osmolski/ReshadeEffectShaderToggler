@@ -9,3 +9,5 @@ if ($LASTEXITCODE -ne 0) { throw 'Rendering safety tests failed to compile.' }
 & ./tests/out/rendering-safety.exe
 if ($LASTEXITCODE -ne 0) { throw 'Rendering safety tests failed.' }
 Write-Output 'Rendering safety regression tests passed.'
+
+& ./scripts/test-maintenance.ps1

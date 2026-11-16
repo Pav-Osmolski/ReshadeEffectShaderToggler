@@ -34,3 +34,10 @@ The Warframe hunting crash in issue #15 was confirmed fixed by its reporter in o
 ## Testing scope
 
 Successful x86/x64 builds verify compilation and package metadata. CPU tests cover selected format/descriptor bookkeeping and packaging. They do not run the game or certify HDR colour output, validation-layer cleanliness or performance. Read each release's recorded coverage rather than extending a BG3 result to every title and renderer.
+
+
+## Crashes during shader hunting
+
+Keep `ReShade.log` from the failed session before restarting the game, since a new launch may replace it. REST logs hunting stage/hash before selection becomes active; search for `REST hunting selection`. Record the selected destination mode and the action that triggered the crash if known. A screenshot of the shader list is not required when the log retains that context.
+
+Windows may also retain a crash report in the Application event log and a dump under `%LOCALAPPDATA%/CrashDumps`. Dumps are not guaranteed to exist on every installation. These files can still provide useful evidence when the final log line does not show an exception. The current maintenance candidate includes a native D3D9 copy/preview state-restoration regression; see [maintenance validation](maintenance-release-validation.md#re4-crash-regression).
