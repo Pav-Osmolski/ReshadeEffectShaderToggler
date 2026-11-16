@@ -13,7 +13,7 @@ public:
         }();
         if (enabled && _budget.start())
             reshade::log::message(reshade::log::level::info,
-              "REST Vulkan trace: START; up to 512 events / 3 presents. begin a=load b=flags c=inside|endPending<<1; barrier a=old b=new c=state; queue a=width b=height c=usage. Events describe callbacks, not proven native pass boundaries.");
+              "REST Vulkan trace: START; up to 512 events / 3 presents. begin a=load b=flags c=inside|endPending<<1; barrier a=old b=new c=state; queue a=width b=height c=usage; ps-draw a=hash. Events describe callbacks, not proven native pass boundaries.");
     }
     bool active() const { return _budget.active(); }
     void event(const char* name, const void* cmd, uint64_t target = 0,

@@ -544,6 +544,7 @@ static bool onBeginRenderPass(command_list* cmd_list,
     }
 
     if (vulkan) {
+        commandListData.vulkanTraceLastPixelHash = 0;
         // ReShade API 20 exposes suspended/resumed dynamic-rendering segments
         // explicitly. A resumed segment is a continuation of the same logical pass,
         // so it can never be used as a safe point for preview/effect transfer work.
@@ -741,6 +742,16 @@ static void UnInit() {
 
 static void CheckDrawCall(command_list* cmd_list, const uint64_t match_modifier = Rendering::MATCH_ALL) {
     CommandListDataContainer& commandListData = *cmd_list->get_private_data<CommandListDataContainer>();
+
+    auto& trace = cmd_list->get_device()->get_private_data<DeviceDataContainer>()->vulkanBoundaryTrace;
+    if ((match_modifier & Rendering::MATCH_PS) != 0 && trace.active() &&
+        commandListData.ps.activeShaderHash != commandListData.vulkanTraceLastPixelHash) {
+        commandListData.vulkanTraceLastPixelHash = commandListData.ps.activeShaderHash;
+        const auto& targets = cmd_list->get_private_data<state_tracking>()->render_targets;
+        const resource target = !targets.empty() && targets[0] != 0 ?
+          cmd_list->get_device()->get_resource_from_view(targets[0]) : resource{0};
+        trace.event("ps-draw", cmd_list, target.handle, commandListData.ps.activeShaderHash);
+    }
 
     if (commandListData.commandQueue & Rendering::MATCH_ALL & match_modifier) {
         if (constantHandler != nullptr && (commandListData.commandQueue & Rendering::MATCH_CONST & match_modifier)) {
