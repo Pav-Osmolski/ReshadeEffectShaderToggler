@@ -1,4 +1,5 @@
 #include "RenderingSafety.h"
+#include "VulkanTraceBudget.h"
 #include <stdexcept>
 
 static void require(bool condition) {
@@ -6,6 +7,19 @@ static void require(bool condition) {
 }
 
 int main() {
+    VulkanTraceBudget trace;
+    require(!trace.take());
+    require(trace.start(2, 3));
+    require(!trace.start());
+    require(trace.take()); require(trace.take()); require(!trace.take());
+    require(!trace.finishFrame()); require(!trace.finishFrame()); require(trace.finishFrame());
+    require(!trace.finishFrame()); require(!trace.start());
+    VulkanTraceBudget frameLimited;
+    require(frameLimited.start(10, 1)); require(frameLimited.take());
+    require(frameLimited.finishFrame()); require(!frameLimited.take());
+    VulkanTraceBudget empty;
+    require(empty.start(10, 0)); require(!empty.active()); require(!empty.finishFrame());
+
     using namespace reshade::api;
     require(Rendering::IsColorTargetType(device_api::d3d9, resource_type::surface));
     require(!Rendering::IsColorTargetType(device_api::d3d11, resource_type::surface));

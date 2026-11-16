@@ -173,6 +173,9 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
                 // continuation pass may be recorded on a different command buffer, so
                 // pending work is tracked at device scope. Preserve the first applicable
                 // group/target for a technique, matching REST's first-render-wins model.
+                deviceData.vulkanBoundaryTrace.arm();
+                deviceData.vulkanBoundaryTrace.event("queue", cmd_list, active_resource.resource.handle,
+                  desc.texture.width, desc.texture.height, static_cast<uint32_t>(desc.usage));
                 group->setDebugAutoStatus("Waiting for safe Vulkan continuation or target transition");
                 if (!effectList.empty())
                     deviceData.vulkanAutoWorkPending.store(true, std::memory_order_release);
@@ -540,6 +543,11 @@ void RenderingEffectManager::_RenderDeferredVulkanAutoEffects(
         toRenderNames.insert(effect);
     }
 
+    if (deviceData.vulkanBoundaryTrace.active()) {
+        for (const auto& [target, usage] : safeTargets)
+            deviceData.vulkanBoundaryTrace.event(boundaryName, cmd_list, target, static_cast<uint32_t>(usage));
+        deviceData.vulkanBoundaryTrace.event("eligible-effects", cmd_list, 0, toRenderNames.size(), deviceData.vulkanAutoPendingEffects.size());
+    }
     if (toRenderNames.empty())
         return;
 
