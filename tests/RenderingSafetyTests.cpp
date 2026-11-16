@@ -36,6 +36,15 @@ int main() {
 
     resource_desc desc(1920, 1080, 1, 1, format::r16g16b16a16_float, 1,
                        memory_heap::default_, resource_usage::render_target);
+    // The Auto-off crash path must stay blocked even on otherwise valid images.
+    using Block = Rendering::VulkanManualEffectBlock;
+    require(Rendering::CheckVulkanManualEffect(true, desc, true) == Block::render_pass);
+    require(Rendering::CheckVulkanManualEffect(false, desc, true) == Block::transfer_source);
+    desc.usage |= resource_usage::copy_source;
+    require(Rendering::CheckVulkanManualEffect(true, desc, true) == Block::render_pass);
+    require(Rendering::CheckVulkanManualEffect(true, desc, false) == Block::render_pass);
+    require(Rendering::CheckVulkanManualEffect(false, desc, false) == Block::format_support);
+    require(Rendering::CheckVulkanManualEffect(false, desc, true) == Block::none);
     require(Rendering::SupportsWholePreviewCopy(desc));
     desc.texture.samples = 4;
     require(!Rendering::SupportsWholePreviewCopy(desc));

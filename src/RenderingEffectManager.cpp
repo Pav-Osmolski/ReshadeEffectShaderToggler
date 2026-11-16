@@ -100,6 +100,22 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
             group->setDebugAutoStatus("Unsupported effect target topology");
             continue;
         }
+        const device_api deviceApi = cmd_list->get_device()->get_api();
+        const bool autoSceneColour = group->isAutoSceneColourActive(deviceApi);
+        if (deviceApi == device_api::vulkan && !autoSceneColour) {
+            // render_technique performs transfer commands even without staging.
+            // Validate before creating views or issuing any rendering work.
+            const auto blocked = CheckVulkanManualEffect(
+              cmdData.vulkanInsideRenderPass, desc,
+              !cmdData.vulkanInsideRenderPass && runtime->get_device()->check_format_support(desc.texture.format, resource_usage::copy_source));
+            if (blocked != VulkanManualEffectBlock::none) {
+                group->setDebugAutoStatus(
+                  blocked == VulkanManualEffectBlock::render_pass ? "Manual Vulkan injection skipped: active render pass; use Auto scene colour" :
+                  blocked == VulkanManualEffectBlock::transfer_source ? "Manual Vulkan injection skipped: missing transfer source" :
+                                                                       "Manual Vulkan injection skipped: unsupported transfer source format");
+                continue;
+            }
+        }
         GroupResource& groupResource = group->GetGroupResource(GroupResourceType::RESOURCE_ALPHA);
         const shared_ptr<GlobalResourceView>& view = resourceManager.GetResourceView(runtime->get_device(), active_resource);
         bool copyPreserveAlpha = false;
@@ -112,8 +128,6 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
         uint32_t runtimeWidth = 0, runtimeHeight = 0;
         runtime->get_screenshot_width_and_height(&runtimeWidth, &runtimeHeight);
 
-        const device_api deviceApi = cmd_list->get_device()->get_api();
-        const bool autoSceneColour = group->isAutoSceneColourActive(deviceApi);
         const bool preserveTargetAlpha = group->getPreserveAlpha() && !autoSceneColour && SupportsShaderCopy(deviceApi);
         const bool wantsNativeStaging =
           autoSceneColour &&

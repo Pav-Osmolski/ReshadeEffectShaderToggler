@@ -15,6 +15,21 @@ inline bool IsColorTargetType(reshade::api::device_api api, reshade::api::resour
            (api == reshade::api::device_api::d3d9 && type == reshade::api::resource_type::surface);
 }
 
+// Manual Vulkan injection has no deferred pass-boundary resolver. Never let
+// a draw/pipeline callback enter ReShade's copy/render path inside a game pass.
+enum class VulkanManualEffectBlock { none, render_pass, transfer_source, format_support };
+inline VulkanManualEffectBlock CheckVulkanManualEffect(bool insideRenderPass,
+                                                       const reshade::api::resource_desc& target,
+                                                       bool copySourceFormatSupported) {
+    if (insideRenderPass)
+        return VulkanManualEffectBlock::render_pass;
+    if ((target.usage & reshade::api::resource_usage::copy_source) == reshade::api::resource_usage::undefined)
+        return VulkanManualEffectBlock::transfer_source;
+    if (!copySourceFormatSupported)
+        return VulkanManualEffectBlock::format_support;
+    return VulkanManualEffectBlock::none;
+}
+
 struct ColorViewFormats {
     reshade::api::format linear;
     reshade::api::format srgb;
