@@ -13,6 +13,10 @@ class CiScopeTests(unittest.TestCase):
     def test_docs_only(self):
         self.assertFalse(scope.needs_native(['README.md', 'docs/RELEASING.md'], 'pull_request'))
 
+    def test_site_only_changes_do_not_compile_the_addon(self):
+        self.assertFalse(scope.needs_native(['website/prepare.py', 'website/assets/site.css',
+                                            'zensical.toml', '.github/workflows/pages.yml'], 'pull_request'))
+
     def test_mixed_or_unknown_changes_build(self):
         for path in ('src/Main.cpp', 'deps/reshade', '.gitmodules', 'new-build-input',
                      '.github/workflows/release.yml', 'scripts/validate-binaries.ps1',
