@@ -44,6 +44,8 @@ Windows may also retain a crash report in the Application event log and a dump u
 
 ## Enshrouded Vulkan testing
 
+Development builds with the [saved Vulkan scene-transfer option](vulkan-scene-transfer-setting.md) can use a per-game REST preference instead of the scene-transfer launcher variable. Save and restart are required; the graphics-hook workaround and Vulkan-layer argument still belong in the launcher.
+
 Enshrouded requires `--keep-vulkan-layers` to retain ReShade's Vulkan layer. In a local SDR test on build 1287369 with ReShade 6.8.0.2155, Vulkan rendering also created DirectX helper objects. An exit crash was consistent with a ReShade D3D12 command-list proxy outliving the unloaded module. A process-only `RESHADE_DISABLE_GRAPHICS_HOOK=1` launch retained Vulkan/REST, allowed normal add-on unloading and exited successfully. This is a tested local workaround, not a global environment recommendation or proof that every exit crash has that cause.
 
 Disabling Auto Scene Colour exposed a separate rendering crash during local testing. Manual Vulkan effect injection now skips active render passes and targets without required transfer-source usage/format support, before creating views or calling ReShade effect rendering. It does not attempt to split the game's pass. This safety guard does not establish a working pre-HUD injection point: Auto still requires a compatible image and safe continuation/transition. UI hiding and hunting are separate from effect placement.

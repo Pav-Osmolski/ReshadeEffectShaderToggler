@@ -1702,6 +1702,23 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, reshade::api::eff
         ImGui::Checkbox("Track descriptors", &trackDescriptors);
         instance.SetTrackDescriptors(trackDescriptors);
 
+        if (ImGui::TreeNode("Advanced Vulkan options")) {
+            bool sceneTransfers = instance.GetVulkanSceneTransfers();
+            if (ImGui::Checkbox("Enable Vulkan scene transfers (requires restart)", &sceneTransfers))
+                instance.SetVulkanSceneTransfers(sceneTransfers);
+            ImGui::SameLine();
+            ShowHelpMarker("Optional scene-copy support for compatible FP16 Vulkan targets. Save changes and restart the game. "
+                           "Default off; use only where needed. Resource Shim must be none. Existing safety checks still apply.");
+            const bool active = instance.GetActiveVulkanSceneTransfers();
+            ImGui::Text("Active this launch: %s", active ? "Enabled" : "Disabled");
+            if (instance.HasVulkanSceneTransfersOverride()) {
+                ImGui::TextWrapped("Launcher override is active. Remove REST_VULKAN_SCENE_TRANSFERS from the launcher and restart to use the saved preference.");
+            } else if (sceneTransfers != active) {
+                ImGui::TextWrapped("Pending change: save changes and restart the game to apply.");
+            }
+            ImGui::TreePop();
+        }
+
         bool runtimeReload = instance.GetPreventRuntimeReload();
         ImGui::Checkbox("Prevent runtime reload", &runtimeReload);
         instance.SetPreventRuntimeReload(runtimeReload);
