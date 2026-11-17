@@ -105,12 +105,8 @@ bool ResourceManager::OnCreateResource(device* device, resource_desc& desc, subr
         ret |= rShim->OnCreateResource(device, desc, initial_data, initial_state);
     }
 
-    static const bool sceneTransfers = [] {
-        char value[2] = {};
-        return GetEnvironmentVariableA("REST_VULKAN_SCENE_TRANSFERS", value, sizeof(value)) == 1 && value[0] == '1';
-    }();
     const auto transfers = resource_usage::copy_source | resource_usage::copy_dest;
-    if (sceneTransfers && rShim == nullptr && originalSceneTransferCandidate &&
+    if (_vulkanSceneTransfers && rShim == nullptr && originalSceneTransferCandidate &&
         IsVulkanSceneTransferCandidate(device->get_api(), desc, initial_state) &&
         (desc.usage & transfers) != transfers &&
         device->check_format_support(desc.texture.format, desc.usage | transfers)) {
