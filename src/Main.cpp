@@ -491,6 +491,15 @@ static void onBarrier(command_list* cmd_list,
 
     CommandListDataContainer& commandListData = *cmd_list->get_private_data<CommandListDataContainer>();
 
+    auto& trace = cmd_list->get_device()->get_private_data<DeviceDataContainer>()->vulkanBoundaryTrace;
+    if (trace.active()) {
+        const uint64_t trackedState = (commandListData.vulkanInsideRenderPass ? 1u : 0u) |
+                                      (commandListData.vulkanRenderPassEndPending ? 2u : 0u);
+        for (uint32_t i = 0; i < count; ++i)
+            trace.event("barrier", cmd_list, resources[i].handle,
+              static_cast<uint32_t>(oldStates[i]), static_cast<uint32_t>(newStates[i]), trackedState);
+    }
+
     // An end_render_pass callback may describe either a real render-pass end or the
     // first half of vkCmdNextSubpass. Seeing a subsequent barrier proves the actual
     // render pass has ended, because there is no command-recording opportunity between
@@ -535,6 +544,7 @@ static bool onBeginRenderPass(command_list* cmd_list,
     }
 
     if (vulkan) {
+        commandListData.vulkanTraceLastPixelHash = 0;
         // ReShade API 20 exposes suspended/resumed dynamic-rendering segments
         // explicitly. A resumed segment is a continuation of the same logical pass,
         // so it can never be used as a safe point for preview/effect transfer work.
@@ -543,6 +553,16 @@ static bool onBeginRenderPass(command_list* cmd_list,
         // Vulkan is still inside the original render pass, so effect/preview transfer
         // work is not legal here. Only treat a begin callback as a safe boundary when
         // REST has positively tracked the command list as being outside a render pass.
+        if (deviceData.vulkanBoundaryTrace.active()) {
+            const uint64_t trackedState = (commandListData.vulkanInsideRenderPass ? 1u : 0u) |
+                                          (commandListData.vulkanRenderPassEndPending ? 2u : 0u);
+            if (count == 0) deviceData.vulkanBoundaryTrace.event("begin-empty", cmd_list, 0, 0, static_cast<uint32_t>(flags), trackedState);
+            for (uint32_t i = 0; i < count; ++i) {
+                const resource target = rts[i].view != 0 ? device->get_resource_from_view(rts[i].view) : resource{0};
+                deviceData.vulkanBoundaryTrace.event("begin", cmd_list, target.handle,
+                  static_cast<uint32_t>(rts[i].load_op), static_cast<uint32_t>(flags), trackedState);
+            }
+        }
         const bool safeVulkanBoundary = !commandListData.vulkanInsideRenderPass && !resuming;
         if (safeVulkanBoundary &&
             deviceData.vulkanPreviewWorkPending.load(std::memory_order_acquire))
@@ -590,6 +610,10 @@ static bool onEndRenderPass(command_list* cmd_list) {
     }
 
     CommandListDataContainer& commandListData = *cmd_list->get_private_data<CommandListDataContainer>();
+
+    cmd_list->get_device()->get_private_data<DeviceDataContainer>()->vulkanBoundaryTrace.event(
+      "end", cmd_list, 0, commandListData.vulkanInsideRenderPass,
+      commandListData.vulkanRenderPassEndPending, commandListData.vulkanRenderPassSuspends);
 
     if (commandListData.vulkanRenderPassSuspends) {
         // API 20 tells us this dynamic-rendering segment is intentionally suspended.
@@ -647,6 +671,7 @@ static void onReShadePresent(effect_runtime* runtime) {
 
     {
         unique_lock<shared_mutex> renderLock(deviceData.render_mutex);
+        deviceData.vulkanBoundaryTrace.present(deviceData.vulkanAutoPendingEffects.size());
         deviceData.vulkanAutoPendingEffects.clear();
         deviceData.vulkanAutoWorkPending.store(false, std::memory_order_release);
     }
@@ -717,6 +742,16 @@ static void UnInit() {
 
 static void CheckDrawCall(command_list* cmd_list, const uint64_t match_modifier = Rendering::MATCH_ALL) {
     CommandListDataContainer& commandListData = *cmd_list->get_private_data<CommandListDataContainer>();
+
+    auto& trace = cmd_list->get_device()->get_private_data<DeviceDataContainer>()->vulkanBoundaryTrace;
+    if ((match_modifier & Rendering::MATCH_PS) != 0 && trace.active() &&
+        commandListData.ps.activeShaderHash != commandListData.vulkanTraceLastPixelHash) {
+        commandListData.vulkanTraceLastPixelHash = commandListData.ps.activeShaderHash;
+        const auto& targets = cmd_list->get_private_data<state_tracking>()->render_targets;
+        const resource target = !targets.empty() && targets[0] != 0 ?
+          cmd_list->get_device()->get_resource_from_view(targets[0]) : resource{0};
+        trace.event("ps-draw", cmd_list, target.handle, commandListData.ps.activeShaderHash);
+    }
 
     if (commandListData.commandQueue & Rendering::MATCH_ALL & match_modifier) {
         if (constantHandler != nullptr && (commandListData.commandQueue & Rendering::MATCH_CONST & match_modifier)) {

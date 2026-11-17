@@ -407,6 +407,10 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance,
                 ImGui::SetTooltip("Auto Scene Colour supports D3D10, D3D11, D3D12 and Vulkan. Vulkan native staging uses ReShade\'s generic image-blit path.");
             }
 
+            if (deviceApi == reshade::api::device_api::vulkan && !autoSceneColour) {
+                ImGui::TextWrapped("Manual Vulkan injection skips active render passes and unsupported targets. Use Auto scene colour for safe deferred placement; compatible targets are still required.");
+            }
+
             const bool autoSceneColourActive = autoSceneColour && autoSceneColourSupported;
             const bool pendingVulkanShaderEdits =
               deviceApi == reshade::api::device_api::vulkan &&
