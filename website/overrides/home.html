@@ -1,0 +1,39 @@
+{% extends "main.html" %}
+{% block extrahead %}
+<meta property="og:type" content="website">
+<meta property="og:title" content="REST Enhanced — Effects in the right place">
+<meta property="og:description" content="Shader hunting, precise effect placement and UI control for ReShade and photomode workflows.">
+<meta property="og:url" content="{{ config.site_url }}">
+<meta property="og:image" content="{{ config.site_url }}docs/images/REST.webp">
+<meta name="twitter:card" content="summary_large_image">
+{% endblock %}
+{% block content %}
+<div class="rest-home">
+  <section class="hero" aria-labelledby="hero-title">
+    <img class="hero-art" src="{{ 'docs/images/REST.webp' | url }}" alt="REST Enhanced — ReShade Effect Shader Toggler. Shader hunting, effect placement, UI control." width="1774" height="887" fetchpriority="high">
+    <div class="hero-top"><a class="release-pill" href="{{ page.meta.modern_url }}"><span class="status-dot"></span> Modern {{ page.meta.modern_version }} <span aria-hidden="true">↗</span></a><span class="hero-publisher">BY PAV-OSMOLSKI</span></div>
+    <div class="hero-bottom">
+      <div><h1 id="hero-title">Your effects. In the right place.</h1><p>For the frame you play. For the shot you keep.</p></div>
+      <div class="hero-actions"><a class="cta primary" href="{{ page.meta.modern_url }}">Download Modern <span aria-hidden="true">↓</span></a><a class="cta secondary" href="{{ 'docs/getting-started/' | url }}">Get started <span aria-hidden="true">→</span></a></div>
+    </div>
+  </section>
+  <div class="support-strip"><span>Windows · x86 &amp; x64</span><span>D3D9 / 10 / 11 / 12 · Vulkan</span><a href="{{ page.meta.legacy_url }}">ReShade 5.x? Get Legacy {{ page.meta.legacy_version }} <span aria-hidden="true">↗</span></a></div>
+  <section class="intro home-section" aria-labelledby="intro-title">
+    <div><p class="eyebrow">CONTROL THE COMPOSITION</p><h2 id="intro-title">A place for every effect.<br>A clearer path to your shot.</h2></div>
+    <div><p>REST Enhanced helps you find game shaders, choose where ReShade techniques run, and control the interface. Keep effects below later UI or fog, or hide HUD elements for a cleaner capture.</p><p>Built for ReShade users, screenshot creators and the photomode community. The right boundary depends on your game and graphics API.</p><a class="text-link" href="{{ 'docs/compatibility/' | url }}">Check compatibility and limits <span aria-hidden="true">→</span></a></div>
+  </section>
+  <section class="placement home-section" aria-labelledby="placement-title">
+    <div class="section-heading"><div><p class="eyebrow">01 / PLACE YOUR EFFECTS</p><h2 id="placement-title">The scene gets the effect.<br>The interface stays itself.</h2></div><p>Mark a suitable scene boundary and let later game passes compose over your effects. Automatic Scene Colour can handle eligible internal/output resolution differences.</p></div>
+    <div class="pipeline" aria-label="Simplified frame order: scene, selected REST effects, later UI and fog"><div><span class="pipeline-index">01</span><strong>Game scene</strong><span>The live colour target</span></div><span class="pipeline-arrow" aria-hidden="true">→</span><div class="pipeline-active"><img src="{{ 'assets/rest-mark.svg' | url }}" alt="" width="64" height="64"><strong>Your ReShade effects</strong><span>At an eligible shader boundary</span></div><span class="pipeline-arrow" aria-hidden="true">→</span><div><span class="pipeline-index">03</span><strong>Later UI &amp; fog</strong><span>Composed by the game</span></div></div>
+    <p class="diagram-note">A simplified example. Vulkan needs a safe later boundary; not every game pass is eligible.</p>
+    <a class="text-link" href="{{ 'docs/effect-placement/' | url }}">Learn effect placement <span aria-hidden="true">→</span></a>
+  </section>
+  <section class="workflow home-section" aria-labelledby="workflow-title">
+    <div class="workflow-copy"><p class="eyebrow">02 / FIND YOUR FRAME</p><h2 id="workflow-title">Hunt the shader.<br>Keep the control.</h2><p>Browse pixel, vertex and compute shaders. Search hashes, mark candidates and inspect compatible target previews. Save useful groups for the next session.</p><p>For screenshots, a separate UI group can hide matching HUD draws with a hotkey. For sharp visible UI, choose an earlier scene-effect boundary instead.</p><a class="text-link" href="{{ 'docs/shader-hunting/' | url }}">Shader-hunting guide <span aria-hidden="true">→</span></a><a class="text-link" href="{{ 'docs/ui-control/' | url }}">UI hiding and masking <span aria-hidden="true">→</span></a></div>
+    <div class="workflow-list"><a href="{{ 'docs/groups-and-configuration/' | url }}"><span>01</span><div><strong>Make a group</strong><p>Keep shaders, effects and a useful hotkey together.</p></div><b aria-hidden="true">↗</b></a><a href="{{ 'docs/shader-hunting/' | url }}"><span>02</span><div><strong>Find the right boundary</strong><p>Inspect candidates in the scene you want to change.</p></div><b aria-hidden="true">↗</b></a><a href="{{ 'docs/effect-placement/' | url }}"><span>03</span><div><strong>Compare, then save</strong><p>Check the result and successful renders before saving.</p></div><b aria-hidden="true">↗</b></a></div>
+  </section>
+  <section class="home-section guides-section" aria-labelledby="guides-title"><p class="eyebrow">A GOOD PLACE TO START</p><h2 id="guides-title">Less guesswork. More creating.</h2><div class="guide-grid"><a href="{{ 'docs/getting-started/' | url }}"><span class="guide-number">GET STARTED</span><h3>Your first REST group</h3><p>Choose a release, install the helpers and make your first working setup.</p><span class="text-link">Start here →</span></a><a href="{{ 'docs/game-guides/' | url }}"><span class="guide-number">GAME GUIDES</span><h3>A known starting point</h3><p>Follow the documented Enshrouded or BG3 configuration and its limits.</p><span class="text-link">Find your game →</span></a><a href="{{ 'docs/troubleshooting/' | url }}"><span class="guide-number">GET HELP</span><h3>Read the right signal</h3><p>Check effect modes, target eligibility and the diagnostics that matter.</p><span class="text-link">Troubleshoot →</span></a></div></section>
+  <section class="download-section home-section" aria-labelledby="download-title"><div><p class="eyebrow">CHOOSE YOUR RELEASE</p><h2 id="download-title">Ready for your next frame.</h2><p>Both archives include x86 and x64. Use one REST build matching your ReShade installation.</p></div><div class="download-lines"><a href="{{ page.meta.modern_url }}"><span><strong>Modern {{ page.meta.modern_version }}</strong><small>ReShade 6.8+ · Latest</small></span><span aria-hidden="true">↓</span></a><a href="{{ page.meta.legacy_url }}"><span><strong>Legacy {{ page.meta.legacy_version }}</strong><small>ReShade 5.8–5.9.2 · 5.9.2 recommended</small></span><span aria-hidden="true">↓</span></a></div></section>
+  <div class="community-note"><p>Continued development. Shared foundations.</p><span>Built on ReShade Effect Shader Toggler, ShaderToggler and community testing.</span><a href="{{ 'docs/credits/' | url }}">Credits &amp; upstream work →</a></div>
+</div>
+{% endblock %}

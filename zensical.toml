@@ -1,0 +1,86 @@
+[project]
+site_name = "REST Enhanced"
+site_url = "https://pav-osmolski.github.io/ReshadeEffectShaderToggler/"
+site_description = "Shader hunting, precise ReShade effect placement and UI control. Installation, guides and support for REST Enhanced Modern and Legacy."
+site_author = "Pav-Osmolski"
+docs_dir = ".pages/docs"
+site_dir = ".pages/site"
+repo_url = "https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler"
+repo_name = "Pav-Osmolski/ReshadeEffectShaderToggler"
+copyright = "REST Enhanced · Built on the work of the ReShade community."
+extra_css = ["assets/site.css"]
+nav = [
+  { "Home" = "index.md" },
+  { "Get started" = [
+    { "Install or upgrade" = "docs/getting-started.md" },
+    { "Compatibility" = "docs/compatibility.md" },
+    { "Groups and saving" = "docs/groups-and-configuration.md" },
+  ] },
+  { "Guides" = [
+    { "All guides" = "docs/README.md" },
+    { "Shader hunting" = "docs/shader-hunting.md" },
+    { "Effect placement" = "docs/effect-placement.md" },
+    { "UI hiding and masking" = "docs/ui-control.md" },
+    { "Automatic Scene Colour" = "docs/automatic-scene-colour.md" },
+    { "HDR and alpha" = "docs/HDR.md" },
+    { "Vulkan scene transfers" = "docs/vulkan-scene-transfer-setting.md" },
+    { "Advanced bindings" = "docs/advanced-bindings.md" },
+    { "Game guides" = [
+      { "Overview" = "docs/game-guides.md" },
+      { "Enshrouded" = "docs/games/enshrouded.md" },
+      { "Baldur's Gate 3" = "docs/games/baldurs-gate-3.md" },
+    ] },
+  ] },
+  { "Help" = [
+    { "Troubleshooting" = "docs/troubleshooting.md" },
+    { "Frequently asked questions" = "docs/faq.md" },
+    { "Report an issue" = "https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler/issues/new/choose" },
+  ] },
+  { "Project" = [
+    { "What's new" = "CHANGELOG.md" },
+    { "Credits" = "docs/credits.md" },
+    { "Building" = "docs/BUILDING.md" },
+    { "Releasing and packaging" = "docs/RELEASING.md" },
+    { "Website maintenance" = "docs/website.md" },
+    { "Technical reference" = "docs/reference.md" },
+    { "Validation records" = "docs/validation.md" },
+    { "Release-note archive" = "docs/releases/README.md" },
+    { "Repository README" = "repository-readme.md" },
+  ] },
+]
+
+[project.theme]
+custom_dir = "website/overrides"
+logo = "assets/rest-mark.svg"
+favicon = "assets/rest-mark.svg"
+language = "en"
+font = false
+features = ["navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.path", "navigation.top", "navigation.footer", "search.highlight", "content.code.copy"]
+
+[[project.theme.palette]]
+scheme = "slate"
+primary = "custom"
+accent = "custom"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to light mode"
+
+[[project.theme.palette]]
+scheme = "default"
+primary = "custom"
+accent = "custom"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to dark mode"
+
+[project.markdown_extensions]
+tables = {}
+fenced_code = {}
+attr_list = {}
+md_in_html = {}
+admonition = {}
+toc.permalink = true
+pymdownx.details = {}
+pymdownx.superfences = {}
+
+[[project.extra.social]]
+icon = "fontawesome/brands/github"
+link = "https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler"
