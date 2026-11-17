@@ -1,51 +1,53 @@
-# HDR handling and validation
+# HDR, colour and alpha
 
-REST selects where ReShade effects run. It does not select a game's HDR presentation mode, install HDR upgrades, or infer a render target's colour encoding from its pixel format. A floating-point texture can contain linear scene colour, scRGB or other data; a 10-bit UNORM texture can contain HDR10/PQ or ordinary normalized colour. Storage format alone is not a colour-space declaration.
+REST decides **where** ReShade effects run. It does not choose the game's HDR mode or convert every effect into an HDR-compatible effect. Correct output depends on both the scene target's encoding and the effect's colour math.
 
-## Safe defaults
+## Start with these settings
 
-- Leave **Apply tone map clamping** off for HDR10/PQ and HLG content. It is an optional, lossy ACES compression/inverse pair for linear HDR effects, not a standards-based HDR colour conversion. It can clip highlights and change negative wide-gamut values. Both techniques must be loaded before the pair runs.
-- Use effects designed for the selected target's encoding and precision. An effect with an 8-bit intermediate, saturation, or SDR-only colour math can clip HDR even when REST preserves the input format correctly.
-- Hunting previews are diagnostic texture views. They are not a colour-managed HDR reference display: raw PQ values and linear values above one need suitable display mapping. Vulkan preview capture is a raw copy at a safe render-pass boundary; flip, alpha-clearing and tone-map preview controls are not applied there.
-- Preserve target alpha is available through REST's copy shader on D3D9/10/11/12. On Vulkan/OpenGL the copy shader is unavailable, so the option is ignored and effects render directly rather than disappearing into a scratch buffer. The saved preference is preserved for supported backends. Auto Scene Colour also ignores this option as documented in the UI.
+- Use effects designed for the colour encoding at the selected target.
+- Leave **Apply tone map clamping** off for HDR10/PQ and HLG. This control uses a lossy ACES compression/inverse pair; it is not standards-based HDR conversion.
+- Compare a known scene with the REST group off/on. Check brightness, colour, highlight detail and UI separately.
+- Treat hunting previews as diagnostic texture views, not a colour-managed HDR reference.
 
-## What the format fixes cover
+An FP16 texture may contain scene-linear, scRGB or other data. A 10-bit UNORM texture may contain PQ or ordinary normalised colour. The storage format alone does not identify the encoding. A selected early scene target can differ from the swapchain's colour space.
 
-- Preview and copied-buffer compatibility distinguishes FP16 FLOAT from 16-bit UNORM/UINT, and 10-bit UNORM from UINT. Sharing a typeless storage family does not make those interpretations interchangeable.
-- Cached game-resource views are keyed by device, resource handle **and** selected typed format. Changing a texture's bound interpretation no longer reuses the first requested view indefinitely.
-- Formats such as FP16 and 10-bit UNORM have no separate sRGB variant: their valid view is reused and destroyed once. Vulkan uses the selected concrete view rather than assuming a mutable linear/sRGB pair. D3D/OpenGL retain supported linear/sRGB alternatives, with fallback to a valid view when one alternative cannot be created.
-- The DX12 copy pipeline remains keyed by actual destination format. D3D10/11 do not bake render-target format into the same pipeline object; their copy shader writes sampled RGB without saturation. The copy shader changes alpha only where explicitly requested.
+## Tone-map clamping
 
-## Experimental D3D12 scene input
+The optional ACES pair may be useful for specific linear-HDR effects, but it can clip highlights and alter negative wide-gamut values. Both helper techniques must be loaded for the pair to run. Do not use it as a general fix for washed-out or over-bright HDR.
 
-The separate development branch can sample a selected pixel-shader scene input into a private RGBA-preserving texture and redirect the selected compositor draw to that processed copy. The game texture is not transitioned or written. This is distinct from rendering into a bound output or Automatic Scene Colour. It is opt-in and skips incomplete layouts rather than falling back over the UI. See [setup, supported formats and remaining tests](experimental-backend-support.md); the Warframe captures establish producer differences, not live DLSS or universal HDR compatibility.
+Effects with 8-bit intermediates, saturation or SDR-only assumptions can still clip or distort colour when REST preserves the target format correctly. REST's target selection does not repair those effects.
 
-## Backend coverage
+## Alpha preservation
 
-| Backend | HDR-related source coverage | Remaining validation |
+**Preserve target alpha** uses REST's shader-copy path on D3D9/10/11/12. It is ignored while Auto Scene Colour is active, and that copy shader is unavailable on Vulkan/OpenGL. The preference remains saved for a supported configuration.
+
+Vulkan previews do not apply flip, alpha clearing or tone-map processing. Other previews and bindings have their own topology and format requirements.
+
+## Backend status
+
+| Backend | Relevant handling | Coverage limits |
 |---|---|---|
-| D3D10 | Typed views, preview/copy-buffer recreation, float copy shader and alpha preservation | Fresh in-game FP16/10-bit tests; HDR presentation availability is game/platform-dependent |
-| D3D11 | Same paths as D3D10; no REST requirement that HDR be limited to DX12 | Fresh HDR tests; the reported BG3 test did not specify HDR mode |
-| D3D12 | Typed destination pipelines, copy/resource transitions, float buffers and alpha preservation | Warframe HDR symptoms, HDR10/scRGB comparisons, validation-layer capture |
-| Vulkan | Concrete image views, safe deferred Auto Scene Colour/preview capture and typed staging buffers | HDR swapchain/effect colour-space handling, HDR title testing and manual copied-binding paths |
-| D3D9/OpenGL | Shared view/cache changes reviewed; copy shader is D3D-only | No claim of modern HDR presentation or Auto Scene Colour support; title/backend-specific testing required |
+| D3D10 / D3D11 | Typed views, float copy path, compatible preview/buffer recreation | Current BG3 D3D11 reports do not establish fresh HDR-specific coverage |
+| D3D12 | Typed copy pipelines, resource transitions and pass guards | Warframe HDR work remains separate; no universal HDR10/scRGB result |
+| Vulkan | Concrete views, safe deferred captures/injection and typed staging | Enshrouded SDR/HDR placement passed in the documented setup; this is not measured colour accuracy |
+| D3D9 / OpenGL | Existing manual view/cache paths | No modern HDR presentation or Auto Scene Colour claim |
 
-Modern ReShade's pinned runtime creates custom-target effect permutations with an **unknown colour space**. REST cannot assume a swapchain's HDR encoding also describes an earlier scene target. Effects must handle this explicitly rather than relying on automatic HDR detection. Legacy/API 7 does not gain API 20 colour-space or descriptor capabilities through these fixes; its documented Vulkan buffer-descriptor fallback remains in force.
+Modern's custom-target effect permutations use an unknown colour-space declaration in the pinned ReShade implementation. Legacy does not gain newer colour-space/descriptor capabilities through REST. Manual copied bindings require separate validation; Auto and hunting results do not certify every binding configuration.
 
-Manual copied bindings on Vulkan need separate safe-boundary/resource-state validation; the generic binding path is not certified by the Auto Scene Colour and hunting tests. Do not extend their test results to every manual binding configuration.
+## What has been tested
 
-## Recorded results and open questions
+Enshrouded Modern and Legacy SDR/HDR passes were confirmed in November 2026. Detailed Modern tests included DLSS Quality, render-scale changes, sharp UI with scene blur, toggles and clean exit in the documented launch setup. BG3 passed D3D11 and Vulkan on both release lines; those reports did not separately establish HDR settings. See [validation records](validation.md).
 
-On 19 October 2026 the reporter of [issue #15](https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler/issues/15#issuecomment-6259749953) confirmed that shader-hunting crashes were fixed in both official and unofficial ReShade, then mentioned HDR problems without describing their appearance or settings. The issue was subsequently closed. No separate HDR issue was available when this audit was performed. The fixes here address concrete format/cache problems; they are not a reproduction or confirmed fix of those unspecified HDR symptoms.
+The closed shader-hunting issue #15 and the later [Warframe HDR investigation #22](https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler/issues/22) are distinct. These releases do not claim to resolve the Warframe HDR work.
 
-The maintainer previously reported successful BG3 D3D11/Vulkan functionality and shader hunting. Exact HDR mode, ReShade versions, architectures and per-branch coverage were not recorded. No fresh HDR game session was available for this audit.
+## Report an HDR problem
 
-For HDR feedback, record: game and renderer; REST and ReShade versions; native HDR/Windows Auto HDR/HDR add-on and its settings; selected target format and injection point; HDR10/PQ versus scRGB if known; enabled effects; tone-map and alpha options; expected/actual brightness, colours and alpha; comparison with REST effects disabled. Attach ReShade logs and screenshots/captures suitable for the selected HDR mode.
+Include the game/build, API, REST/ReShade versions, other add-ons, HDR source (native, Auto HDR or an add-on), target format and scene boundary, enabled effects, tone-map/alpha settings, and expected versus actual appearance. State PQ/scRGB/HLG only if known. Attach fresh logs and a suitable comparison capture; a normal screenshot may not preserve HDR appearance.
 
-Test matrix: FP16 scRGB (negative channels and values above one), 10-bit HDR10/PQ, SDR reference, alpha on/off where supported, hunting while switching FP16/UNORM interpretations, resize/upscaler changes, same-resolution and native-staging paths. Run modern and legacy separately and record actual coverage.
+Useful comparisons include SDR reference, FP16 values above one/negative channels, 10-bit PQ, same-resolution versus staging, resizing/upscaling, and supported alpha on/off. Mark unavailable tests as unrun.
 
 ## References
 
-- [Microsoft: DirectX Advanced Color and HDR](https://learn.microsoft.com/en-us/windows/win32/direct3darticles/high-dynamic-range): scRGB uses values outside [0,1]; storage and presentation colour space are separate.
-- [Khronos: swapchain colour spaces](https://docs.vulkan.org/refpages/latest/refpages/source/VkColorSpaceKHR.html): HDR10/ST2084 and extended-linear colour spaces are distinct.
-- Pinned ReShade sources: `source/runtime_api.cpp` (custom-target rendering), `source/runtime.cpp` (effect permutations), and the D3D10/D3D11 device implementations (render-target format pipeline subobjects are ignored).
+- [Microsoft: DirectX Advanced Color and HDR](https://learn.microsoft.com/en-us/windows/win32/direct3darticles/high-dynamic-range)
+- [Khronos: Vulkan swapchain colour spaces](https://docs.vulkan.org/refpages/latest/refpages/source/VkColorSpaceKHR.html)
+- [Technical reference](reference.md) and [Vulkan allocation safety](vulkan-transfer-safety.md)

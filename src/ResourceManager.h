@@ -55,6 +55,7 @@ class __declspec(novtable) ResourceManager final {
     void OnDestroyDevice(reshade::api::device*, bool validDevice = false);
 
     void SetResourceShim(const std::string& shim) { _shimType = ResolveResourceShimType(shim); }
+    void SetVulkanSceneTransfers(bool enabled) { _vulkanSceneTransfers = enabled; }
     void Init();
 
     void DisposePreview(reshade::api::device* runtime);
@@ -79,6 +80,7 @@ class __declspec(novtable) ResourceManager final {
 
     ResourceShimType _shimType = ResourceShimType::Resource_Shim_None;
     Shim::Resources::ResourceShim* rShim = nullptr;
+    bool _vulkanSceneTransfers = false;
     bool in_destroy_device = false;
 
     bool effects_reloading = false;

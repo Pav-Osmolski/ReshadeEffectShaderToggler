@@ -1,16 +1,39 @@
 # REST Enhanced documentation
 
-Start with [Getting started](getting-started.md) for installation, upgrading and the first shader group.
+Choose a task below, or start with [installation and your first group](getting-started.md). The [documentation website](https://pav-osmolski.github.io/ReshadeEffectShaderToggler/) presents these same guides with navigation and search.
 
-| Task | Guide |
+## Get started
+
+| Guide | What you will learn |
 |---|---|
-| Install REST, choose Modern/Legacy or use the BG3 configs | [Getting started](getting-started.md) |
-| Inject effects before later fog/UI or work with DLSS/upscaling | [Automatic Scene Colour](automatic-scene-colour.md) |
-| Understand HDR formats, preview colour and tone-map clamping | [HDR handling and validation](HDR.md) |
-| Diagnose missing effects, configuration problems or crashes | [Troubleshooting](troubleshooting.md) |
-| Test D3D12 scene-input redirection or D3D9 reset improvements | [Experimental backend support and fork audit](experimental-backend-support.md) |
-| Build or package locally | [Building](BUILDING.md) |
-| Maintain CI or publish a release | [Release process](RELEASING.md) |
-| Review changes and historical release notes | [Changelog](../CHANGELOG.md) and [release-note archive](releases/) |
+| [Install or upgrade](getting-started.md) | Choose Modern or Legacy, install the correct architecture and verify REST loads |
+| [Compatibility](compatibility.md) | ReShade requirements, supported graphics APIs and important limits |
+| [Groups and configuration](groups-and-configuration.md) | Create groups, save changes, import configurations and recover backups |
 
-Modern uses `main` and the ReShade 6.8/API 20 baseline. Legacy uses `legacy/reshade-5.x` and the ReShade 5.8/API 7 baseline; ReShade 5.9.2 is recommended for that line. A feature's presence in the code or a successful x86/x64 build does not establish runtime coverage for every game, renderer or HDR setup.
+## Guides
+
+| Guide | Use it when you want to… |
+|---|---|
+| [Shader hunting](shader-hunting.md) | Find shaders, mark candidates and interpret previews |
+| [Effect placement](effect-placement.md) | Apply selected effects before later game rendering |
+| [UI hiding and masking](ui-control.md) | Hide HUD elements or keep later UI out of an effect |
+| [Automatic Scene Colour](automatic-scene-colour.md) | Handle internal/output resolution differences and Vulkan boundaries |
+| [HDR](HDR.md) | Choose suitable effects and understand colour and alpha limits |
+| [Vulkan scene transfers](vulkan-scene-transfer-setting.md) | Save optional scene-copy support per game and apply it after restarting |
+| [Advanced bindings](advanced-bindings.md) | Understand manual targets, copied bindings and constant extraction |
+| [Game guides](game-guides.md) | Configure [Enshrouded](games/enshrouded.md) or [Baldur's Gate 3](games/baldurs-gate-3.md) |
+
+## Help
+
+- [Troubleshooting](troubleshooting.md): symptoms, diagnostics and crash reports.
+- [Frequently asked questions](faq.md): common setup and effect-selection questions.
+- [Report an issue](https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler/issues/new/choose): include a fresh log and Copy diagnostics output.
+
+## Project and reference
+
+- [Changelog](../CHANGELOG.md) and [release notes](releases/README.md)
+- [Credits](credits.md) and [licence](../LICENSE)
+- [Building](BUILDING.md), [releasing](RELEASING.md) and [maintaining the website](website.md)
+- [Technical reference](reference.md), [Vulkan allocation safety](vulkan-transfer-safety.md) and [validation records](validation.md)
+
+Current instructions describe the maintained stable features. Dated release notes and validation records describe the versions and tests named in those records; they are not universal compatibility claims.

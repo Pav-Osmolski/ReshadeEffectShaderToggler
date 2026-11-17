@@ -93,15 +93,30 @@ void ResourceManager::OnDestroySwapchain(reshade::api::swapchain* swapchain) {
 
 bool ResourceManager::OnCreateResource(device* device, resource_desc& desc, subresource_data* initial_data, resource_usage initial_state) {
     bool ret = false;
+    const bool originalSceneTransferCandidate =
+      IsVulkanSceneTransferCandidate(device->get_api(), desc, initial_state);
 
-    if (static_cast<uint32_t>(desc.usage & resource_usage::render_target) && !static_cast<uint32_t>(desc.usage & resource_usage::shader_resource) &&
-        desc.type == resource_type::texture_2d) {
+    if (ShouldAddShaderResourceUsage(device->get_api(), desc)) {
         desc.usage |= resource_usage::shader_resource;
         ret = true;
     }
 
     if (rShim != nullptr) {
         ret |= rShim->OnCreateResource(device, desc, initial_data, initial_state);
+    }
+
+    const auto transfers = resource_usage::copy_source | resource_usage::copy_dest;
+    if (_vulkanSceneTransfers && rShim == nullptr && originalSceneTransferCandidate &&
+        IsVulkanSceneTransferCandidate(device->get_api(), desc, initial_state) &&
+        (desc.usage & transfers) != transfers &&
+        device->check_format_support(desc.texture.format, desc.usage | transfers)) {
+        desc.usage |= transfers;
+        ret = true;
+        static std::atomic_uint32_t logged{0};
+        if (logged.fetch_add(1, std::memory_order_relaxed) < 16)
+            reshade::log::message(reshade::log::level::info,
+              std::format("REST Vulkan scene transfers: opted in FP16 {}x{} target at creation (usage 0x{:x}).",
+                          desc.texture.width, desc.texture.height, static_cast<uint32_t>(desc.usage)).c_str());
     }
 
     return ret;

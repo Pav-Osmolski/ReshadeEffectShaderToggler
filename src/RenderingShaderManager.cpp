@@ -204,7 +204,10 @@ bool RenderingShaderManager::ApplyShader(command_list* cmd_list,
         return false;
     }
 
-    cmd_list->get_private_data<state_tracking>().capture(cmd_list, true);
+    if (!cmd_list->get_private_data<state_tracking>().capture(cmd_list, true)) {
+        reshade::log::message(reshade::log::level::warning, "REST copy skipped: native D3D9 state could not be captured.");
+        return false;
+    }
 
     cmd_list->bind_render_targets_and_depth_stencil(1, &rtv_dst);
 

@@ -1,211 +1,66 @@
-# REST Enhanced Legacy — ReShade Effect Shader Toggler
+<div align="center">
 
-> **Legacy ReShade 5.x maintenance branch.** This branch is retained for ReShade 5.8–5.9.2 users. New feature development targets ReShade 6.8+ on `main`. ReShade 5.9.2 is the recommended runtime for this legacy line; versions older than 5.8 are unsupported.
+# REST Enhanced
 
-[![MSBuild](https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler/actions/workflows/msbuild.yml/badge.svg?branch=legacy%2Freshade-5.x)](https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler/actions/workflows/msbuild.yml)
-[![Legacy Release](https://img.shields.io/github/v/release/Pav-Osmolski/ReshadeEffectShaderToggler?filter=*.580&label=legacy%20release)](https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler/releases?q=Legacy)
+**ReShade effects where you want them. A clear view when you need it.**
 
-A ReShade 5.8+ add-on for applying ReShade effects at specific points inside a game's rendering pipeline. REST groups user-selected shaders and can inject selected ReShade techniques immediately before those shaders are encountered.
+Shader hunting, precise effect placement and UI control for ReShade and photomode workflows.
 
-Both 64-bit and 32-bit are first-class build targets. CI builds and validates both architectures, including PE machine type, version metadata and required add-on exports. Auto Scene Colour supports D3D10/D3D11/D3D12 and Vulkan through ReShade's generic API, with a Vulkan-specific native-staging blit path. Legacy game-specific hooks may remain architecture-specific; the FFXIV constant-copy hook is x64-only because its signatures target 64-bit game code.
+Maintained by **[Pav-Osmolski / DeViLhoOD](https://github.com/Pav-Osmolski)**.
 
-> **Experimental branch:** D3D9 reset/surface and resource-lifecycle improvements are under development here. The Modern companion branch adds experimental D3D12 scene-input redirection. See the [setup, limits and fork audit](docs/experimental-backend-support.md). These changes are not yet in the stable releases.
+[Website](https://pav-osmolski.github.io/ReshadeEffectShaderToggler/) · [Download](https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler/releases) · [Documentation](docs/README.md) · [Changelog](CHANGELOG.md) · [Report an issue](https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler/issues/new/choose)
 
-## Start here
+[![Release](https://img.shields.io/github/v/release/Pav-Osmolski/ReshadeEffectShaderToggler?label=Modern)](https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler/releases/latest)
+[![MSBuild](https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler/actions/workflows/msbuild.yml/badge.svg)](https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler/actions/workflows/msbuild.yml)
+![Windows x86 and x64](https://img.shields.io/badge/Windows-x86%20%7C%20x64-168dcc)
 
-- [Getting started](docs/getting-started.md): installation, upgrading, first group and BG3 configurations.
-- [Experimental backend support](docs/experimental-backend-support.md): D3D12 private scene copies, D3D9 fixes and validation limits.
-- [Documentation index](docs/README.md): Auto Scene Colour, HDR, troubleshooting and building.
-- [Downloads](https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler/releases) and [changelog](CHANGELOG.md).
+![REST Enhanced — shader hunting, effect placement and UI control](docs/images/REST.webp)
 
-## Highlights
+</div>
 
-- Create shader groups and toggle them on or off from the ReShade overlay.
-- Apply all globally enabled ReShade techniques, a selected subset, or all except selected techniques to a group.
-- Render effects at configurable render-target boundaries.
-- **Hide marked shaders** to suppress matching UI/HUD or other graphics draws, enabling configurable HUD-free screenshot workflows without a separate UI-mask add-on.
-- Preview and inspect render targets while hunting shaders.
-- Extract and reuse constant-buffer or texture-binding data where supported.
-- **Automatic scene-colour injection for D3D10/D3D11/D3D12 and Vulkan games using DLSS or other dynamic-resolution/upscaling paths.**
-- Preserve technique selections reliably across ReShade effect reloads and ordering changes.
-- Search, filter and recollect shaders with mouse controls or configurable keyboard shortcuts.
-- Track unsaved configuration changes, clone/import/export groups safely, confirm deletions and flag shortcut conflicts.
-- Use crash-safe configuration saves with an automatic `ReshadeEffectShaderToggler.ini.bak` backup.
+REST Enhanced lets you find game shaders, group them and apply selected ReShade effects at a suitable point in the frame. Keep effects beneath later UI or fog, hide interface elements for screenshots, and work with upscaled rendering using Automatic Scene Colour. The available result depends on the game, graphics API and shader boundary you select.
 
-## Compatibility
+## Choose your download
 
-REST Enhanced Legacy targets **ReShade 5.8 through 5.9.2**, is compiled against the ReShade 5.8.0 / API 7 baseline, and requires a ReShade build with add-on support enabled. ReShade 5.9.2 is recommended for users remaining on the 5.x line.
+| Your ReShade installation | REST release | Game architecture |
+|---|---|---|
+| ReShade 6.8+ with full add-on support | **Modern** — [Latest release](https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler/releases/latest) | `.addon64` for 64-bit games; `.addon32` for 32-bit games |
+| ReShade 5.8–5.9.2 with full add-on support | **Legacy / ReShade 5.x** — [Release list](https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler/releases) | Both architectures included; ReShade 5.9.2 recommended |
 
-The existing render-target, shader-hunting and binding features remain API/game dependent. D3D10/D3D11/D3D12 and Vulkan behaviour outside the paths that have been specifically tested may vary by title.
+Future release downloads use **`REST-Enhanced-Modern-v<VERSION>.zip`** and **`REST-Enhanced-Legacy-v<VERSION>.zip`**. Older releases use `release.zip`; choose the asset on the correct release page. GitHub's source-code ZIPs are not compiled add-ons.
 
-The **Auto scene colour** path supports D3D10, D3D11, D3D12 and Vulkan on both x86 and x64. D3D10/11/12 retain the existing shader-based native-staging copy path. Vulkan defers injection to a proven safe boundary: a new pass that **LOADs the same colour target**, or a **post-pass transition of that exact target out of render-target usage**. Subpass transitions are not treated as completed render passes. REST restores the game's requested resource state and guards against recursive injection.
+## Get started
 
-The live Vulkan image must already have transfer-source usage; native staging additionally requires transfer-destination usage and uses image blits. REST does not add transfer flags to arbitrary game images or split active game passes. Unsupported targets or boundaries are skipped safely. Baldur's Gate 3 Vulkan testing confirmed stable Before Fog injection with `2560×1440 → 3840×2160` staging and rapid shader navigation after the hunting fixes. BG3 DX11 + DLSS remains the D3D regression reference; this does not imply every title or architecture has been runtime-tested.
+1. Install ReShade with **full add-on support** against the executable the game actually renders through.
+2. Close the game. Back up your REST INI, then copy the matching `.addon64` or `.addon32` beside that executable. Keep one REST build installed.
+3. Copy the supplied `Shaders/REST_*.fx` helpers into a configured ReShade effect folder. Make sure `ReShade.fxh` is available through the include path.
+4. Open **ReShade → Add-ons → REST Enhanced**, create a group and start hunting. Select a shader boundary for effects, or identify HUD shaders for hiding.
+5. Finish hunting, test the group and click **Save changes**.
 
-This maintenance line begins with **v1.6.4.580**, preserving the v1.6.3 feature set while restoring a true ReShade 5.8 / API 7 build baseline. See the [changelog](CHANGELOG.md) for details.
+Follow the [installation guide](docs/getting-started.md) for the complete setup and upgrade steps.
 
-## Installation
+## What would you like to do?
 
-Place the appropriate add-on beside the game executable that ReShade is actually injected into:
+| Goal | Start here |
+|---|---|
+| Find and mark game shaders | [Shader hunting](docs/shader-hunting.md) |
+| Place effects beneath later UI or fog | [Effect placement](docs/effect-placement.md) |
+| Hide the HUD for screenshots | [UI hiding and masking](docs/ui-control.md) |
+| Use DLSS, dynamic resolution or another upscaler | [Automatic Scene Colour](docs/automatic-scene-colour.md) |
+| Set up Enshrouded or Baldur's Gate 3 | [Game guides](docs/game-guides.md) |
+| Understand HDR, alpha and previews | [HDR guide](docs/HDR.md) |
+| Diagnose missing effects or a crash | [Troubleshooting](docs/troubleshooting.md) |
 
-- 64-bit: `ReshadeEffectShaderToggler.addon64`
-- 32-bit: `ReshadeEffectShaderToggler.addon32`
+## Compatibility at a glance
 
-For Unreal Engine games this is often the executable under a path such as:
+Automatic Scene Colour supports **D3D10, D3D11, D3D12 and Vulkan**. D3D9 supports manual workflows and standalone surface targets; it does not gain Auto Scene Colour or modern HDR presentation. Vulkan requires a compatible image and a safe later pass boundary. See [compatibility and limitations](docs/compatibility.md).
 
-`GameName\Binaries\Win64\GameName-Win64-Shipping.exe`
+REST chooses where an effect runs; it does not make SDR effects HDR-aware or guarantee a suitable boundary in every game. The optional **Vulkan scene transfers** setting defaults off and requires saving and restarting. See the [saved-setting guide](docs/vulkan-scene-transfer-setting.md).
 
-ReShade must be installed against that executable with full add-on support enabled. Copy the supplied `Shaders/REST_*.fx` files into a configured effect search folder and ensure the include path contains `ReShade.fxh`. Back up your INI before replacing a binary or installing example configs; see [Getting started](docs/getting-started.md).
+## Project
 
-Start the game and open the ReShade overlay. The **Add-ons** tab should list **REST Enhanced Legacy — ReShade Effect Shader Toggler**.
+- [Build REST](docs/BUILDING.md) · [Release and packaging process](docs/RELEASING.md)
+- [Credits and upstream work](docs/credits.md) · [Validation records](docs/validation.md)
+- [Licence](LICENSE) · [Fork licence notice](docs/fork-license.txt)
 
-## Basic workflow
-
-1. Open the ReShade overlay and expand **REST Enhanced Legacy — ReShade Effect Shader Toggler**.
-2. Click **New group** to create a toggle group.
-3. Click **Edit** to give the group a useful name and optional hotkey.
-4. Click **Settings** and keep the relevant scene visible while REST collects active shaders.
-5. Use the shader search/filter controls, mouse navigation buttons or configured hunting shortcuts to locate and mark the shader(s) that define the desired boundary.
-6. In **Effects**, select the techniques the group should apply. Enable **Auto scene colour** in the render-target settings when appropriate.
-7. Click **Done**, test the group, then click **Save changes** when the unsaved-changes indicator is shown.
-
-The saved configuration is written to `ReshadeEffectShaderToggler.ini` beside the add-on. Saves are first written to a verified temporary file, the previous configuration is refreshed as `ReshadeEffectShaderToggler.ini.bak`, and the live INI is then replaced atomically. REST also persists the shader-collection frame count, overlay opacity and configurable hunting shortcuts.
-
-### Group management
-
-- **Clone** copies a group's shader hashes, effects and settings into a new inactive group with no hotkey, so it can be adjusted safely.
-- **Copy group** places a self-contained REST group INI block on the clipboard; **Import group** restores one without replacing the rest of the configuration. Imported groups start inactive with no hotkey to avoid unexpected rendering changes or shortcut conflicts.
-- **Delete** requires confirmation and is not written to disk until **Save changes** is used.
-- Each group shows compact pixel/vertex/compute shader counts, selected-effect count and an **Auto Scene Colour** indicator when enabled.
-- REST warns when group hotkeys conflict with another group or with a configured REST action.
-- The **Saved / Unsaved changes** indicator reflects the configuration that would be written to disk, including the group's persisted Active state.
-
-## Hiding marked shaders
-
-Enable **Hide marked shaders** in a group's settings to suppress graphics draws that match the group's marked pixel or vertex shaders while the group is active. This is useful for shader identification and configuration testing, and can provide a lightweight photo-mode style workflow in games that do not offer a native HUD toggle.
-
-A typical `UI` group can contain the shaders used by the HUD, minimap, subtitles or prompts. Assigning a hotkey to that group then provides a convenient way to toggle those elements for screenshots. Games may use several shaders or passes for their interface, so multiple hashes can be collected into the same group.
-
-The feature suppresses graphics draws only. Compute dispatches are deliberately not suppressed because compute shaders may perform lighting, simulation, upscaling or other non-visual pipeline work.
-
-## Configuring effects
-
-Each group can control a subset of the techniques currently known to ReShade. Techniques are executed in their global ReShade order.
-
-REST supports three modes:
-
-- **All globally enabled techniques are applied**: no technique filter is used.
-- **Only ticked enabled techniques are applied**: only selected techniques that are globally enabled in ReShade are run.
-- **Ticked techniques are EXCLUDED**: all globally enabled techniques except the selected entries are run.
-
-Important behaviour:
-
-- A technique enabled in the group but disabled globally in ReShade will not run.
-- If the same technique is assigned to multiple active groups, it is normally rendered by the first applicable group encountered in the frame.
-- Multi-pass effects must keep their required techniques enabled and in the correct ReShade order.
-- Technique selections are stored by name and preserved when ReShade reloads or reorders its effect list.
-
-## Automatic scene colour for D3D10/D3D11/D3D12 and Vulkan upscalers
-
-For games that render the scene below output resolution and upscale later, rendering a ReShade effect directly into the lower-resolution scene target can break multi-pass effects or produce incorrectly scaled output.
-
-Enable **Auto scene colour** in the group's render-target settings to use REST's automatic path.
-
-In this mode REST:
-
-1. Uses the **primary live colour render target** bound at the matched draw.
-2. Matches the target by **aspect ratio**, so DLSS/dynamic-resolution changes do not require manual width/height configuration.
-3. If the live scene is below the ReShade runtime/output resolution, copies it into a native-resolution staging target.
-4. Runs the selected ReShade techniques at the native ReShade resolution.
-5. Copies the completed result back into the live scene target.
-6. Returns control to the game so later fog, post-processing and UI passes are composed normally.
-
-This is why effects such as AO can remain **under the UI** while still using their normal full-resolution intermediate textures.
-
-Auto mode intentionally ignores manual render-target index, SRV slot/binding, swapchain-match and alpha-preservation settings while it is active. Those manual settings are preserved unchanged underneath Auto mode and become effective again when Auto is disabled. You do not need to choose a shader stage, SRV slot or descriptor binding.
-
-The group editor reports the live **scene resolution**, **effect resolution**, technique order, injection status and native-staging state, and keeps the eight most recent distinct Auto Scene Colour attempts in an expandable diagnostic history. **Copy diagnostics** places the relevant REST version, API, resolutions, technique information, render-call count and target handle on the clipboard for support reports.
-
-For setup details, limitations and troubleshooting, see [Automatic Scene Colour](docs/automatic-scene-colour.md).
-
-## Marking shaders
-
-Make the element that defines your desired injection boundary visible before starting shader hunting. A debug-heavy effect such as AO can make it easier to see whether a UI, fog or other game pass is being drawn before or after the current shader.
-
-Click **Settings** on the group, then **Start shader hunting**. REST first collects active shaders for the configured number of frames, then lets you browse them. The shader pane provides:
-
-- case-insensitive hash search;
-- **All / Marked / Unmarked** filtering;
-- **Prev**, **Next**, **Prev marked**, **Mark / unmark** and **Next marked** mouse controls, with press-and-hold repeat for navigation;
-- **Mark + Prev / Mark + Next** controls and optional shortcuts for rapidly classifying candidates;
-- **Copy hash** for the currently selected candidate;
-- collected and marked shader counts plus **Clear marked** for the current shader stage;
-- **Rescan**, which starts a fresh collection for pixel, vertex and compute shaders while preserving the current marked hashes;
-- a render-target preview below the settings pane. On Vulkan the hunted draw is still suppressed safely, while the preview copy is deferred to a legal render-pass boundary rather than copied from inside the active draw pass. The preview reports the selected hash, shader stage, target dimensions/format and an explicit reason when the image cannot be copied safely.
-
-The traditional defaults remain available for pixel and vertex shader hunting:
-
-- `Numpad 1` / `Numpad 2`: previous/next pixel shader.
-- `Numpad 3`: add/remove the current pixel shader from the group.
-- `Ctrl + Numpad 1` / `Ctrl + Numpad 2`: browse marked pixel shaders.
-- `Numpad 4` / `Numpad 5`: previous/next vertex shader.
-- `Numpad 6`: add/remove the current vertex shader from the group.
-- `Ctrl + Numpad 4` / `Ctrl + Numpad 5`: browse marked vertex shaders.
-
-All hunting shortcuts are configurable under **Shader hunting keybindings**, including optional Mark + Previous/Next bindings, making shader hunting practical on laptops and compact keyboards. The hunting pane is responsive with a 540 px preferred width, uses a second hash column automatically for large filtered result sets when space permits, and retains its width together with search text, filter mode, selected shader stage and preview channel while the current REST session remains open. Compute-shader hunting is also configurable but deliberately has no default shortcut. Shortcut matching uses the exact configured Ctrl/Shift/Alt modifiers, so a plain key does not also fire when a modified version is pressed.
-
-Use the group's **Active** checkbox or assigned hotkey while testing. When finished, click **Done** and **Save changes**.
-
-Rapid **Prev / Next** navigation uses owned shader-group snapshots, synchronised shader maps and collected lists, and atomic render-visible hunting state. Vulkan snapshots the selected shader for each draw. These fixes address the rapid-navigation crash without adding a button delay. Preview **RGB / R / G / B** controls help inspect individual channels; Vulkan previews wait for a safe copy boundary and do not support Clear alpha processing.
-
-## Automatic scene-colour performance note
-
-When native staging is required, REST performs an additional scene copy to native resolution and another copy back to the live scene target, and the selected ReShade techniques run at native resolution. This is intentional for correctness but can cost more GPU time than rendering directly at the game's internal resolution.
-
-Legacy API 7 cannot distinguish static from dynamic Vulkan buffer descriptors or capture their dynamic offsets. Deferred injection is therefore skipped when restoring a bound buffer-descriptor layout would be ambiguous; globally enabled effects fall back to ordinary end-of-frame placement. The diagnostic explains this limitation. Use the modern ReShade 6.8/API 20 line for dynamic-offset restoration support.
-
-## Preview and target safety
-
-Hunting previews currently require a single-sample, single-layer, single-mip 2D image. Unsupported targets are skipped rather than copied unsafely. DX12 preview capture and effect injection are skipped while a native D3D12 render pass is active; globally enabled effects can use ordinary end-of-frame placement instead. ReShade's traditional DX12 render-target binding path remains available.
-
-DX12 fullscreen-copy pipelines are cached by typed destination format, including formats used by HDR targets. This is implementation support, not a claim that every HDR game or add-on combination has been tested.
-
-Preview and group-buffer replacements flush ReShade's immediate list and synchronize the device's known queues at the maintenance boundary. Synchronization occurs only when existing allocations need replacement or disposal, not on every rendered frame. A resolution/format change can therefore briefly stall while prior GPU work completes.
-
-Automatic scene-colour matching retains a conservative scale heuristic: output/input ratios must be between 0.5 and 1.85 in both dimensions with a compatible aspect ratio. A 1920x1080 scene at 3840x2160 output (2x) falls outside that range. Choose a supported internal resolution or use manual target configuration.
-
-## Building
-
-The repository builds x64 and x86 Release configurations through GitHub Actions and Visual Studio/MSBuild.
-
-See [Building and packaging](docs/BUILDING.md) for prerequisites, pinned dependency setup, x86/x64 build commands and local checks.
-
-Build-affecting pull requests validate on opened, reopened and ready-for-review, not on every pushed commit. Keep the PR in draft while revising it, then mark it ready for review to validate the final merge result. If an already-ready PR changes again, return it to draft and mark it ready again (or reopen it) to refresh required PR checks. Manual MSBuild dispatch remains available for branch test builds; those runs may not satisfy PR-associated merge checks. Workflow-only changes also run lightweight YAML/PowerShell checks. Tagged releases use the format:
-
-`vMAJOR.MINOR.PATCH.RESHADE`
-
-For example:
-
-`v1.6.6.580`
-
-See [Release Process](docs/RELEASING.md) for the release checklist and packaging details.
-
-## Credits
-
-- **[BadassBaboon](https://github.com/BadassBaboon)** and **[CrazyDaifu](https://github.com/CrazyDaifu)** — D3D9 surface/reset work and resource-lifetime fixes reviewed and adapted from the fork; see the [audit and source commits](docs/experimental-backend-support.md#fork-audit-and-attribution).
-
-- [alex / 4lex4nder](https://github.com/4lex4nder) - ReShade Effect Shader Toggler development.
-- **[DeViLhoOD](https://github.com/Pav-Osmolski)** - Automatic Scene Colour, Vulkan safe-boundary injection and previews, shader-hunting stability improvements, DLSS/upscaled rendering support, x86/x64 hardening, QoL workflow improvements, documentation and testing.
-- [Frans Bouma](https://github.com/FransBouma) - original ShaderToggler.
-- [Sinom](https://github.com/sinomsinom) - contributor.
-- [crosire](https://github.com/crosire) - ReShade and effect-rendering examples.
-- [Marty McFly](https://github.com/martymcmodding) - constant-buffer extraction idea.
-- [darkarchan](https://github.com/darkarchan) - testing and contributions.
-
-## Licence
-
-This project retains the licence and notices from the upstream project. See [LICENSE](LICENSE).
-
-## HDR notes
-
-See [HDR handling and validation](docs/HDR.md) for supported format handling, colour-space limits, tone-map clamping, preview limitations and the current test matrix.
+Built on the work of alex / 4lex4nder, Frans Bouma and the ReShade community. Full contributor acknowledgements are in [Credits](docs/credits.md).
