@@ -269,3 +269,10 @@ scripts/__pycache__/
 /SHA256SUMS.txt
 /BG3-Configs-*.zip
 /BG3-Configs-*.txt
+
+# Documentation preview and named release packages
+/.venv/
+/.pages/
+/.cache/
+/REST-Enhanced-*.zip
+/website/__pycache__/

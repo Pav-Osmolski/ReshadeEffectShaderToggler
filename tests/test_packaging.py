@@ -2,8 +2,11 @@
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 import tempfile
+import subprocess
+import sys
 import unittest
 import zipfile
 
@@ -34,7 +37,7 @@ class PackagingTests(unittest.TestCase):
             packager.package(root, 'test', commit)
             packager.package(root, 'release', commit)
             with zipfile.ZipFile(root / 'test-package/REST-test-1.7.2.680-aaaaaaaaaaaa.zip') as ci, \
-                 zipfile.ZipFile(root / 'release.zip') as release:
+                 zipfile.ZipFile(root / 'REST-Enhanced-Modern-v1.7.2.680.zip') as release:
                 self.assertEqual(set(ci.namelist()), set(release.namelist()))
                 self.assertIn('CHANGELOG.md', release.namelist())
                 self.assertIn('Shaders/example.txt', release.namelist())
@@ -62,7 +65,46 @@ class PackagingTests(unittest.TestCase):
             (root / 'CHANGELOG.md').unlink()
             with self.assertRaises(FileNotFoundError):
                 packager.package(root, 'release', 'a' * 40)
+            self.assertFalse(list(root.glob('REST-Enhanced-*.zip')))
+
+    def test_legacy_release_name_and_checksum(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            self.fixture(root)
+            (root / 'src/version.h').write_text('#define REST_VERSION_STRING "1.6.10.580"\n')
+            packager.package(root, 'release', 'b' * 40)
+            name = 'REST-Enhanced-Legacy-v1.6.10.580.zip'
+            with zipfile.ZipFile(root / name) as archive:
+                self.assertIn('1.6.10.580', archive.read('BUILD-INFO.txt').decode())
+            self.assertIn(name, (root / 'SHA256SUMS.txt').read_text())
             self.assertFalse((root / 'release.zip').exists())
+
+    def test_unknown_baseline_does_not_guess_release_line(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            self.fixture(root)
+            (root / 'src/version.h').write_text('#define REST_VERSION_STRING "1.7.0.999"\n')
+            with self.assertRaises(ValueError):
+                packager.package(root, 'release', 'a' * 40)
+            self.assertFalse(list(root.glob('*.zip')))
+
+    def test_cli_emits_the_archive_name_consumed_by_actions(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            self.fixture(root)
+            script = root / 'scripts/package-build.py'
+            script.write_bytes(Path('scripts/package-build.py').read_bytes())
+            subprocess.run(['git', 'init', '-q'], cwd=root, check=True, capture_output=True)
+            subprocess.run(['git', 'add', '.'], cwd=root, check=True, capture_output=True)
+            subprocess.run(['git', '-c', 'user.name=Package test', '-c', 'user.email=package-test@example.invalid',
+                            'commit', '-qm', 'Fixture'], cwd=root, check=True, capture_output=True)
+            output = root / 'action-outputs.txt'
+            result = subprocess.run([sys.executable, str(script), '--kind', 'release'], cwd=root,
+                                    env=dict(os.environ, GITHUB_OUTPUT=str(output)), capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            name = output.read_text(encoding='utf-8').strip().removeprefix('archive_name=')
+            self.assertEqual(name, 'REST-Enhanced-Modern-v1.7.2.680.zip')
+            self.assertTrue((root / name).is_file())
 
     def test_archive_traversal_is_rejected(self):
         with tempfile.TemporaryDirectory() as temp:

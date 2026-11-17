@@ -16,6 +16,7 @@ concurrency:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   release:
@@ -94,6 +95,7 @@ jobs:
         run: ./scripts/validate-binaries.ps1
 
       - name: Package release
+        id: package
         run: python scripts/package-build.py --kind release
 
       - name: Publish GitHub release
@@ -101,7 +103,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_ARCHIVE: ${{ steps.package.outputs.archive_name }}
         run: |
           # Existing releases are immutable: retries must never replace assets.
-          gh release create $env:RELEASE_TAG "release.zip" "SHA256SUMS.txt" "BG3-Configs-D3D11+Vulkan.zip" "BG3-Configs-SHA256SUMS.txt" "BG3-Configs-PROVENANCE.txt" --verify-tag --latest --title "REST Enhanced $env:RELEASE_TAG" --notes-file "docs/releases/$env:RELEASE_TAG.md"
+          if (-not $env:RELEASE_ARCHIVE -or -not (Test-Path -LiteralPath $env:RELEASE_ARCHIVE)) { throw "Missing named release archive." }
+          gh release create $env:RELEASE_TAG $env:RELEASE_ARCHIVE "SHA256SUMS.txt" "BG3-Configs-D3D11+Vulkan.zip" "BG3-Configs-SHA256SUMS.txt" "BG3-Configs-PROVENANCE.txt" --verify-tag --latest --title "REST Enhanced $env:RELEASE_TAG" --notes-file "docs/releases/$env:RELEASE_TAG.md"
           if ($LASTEXITCODE -ne 0) { throw "Release publication failed; existing releases are never overwritten." }
+
+      - name: Refresh documentation website
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run pages.yml --ref main --repo "${{ github.repository }}"
