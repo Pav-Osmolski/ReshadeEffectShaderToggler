@@ -25,3 +25,12 @@ No additional reporter capture is needed for the established capacity failure. D
 Run `scripts/test-rendering-safety.ps1` (including scene-input SDK/native tests and maintained-backend regressions), the Python packaging/routing tests, workflow validation and complete x64/x86 CI builds on both feature branches. Use `workflow_dispatch` on each feature branch; do not tag or merge this experimental work into a stable branch.
 
 The first [restricted submission prototype](scene-submission-prototype.md) is implemented and locally verified. Its single-queue result narrows the remaining integration work; it does not resolve the full release blockers.
+
+
+## Sharing a future reporter candidate
+
+Use a successful Actions build from the appropriate feature branch, not a GitHub pre-release or a stable tag. The workflow uploads `REST-Experimental-Modern-<full-commit>` / `REST-Experimental-Legacy-<full-commit>` and includes a direct artifact link and installation notes in its run summary. Artifacts are retained for up to 90 days. They remain accessible to signed-in GitHub users who can read this public repository; they are not private downloads, but do not appear on the Releases page.
+
+Link the exact successful run and its specific artifact in issue #22, with the commit, the intended behavioural change, focused test steps, and a rollback to the previously tested build. The artifact is an outer ZIP containing the `REST-test-<version>-<commit>.zip` and checksum files. Extract both levels. Do not link a moving branch/latest download or a temporary storage URL. Reruns/replacements need a new link; do not overwrite existing evidence.
+
+Only ask the reporter to test when the build contains an integrated change that addresses a stated game behaviour. The standalone submission prototype is not linked into the add-on, so its successful CI build is not a new Warframe fix to test.

@@ -106,15 +106,39 @@ jobs:
         run: ./scripts/package-test-build.ps1
 
       - name: Upload build artifacts
+        id: artifact
         if: steps.scope.outputs.native == 'true'
         uses: actions/upload-artifact@v7
         with:
-          name: REST-build-${{ github.sha }}
+          name: REST-Experimental-Modern-${{ github.sha }}
           path: |
             test-package/*.zip
             test-package/*.txt
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 90
+
+
+      - name: Experimental download instructions
+        if: steps.scope.outputs.native == 'true'
+        shell: pwsh
+        env:
+          ARTIFACT_URL: ${{ steps.artifact.outputs.artifact-url }}
+          BUILD_SHA: ${{ github.sha }}
+          BUILD_REF: ${{ github.head_ref || github.ref_name }}
+        run: |
+          @"
+          ### Experimental runtime candidate — Modern
+          [Download the Modern test bundle]($env:ARTIFACT_URL)
+
+          Branch: $env:BUILD_REF
+          Commit: $env:BUILD_SHA
+
+          Sign in to GitHub to download. This is an Actions artifact, not a release.
+          Retained for up to 90 days; rerunning creates a new artifact/link.
+          Extract the outer artifact ZIP, then the REST-test ZIP inside it.
+          SHA256SUMS.txt identifies the inner archives. Follow the issue-specific
+          test instructions: a successful build alone does not establish a fix.
+          "@ | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
 
   tag:
     needs: build
