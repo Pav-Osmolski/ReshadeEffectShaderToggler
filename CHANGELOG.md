@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.7.6.680 — 2026-11-17
+
+- Add a saved per-game Vulkan scene-transfer option, startup/pending status and diagnostic launcher override detection.
+- Keep image-creation policy fixed until restart; preserve existing safety checks and default-off behaviour.
+- Modern and Legacy local testing passed. See [release notes](docs/releases/v1.7.6.680.md).
+
 ## v1.7.5.680 — 2026-11-17
 
 - Vulkan manual-injection guards, safer attachment usage, broader automatic upscaling matching and optional FP16 scene-copy support.

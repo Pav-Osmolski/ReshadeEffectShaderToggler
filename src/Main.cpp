@@ -724,6 +724,8 @@ static void displaySettings(effect_runtime* runtime) {
 }
 
 static void Init() {
+    g_addonUIData.InitializeVulkanSceneTransfers();
+    resourceManager.SetVulkanSceneTransfers(g_addonUIData.GetActiveVulkanSceneTransfers());
     resourceManager.SetResourceShim(g_addonUIData.GetResourceShim());
     resourceManager.Init();
     constantManager.Init(g_addonUIData, groupResourceManager, &constantCopy, &constantHandler);
