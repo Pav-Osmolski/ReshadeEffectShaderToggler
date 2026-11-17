@@ -23,3 +23,5 @@ if ($compilerVersion.Major -eq 14 -and $compilerVersion.Minor -lt 30) {
   Write-Output 'Production tracking registration integration test passed.'
 }
 & ./scripts/test-maintenance.ps1
+
+& ./scripts/test-scene-submission-prototype.ps1
