@@ -30,10 +30,16 @@ Closed-recording lifetime does not inherently require a separate physical scratc
 1. The existing ReShade API still does not let REST own/split a native batch. No native hook or dependency fork is installed by this work.
 2. The queue must be known before sharing scratch during recording. A command list can be recorded before its eventual queue is known. Rejecting a second queue is a harness boundary, not a usable game fallback: an add-on cannot simply suppress the game's submission or safely pass through injected shared-scratch commands without the required ordering.
 3. A universal global fence chain across queues can introduce cycles with existing game waits. The prototype therefore inserts no cross-queue waits. General concurrent/cross-queue support remains a blocker, not a passed test.
-4. The workload uses a real FP16 compute shader and texture readbacks, but not REST's compositor split, cloned game descriptor tables, ReShade technique execution, saved screenshots or HDR colour correctness. Those renderer-level checks are still required.
+4. The small workload uses a real FP16 compute shader and texture readbacks. The follow-up below additionally replays the captured split shader pair, but neither test runs the complete REST/ReShade technique renderer, production descriptor cloning/state restoration or live-game integration. HDR colour correctness and those renderer-level checks remain required.
 5. Signal-failure quarantine has no automatic recovery. The bridge requires an external proven drain before destruction; it is not suitable for uncontrolled device/queue teardown.
 6. Mutable/volatile descriptor behaviour, multiple device queues, unaffected game lists, secondary lists, device removal and queue/command-list interception must be assessed before any integration.
 
 ## Next boundary
 
 Establish a submission integration contract that can identify or safely bind the queue before recording shared scratch, observe whole batches, and preserve the game's queue dependencies. Then replay the actual compositor with canonical entry/exit states and immutable recording versions. Keep the existing runtime image pool untouched until that contract is implemented and tested. No new user capture is required for these local design questions.
+
+## Captured compositor replay follow-up
+
+The standalone native replay tool now runs the captured production shader-pair outputs rather than only the small compute workload. The local TAA, no-TAA and FSR exports (3824×1600) each passed 32 simultaneously retained recordings sharing one FP32 scene/processed/R32-alpha scratch set, three reordered submissions, and bit-exact identity/tint/alpha output with no D3D12 debug errors. Identity outputs matched the original saved captures and tint outputs matched the prior validated split reference.
+
+The tool uses a dedicated tint/alpha-overwrite pass rather than arbitrary ReShade effects. Per-recording readbacks/descriptors still scale, and its scratch set has three intermediate images plus the output. This advances captured compositor replay evidence but does not cover live queue integration, actual ReShade rendering/state restoration or cross-queue execution. Run instructions are in [the replay tool guide](../tools/compositor-probe/README.md#retained-recordings-with-one-shared-scratch-set).

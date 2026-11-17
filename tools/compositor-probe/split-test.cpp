@@ -1,4 +1,5 @@
 #define NOMINMAX
+#include "../../tests/prototypes/SceneSubmissionBridge.h"
 #include <windows.h>
 #include <d3d12.h>
 #include <wrl/client.h>
@@ -213,6 +214,9 @@ public:
     }
   }
 
+public:
+  ID3D12CommandQueue* NativeQueue() { return queue.Get(); }
+  const std::vector<Readback>& Readbacks() const { return outputs; }
 private:
   ComPtr<ID3D12CommandQueue> queue;
   ComPtr<ID3D12CommandAllocator> allocator;
@@ -281,12 +285,21 @@ static ComPtr<ID3D12PipelineState> Pipeline(Gpu &gpu, ID3D12RootSignature *root,
 }
 
 int wmain(int argc, wchar_t **argv) {
-  if (argc != 4 && argc != 5) {
-    fprintf(stderr, "Usage: split-test mode-directory replay-vertex.dxil tint-scene.dxil [overwrite-alpha.dxil]\n");
+  if (argc != 4 && argc != 5 && argc != 7) {
+    fprintf(stderr, "Usage: split-test mode-directory replay-vertex.dxil tint-scene.dxil [overwrite-alpha.dxil [--submission-replay output-directory]]\n");
     return 2;
   }
   try {
     const Path folder = argv[1];
+    const bool replay = argc == 7;
+    if (replay && std::wstring(argv[5]) != L"--submission-replay")
+      throw std::runtime_error("Unknown replay option");
+    const Path outputFolder = replay ? Path(argv[6]) : folder;
+    if (replay) {
+      std::filesystem::create_directories(outputFolder);
+      if (std::filesystem::equivalent(folder, outputFolder))
+        throw std::runtime_error("Replay output must be separate from captured inputs");
+    }
     Gpu gpu;
     const auto root = Root(gpu);
     const auto vertexShader = Read(argv[2]);
@@ -411,7 +424,7 @@ int wmain(int argc, wchar_t **argv) {
       gpu.list->DrawInstanced(3, 1, 0, 0);
     };
     draw(original.Get(), 0, 0);
-    gpu.SaveTarget(output, folder / "native-original.raw");
+    gpu.SaveTarget(output, outputFolder / "native-original.raw");
     const std::pair<DXGI_FORMAT, const char *> formats[]{
         {DXGI_FORMAT_R32G32B32A32_FLOAT, "fp32"}, {DXGI_FORMAT_R16G16B16A16_FLOAT, "fp16"}, {outputFormat, "rgb10"}};
     UINT slot = 1;
@@ -425,12 +438,12 @@ int wmain(int argc, wchar_t **argv) {
       draw(passes.back().Get(), slot, 0);
       gpu.Transition(scene, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
       draw(ui.Get(), 0, slot);
-      gpu.SaveTarget(output, folder / (std::string("split-") + name + "-identity.raw"));
+      gpu.SaveTarget(output, outputFolder / (std::string("split-") + name + "-identity.raw"));
       passes.push_back(Pipeline(gpu, root.Get(), vertexShader, argv[3], format));
       draw(passes.back().Get(), slot + 1, slot);
       gpu.Transition(processed, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
       draw(ui.Get(), 0, slot + 1);
-      gpu.SaveTarget(output, folder / (std::string("split-") + name + "-tint.raw"));
+      gpu.SaveTarget(output, outputFolder / (std::string("split-") + name + "-tint.raw"));
       if (format == DXGI_FORMAT_R32G32B32A32_FLOAT) {
         auto *tint = passes.back().Get();
         passes.push_back(Pipeline(gpu, root.Get(), vertexShader, folder / "secondary-scene-only.dxil", format));
@@ -438,13 +451,13 @@ int wmain(int argc, wchar_t **argv) {
         draw(passes.back().Get(), slot, 0);
         gpu.Transition(scene, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
         draw(ui.Get(), 0, slot);
-        gpu.SaveTarget(output, folder / "split-secondary-identity.raw");
+        gpu.SaveTarget(output, outputFolder / "split-secondary-identity.raw");
         gpu.Transition(processed, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
         draw(tint, slot + 1, slot);
         gpu.Transition(processed, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
         draw(ui.Get(), 0, slot + 1);
-        gpu.SaveTarget(output, folder / "split-secondary-tint.raw");
-        if (argc == 5) {
+        gpu.SaveTarget(output, outputFolder / "split-secondary-tint.raw");
+        if (argc >= 5) {
           auto *alpha = createTarget(DXGI_FORMAT_R32_FLOAT, 7);
           table(7, scene, input, alpha);
           table(8, processed, input, alpha);
@@ -456,18 +469,107 @@ int wmain(int argc, wchar_t **argv) {
           passes.push_back(Pipeline(gpu, root.Get(), vertexShader, folder / "runtime-ui.dxil", outputFormat));
           auto *runtimeUi = passes.back().Get();
           draw(runtimeUi, 0, 7);
-          gpu.SaveTarget(output, folder / "runtime-identity.raw");
+          gpu.SaveTarget(output, outputFolder / "runtime-identity.raw");
           passes.push_back(Pipeline(gpu, root.Get(), vertexShader, argv[4], format));
           gpu.Transition(processed, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
           draw(passes.back().Get(), slot + 1, slot);
           gpu.Transition(processed, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
           draw(runtimeUi, 0, 8);
-          gpu.SaveTarget(output, folder / "runtime-tint-overwrite-alpha.raw");
+          gpu.SaveTarget(output, outputFolder / "runtime-tint-overwrite-alpha.raw");
         }
       }
       slot += 2;
     }
     gpu.Finish();
+    if (replay) {
+      using namespace SceneSubmissionResearch;
+      const auto identityReference = Read(outputFolder / "runtime-identity.raw");
+      const auto tintReference = Read(outputFolder / "runtime-tint-overwrite-alpha.raw");
+      if (identityReference != Read(outputFolder / "native-original.raw"))
+        throw std::runtime_error("Runtime split identity differs from original captured draw");
+      auto* sharedScene = createTarget(DXGI_FORMAT_R32G32B32A32_FLOAT, 1);
+      auto* sharedProcessed = createTarget(DXGI_FORMAT_R32G32B32A32_FLOAT, 2);
+      auto* sharedAlpha = createTarget(DXGI_FORMAT_R32_FLOAT, 7);
+      TextureInput full{DXGI_FORMAT_R32G32B32A32_FLOAT, DXGI_FORMAT_R32G32B32A32_FLOAT, width, height, 1, 1, 16};
+      table(7, sharedScene, full, sharedAlpha);
+      table(8, sharedProcessed, full, sharedAlpha);
+      const auto scenePass = Pipeline(gpu, root.Get(), vertexShader, folder / "runtime-scene.dxil", full.storage, true);
+      const auto uiPass = Pipeline(gpu, root.Get(), vertexShader, folder / "runtime-ui.dxil", outputFormat);
+      const auto tintPass = Pipeline(gpu, root.Get(), vertexShader, argv[4], full.storage);
+      ComPtr<ID3D12Fence> replayFence;
+      Check(gpu.device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&replayFence)), "Create replay fence");
+      QueueAffineBridge bridge(gpu.NativeQueue(), replayFence.Get());
+      std::vector<std::shared_ptr<Recording>> recorded;
+      const auto firstReadback = gpu.Readbacks().size();
+      for (size_t i = 0; i < 32; ++i) {
+        auto r = std::make_shared<Recording>();
+        Check(gpu.device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&r->allocator)), "Create replay allocator");
+        Check(gpu.device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, r->allocator.Get(), nullptr, IID_PPV_ARGS(&r->commands)), "Create replay recording");
+        gpu.list = r->commands;
+        gpu.list->SetDescriptorHeaps(2, heaps);
+        gpu.list->SetGraphicsRootSignature(root.Get());
+        gpu.list->SetGraphicsRootDescriptorTable(1, samplers->GetGPUDescriptorHandleForHeapStart());
+        gpu.list->SetGraphicsRootConstantBufferView(2, constantBuffer->GetGPUVirtualAddress());
+        gpu.list->RSSetViewports(1, &viewport); gpu.list->RSSetScissorRects(1, &scissor);
+        gpu.list->IASetVertexBuffers(0, 1, &vertexView);
+        gpu.list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        draw(scenePass.Get(), 1, 0, 7);
+        gpu.Transition(sharedScene, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+        gpu.Transition(sharedAlpha, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+        if (i % 2) {
+          draw(tintPass.Get(), 2, 7);
+          gpu.Transition(sharedProcessed, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+        }
+        draw(uiPass.Get(), 0, i % 2 ? 8 : 7);
+        gpu.SaveTarget(output, outputFolder / "unused-replay-readback.raw");
+        // Every recording has identical canonical entry/exit states, including
+        // the first recording and recordings that are never submitted.
+        gpu.Transition(sharedScene, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
+        gpu.Transition(sharedAlpha, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
+        if (i % 2) gpu.Transition(sharedProcessed, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
+        Check(gpu.list->Close(), "Close replay recording");
+        r->resources = gpu.resources; r->descriptors = {srvs, samplers, rtvs}; r->root = root; r->pipeline = uiPass;
+        recorded.push_back(std::move(r));
+      }
+      auto verify = [&] {
+        for (size_t i = 0; i < recorded.size(); ++i) {
+          const auto& readback = gpu.Readbacks()[firstReadback + i];
+          const auto& expected = i % 2 ? tintReference : identityReference;
+          void* mapped = nullptr; Check(readback.buffer->Map(0, nullptr, &mapped), "Map replay output");
+          bool same = true;
+          for (UINT row = 0; row < height; ++row)
+            same &= memcmp(static_cast<char*>(mapped) + size_t(row) * readback.footprint.Footprint.RowPitch,
+                           expected.data() + size_t(row) * readback.rowSize, readback.rowSize) == 0;
+          const D3D12_RANGE untouched{}; readback.buffer->Unmap(0, &untouched);
+          if (!same) throw std::runtime_error("Captured compositor replay differs from its isolated reference");
+        }
+      };
+      std::vector<std::shared_ptr<Recording>> batch(recorded.rbegin(), recorded.rend());
+      for (unsigned round = 0; round < 3; ++round) {
+        uint64_t ticket = 0;
+        Check(bridge.Submit(gpu.NativeQueue(), batch, ticket), "Submit captured replay batch");
+        HANDLE event = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+        if (!event) throw std::runtime_error("Create replay event failed");
+        const auto hr = replayFence->SetEventOnCompletion(ticket, event);
+        const auto waited = SUCCEEDED(hr) ? WaitForSingleObject(event, 60000) : WAIT_FAILED;
+        CloseHandle(event); Check(hr, "Register captured replay completion");
+        if (waited != WAIT_OBJECT_0) throw std::runtime_error("Captured compositor replay timed out");
+        verify(); Check(bridge.Collect(), "Collect captured replay flight");
+        std::rotate(batch.begin(), batch.begin() + 7, batch.end());
+      }
+      ComPtr<ID3D12InfoQueue> messages; Check(gpu.device.As(&messages), "Require D3D12 debug messages");
+      for (UINT64 i = 0; i < messages->GetNumStoredMessages(); ++i) {
+        SIZE_T size = 0; Check(messages->GetMessage(i, nullptr, &size), "Read replay validation size");
+        Bytes bytes(size); auto* message = reinterpret_cast<D3D12_MESSAGE*>(bytes.data());
+        Check(messages->GetMessage(i, message, &size), "Read replay validation");
+        if (message->Severity <= D3D12_MESSAGE_SEVERITY_ERROR) throw std::runtime_error(message->pDescription);
+      }
+      std::ofstream report(outputFolder / "submission-replay.json");
+      report << "{\"recordings\":32,\"rounds\":3,\"shared_scene_sets\":1,\"width\":" << width
+             << ",\"height\":" << height << ",\"bit_exact\":true,\"debug_errors\":0}\n";
+      if (!report) throw std::runtime_error("Write captured replay result failed");
+      printf("PASS: captured runtime compositor, 32 live recordings, one shared scratch set, three reordered submissions, bit-exact identity/tint/alpha outputs, zero debug errors.\n");
+    }
     return 0;
   } catch (const std::exception &error) {
     fprintf(stderr, "%s\n", error.what());
