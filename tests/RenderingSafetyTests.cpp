@@ -1,4 +1,5 @@
 #include "RenderingSafety.h"
+#include "VulkanTraceBudget.h"
 #include <stdexcept>
 
 static void require(bool condition) {
@@ -6,6 +7,36 @@ static void require(bool condition) {
 }
 
 int main() {
+    // DLSS Quality combined with a reduced game render scale exceeds the old
+    // 1.85x output/input limit, despite retaining the output aspect ratio.
+    require(Rendering::MatchesAutomaticSceneDimensions(2560, 1440, 3840, 2160));
+    require(Rendering::MatchesAutomaticSceneDimensions(1896, 1067, 3840, 2160));
+    require(Rendering::MatchesAutomaticSceneDimensions(1920, 1080, 3840, 2160));
+    require(Rendering::MatchesAutomaticSceneDimensions(1280, 720, 3840, 2160));
+    require(Rendering::MatchesAutomaticSceneDimensions(960, 540, 3840, 2160));
+    require(Rendering::MatchesAutomaticSceneDimensions(7680, 4320, 3840, 2160));
+    require(!Rendering::MatchesAutomaticSceneDimensions(959, 540, 3840, 2160));
+    require(!Rendering::MatchesAutomaticSceneDimensions(480, 270, 3840, 2160));
+    require(!Rendering::MatchesAutomaticSceneDimensions(1024, 1024, 3840, 2160));
+    require(!Rendering::MatchesAutomaticSceneDimensions(1920, 1200, 3840, 2160));
+    require(!Rendering::MatchesAutomaticSceneDimensions(0, 1080, 3840, 2160));
+    require(!Rendering::MatchesAutomaticSceneDimensions(1920, 0, 3840, 2160));
+    require(!Rendering::MatchesAutomaticSceneDimensions(1920, 1080, 0, 2160));
+    require(!Rendering::MatchesAutomaticSceneDimensions(1920, 1080, 3840, 0));
+
+    VulkanTraceBudget trace;
+    require(!trace.take());
+    require(trace.start(2, 3));
+    require(!trace.start());
+    require(trace.take()); require(trace.take()); require(!trace.take());
+    require(!trace.finishFrame()); require(!trace.finishFrame()); require(trace.finishFrame());
+    require(!trace.finishFrame()); require(!trace.start());
+    VulkanTraceBudget frameLimited;
+    require(frameLimited.start(10, 1)); require(frameLimited.take());
+    require(frameLimited.finishFrame()); require(!frameLimited.take());
+    VulkanTraceBudget empty;
+    require(empty.start(10, 0)); require(!empty.active()); require(!empty.finishFrame());
+
     using namespace reshade::api;
     require(Rendering::IsColorTargetType(device_api::d3d9, resource_type::surface));
     require(!Rendering::IsColorTargetType(device_api::d3d11, resource_type::surface));
@@ -39,14 +70,51 @@ int main() {
     require(!Rendering::SupportsLegacyVulkanDescriptor(descriptor_type::shader_storage_buffer));
     resource_desc desc(1920, 1080, 1, 1, format::r16g16b16a16_float, 1,
                        memory_heap::gpu_only, resource_usage::render_target);
+    // A transient Vulkan attachment loses its native transient flag in the
+    // callback descriptor. Neither sampling nor transfers may be inferred.
+    require(!Rendering::ShouldAddShaderResourceUsage(device_api::vulkan, desc));
+    require(Rendering::ShouldAddShaderResourceUsage(device_api::d3d11, desc));
+    require(Rendering::ShouldAddShaderResourceUsage(device_api::d3d10, desc));
+    require(Rendering::ShouldAddShaderResourceUsage(device_api::d3d12, desc));
+    require(!Rendering::IsVulkanSceneTransferCandidate(device_api::vulkan, desc));
+    desc.usage |= resource_usage::shader_resource;
+    require(!Rendering::ShouldAddShaderResourceUsage(device_api::d3d11, desc));
+    require(!Rendering::IsVulkanSceneTransferCandidate(device_api::vulkan, desc, resource_usage::cpu_access));
+    // The Auto-off crash path must stay blocked even on otherwise valid images.
+    using Block = Rendering::VulkanManualEffectBlock;
+    require(Rendering::CheckVulkanManualEffect(true, desc, true) == Block::render_pass);
+    require(Rendering::CheckVulkanManualEffect(false, desc, true) == Block::transfer_source);
+    desc.usage |= resource_usage::copy_source;
+    require(Rendering::CheckVulkanManualEffect(true, desc, true) == Block::render_pass);
+    require(Rendering::CheckVulkanManualEffect(true, desc, false) == Block::render_pass);
+    require(Rendering::CheckVulkanManualEffect(false, desc, false) == Block::format_support);
+    require(Rendering::CheckVulkanManualEffect(false, desc, true) == Block::none);
+    require(Rendering::IsVulkanSceneTransferCandidate(device_api::vulkan, desc));
+    require(!Rendering::IsVulkanSceneTransferCandidate(device_api::d3d11, desc));
+    desc.heap = memory_heap::unknown;
+    require(Rendering::IsVulkanSceneTransferCandidate(device_api::vulkan, desc));
+    desc.heap = memory_heap::gpu_to_cpu;
+    require(!Rendering::IsVulkanSceneTransferCandidate(device_api::vulkan, desc));
+    desc.heap = memory_heap::gpu_only;
+    desc.flags = resource_flags::shared;
+    require(!Rendering::IsVulkanSceneTransferCandidate(device_api::vulkan, desc));
+    desc.flags = resource_flags::sparse_binding;
+    require(!Rendering::IsVulkanSceneTransferCandidate(device_api::vulkan, desc));
+    desc.flags = resource_flags::none;
+    desc.texture.format = format::r8g8b8a8_unorm;
+    require(!Rendering::IsVulkanSceneTransferCandidate(device_api::vulkan, desc));
+    desc.texture.format = format::r16g16b16a16_float;
     require(Rendering::SupportsWholePreviewCopy(desc));
     desc.texture.samples = 4;
+    require(!Rendering::IsVulkanSceneTransferCandidate(device_api::vulkan, desc));
     require(!Rendering::SupportsWholePreviewCopy(desc));
     desc.texture.samples = 1;
     desc.texture.levels = 2;
+    require(!Rendering::IsVulkanSceneTransferCandidate(device_api::vulkan, desc));
     require(!Rendering::SupportsWholePreviewCopy(desc));
     desc.texture.levels = 1;
     desc.texture.depth_or_layers = 6;
+    require(!Rendering::IsVulkanSceneTransferCandidate(device_api::vulkan, desc));
     require(!Rendering::SupportsWholePreviewCopy(desc));
     desc.texture.depth_or_layers = 1;
     desc.texture.width = 0;

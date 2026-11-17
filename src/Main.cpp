@@ -488,6 +488,15 @@ static void onBarrier(command_list* cmd_list,
 
     CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
 
+    auto& trace = cmd_list->get_device()->get_private_data<DeviceDataContainer>().vulkanBoundaryTrace;
+    if (trace.active()) {
+        const uint64_t trackedState = (commandListData.vulkanInsideRenderPass ? 1u : 0u) |
+                                      (commandListData.vulkanRenderPassEndPending ? 2u : 0u);
+        for (uint32_t i = 0; i < count; ++i)
+            trace.event("barrier", cmd_list, resources[i].handle,
+              static_cast<uint32_t>(oldStates[i]), static_cast<uint32_t>(newStates[i]), trackedState);
+    }
+
     // An end_render_pass callback may describe either a real render-pass end or the
     // first half of vkCmdNextSubpass. Seeing a subsequent barrier proves the actual
     // render pass has ended, because there is no command-recording opportunity between
@@ -524,6 +533,18 @@ static void onBeginRenderPass(command_list* cmd_list, uint32_t count, const rend
     }
 
     if (device->get_api() == device_api::vulkan) {
+        commandListData.vulkanTraceLastPixelHash = 0;
+        if (deviceData.vulkanBoundaryTrace.active()) {
+            const uint64_t tracedState = (commandListData.vulkanInsideRenderPass ? 1u : 0u) |
+                                         (commandListData.vulkanRenderPassEndPending ? 2u : 0u);
+            // API 7 has no render-pass flags; log zero without inferring suspension state.
+            if (count == 0) deviceData.vulkanBoundaryTrace.event("begin-empty", cmd_list, 0, 0, 0, tracedState);
+            for (uint32_t i = 0; i < count; ++i) {
+                const resource target = rts[i].view != 0 ? device->get_resource_from_view(rts[i].view) : resource{0};
+                deviceData.vulkanBoundaryTrace.event("begin", cmd_list, target.handle,
+                  static_cast<uint32_t>(rts[i].load_op), 0, tracedState);
+            }
+        }
         // ReShade also emits begin_render_pass around vkCmdNextSubpass. In that case
         // Vulkan is still inside the original render pass, so effect/preview transfer
         // work is not legal here. Only treat a begin callback as a safe boundary when
@@ -572,6 +593,9 @@ static void onEndRenderPass(command_list* cmd_list) {
         return;
     }
 
+    const auto& traced = cmd_list->get_private_data<CommandListDataContainer>();
+    cmd_list->get_device()->get_private_data<DeviceDataContainer>().vulkanBoundaryTrace.event(
+      "end", cmd_list, 0, traced.vulkanInsideRenderPass, traced.vulkanRenderPassEndPending, 0);
     // This event is also emitted immediately before vkCmdNextSubpass. Keep the
     // command list marked as inside the render pass until a later event proves that
     // vkCmdEndRenderPass/vkCmdEndRendering really occurred.
@@ -618,6 +642,7 @@ static void onReShadePresent(effect_runtime* runtime) {
 
     {
         unique_lock<shared_mutex> renderLock(deviceData.render_mutex);
+        deviceData.vulkanBoundaryTrace.present(deviceData.vulkanAutoPendingEffects.size());
         deviceData.vulkanAutoPendingEffects.clear();
         deviceData.vulkanAutoWorkPending.store(false, std::memory_order_release);
     }
@@ -688,6 +713,16 @@ static void UnInit() {
 
 static void CheckDrawCall(command_list* cmd_list, const uint64_t match_modifier = Rendering::MATCH_ALL) {
     CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
+
+    auto& trace = cmd_list->get_device()->get_private_data<DeviceDataContainer>().vulkanBoundaryTrace;
+    if ((match_modifier & Rendering::MATCH_PS) != 0 && trace.active() &&
+        commandListData.ps.activeShaderHash != commandListData.vulkanTraceLastPixelHash) {
+        commandListData.vulkanTraceLastPixelHash = commandListData.ps.activeShaderHash;
+        const auto& targets = cmd_list->get_private_data<state_tracking>().render_targets;
+        const resource target = !targets.empty() && targets[0] != 0 ?
+          cmd_list->get_device()->get_resource_from_view(targets[0]) : resource{0};
+        trace.event("ps-draw", cmd_list, target.handle, commandListData.ps.activeShaderHash);
+    }
 
     if (commandListData.commandQueue & Rendering::MATCH_ALL & match_modifier) {
         if (constantHandler != nullptr && (commandListData.commandQueue & Rendering::MATCH_CONST & match_modifier)) {

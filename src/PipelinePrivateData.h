@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CDataFile.h"
+#include "VulkanBoundaryTrace.h"
 #include "EffectData.h"
 #include "ToggleGroup.h"
 #include "reshade.hpp"
@@ -57,6 +58,7 @@ struct __declspec(novtable) ShaderData final {
 struct __declspec(uuid("222F7169-3C09-40DB-9BC9-EC53842CE537")) CommandListDataContainer {
     uint64_t commandQueue = 0;
     bool vulkanAutoInjectionActive = false;
+    uint32_t vulkanTraceLastPixelHash = 0;
     bool vulkanInsideRenderPass = false;
     bool vulkanRenderPassEndPending = false;
     bool vulkanRenderPassSuspends = false;
@@ -183,6 +185,7 @@ struct __declspec(uuid("C63E95B1-4E2F-46D6-A276-E8B4612C069A")) DeviceDataContai
     std::unordered_set<const ShaderToggler::ToggleGroup*> bindingsUpdated;
     std::unordered_set<const ShaderToggler::ToggleGroup*> constantsUpdated;
     std::unordered_set<const ShaderToggler::ToggleGroup*> srvUpdated;
+    VulkanBoundaryTrace vulkanBoundaryTrace;
     effect_queue vulkanAutoPendingEffects;
     std::atomic_bool vulkanAutoWorkPending{ false };
     std::atomic_bool vulkanPreviewWorkPending{ false };

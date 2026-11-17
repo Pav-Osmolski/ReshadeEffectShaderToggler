@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.6.9.580 — 2026-11-17
+
+- Vulkan manual-injection guards, safer attachment usage, broader automatic upscaling matching and optional FP16 scene-copy support.
+- Enshrouded SDR/HDR and BG3 D3D11/Vulkan testing passed on Modern and Legacy; see the validation record for detailed coverage.
+- See [release notes](docs/releases/v1.6.9.580.md) for scope, optional setup and validation limits.
+
 ## v1.6.8.580 — 2026-11-16
 
 - Adapt D3D9 standalone-surface targets and pre-Reset cleanup from BadassBaboon/CrazyDaifu.
