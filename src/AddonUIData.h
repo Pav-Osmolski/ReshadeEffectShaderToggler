@@ -32,6 +32,7 @@
 #pragma once
 
 #include "CDataFile.h"
+#include "VulkanSceneTransferSettings.h"
 #include "ConstantHandlerBase.h"
 #include "EffectData.h"
 #include "ShaderManager.h"
@@ -135,6 +136,7 @@ class AddonUIData {
     std::string _constHookType = "default";
     std::string _constHookCopyType = "gpu_readback";
     std::string _resourceShim = "none";
+    VulkanSceneTransferSettings _vulkanSceneTransfers;
     bool _trackDescriptors = true;
     bool _warframeCompositorSplit = false;
     bool _preventRuntimeReload = false;
@@ -205,6 +207,11 @@ class AddonUIData {
     const std::unordered_map<std::string, std::tuple<Shim::Constants::constant_type, std::vector<reshade::api::effect_uniform_variable>>>* GetRESTVariables() {
         return _constantHandler->GetRESTVariables();
     };
+    bool GetVulkanSceneTransfers() const { return _vulkanSceneTransfers.Configured(); }
+    bool GetActiveVulkanSceneTransfers() const { return _vulkanSceneTransfers.Active(); }
+    bool HasVulkanSceneTransfersOverride() const { return _vulkanSceneTransfers.HasOverride(); }
+    void SetVulkanSceneTransfers(bool enabled) { if (_vulkanSceneTransfers.SetConfigured(enabled)) MarkConfigDirty(); }
+    void InitializeVulkanSceneTransfers();
     bool GetTrackDescriptors() const { return _trackDescriptors; }
     bool GetWarframeCompositorSplit() const { return _warframeCompositorSplit; }
     void SetWarframeCompositorSplit(bool enabled) {

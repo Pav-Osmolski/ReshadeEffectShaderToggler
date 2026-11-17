@@ -1,0 +1,58 @@
+name: Documentation site
+
+on:
+  push:
+    branches: [main]
+    paths: ["docs/**", "website/**", "zensical.toml", "README.md", "CHANGELOG.md", "src/version.h", ".github/workflows/pages.yml"]
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, ready_for_review]
+    paths: ["docs/**", "website/**", "zensical.toml", "README.md", "CHANGELOG.md", "src/version.h", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-${{ github.event_name == 'pull_request' && github.event.pull_request.number || 'publish' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Install pinned documentation tools
+        run: python -m pip install -r website/requirements.txt
+      - name: Stage canonical documentation and published versions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python website/prepare.py --refresh-releases
+      - name: Build documentation
+        run: zensical build --clean
+      - name: Check pages, links and assets
+        run: python website/check.py
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: .pages/site
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v6
+      - uses: actions/deploy-pages@v5
+        id: deployment

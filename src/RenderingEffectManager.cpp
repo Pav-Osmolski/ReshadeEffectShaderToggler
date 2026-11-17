@@ -162,6 +162,22 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
             group->setDebugAutoStatus("Unsupported effect target topology");
             continue;
         }
+        const device_api deviceApi = cmd_list->get_device()->get_api();
+        const bool autoSceneColour = group->isAutoSceneColourActive(deviceApi);
+        if (deviceApi == device_api::vulkan && !autoSceneColour) {
+            // render_technique performs transfer commands even without staging.
+            // Validate before creating views or issuing any rendering work.
+            const auto blocked = CheckVulkanManualEffect(
+              cmdData.vulkanInsideRenderPass, desc,
+              !cmdData.vulkanInsideRenderPass && runtime->get_device()->check_format_support(desc.texture.format, resource_usage::copy_source));
+            if (blocked != VulkanManualEffectBlock::none) {
+                group->setDebugAutoStatus(
+                  blocked == VulkanManualEffectBlock::render_pass ? "Manual Vulkan injection skipped: active render pass; use Auto scene colour" :
+                  blocked == VulkanManualEffectBlock::transfer_source ? "Manual Vulkan injection skipped: missing transfer source" :
+                                                                       "Manual Vulkan injection skipped: unsupported transfer source format");
+                continue;
+            }
+        }
         GroupResource& groupResource = group->GetGroupResource(GroupResourceType::RESOURCE_ALPHA);
         const shared_ptr<GlobalResourceView>& view = sceneCopyView ? sceneCopyView : resourceManager.GetResourceView(runtime->get_device(), active_resource);
         bool copyPreserveAlpha = false;
@@ -174,8 +190,6 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
         uint32_t runtimeWidth = 0, runtimeHeight = 0;
         runtime->get_screenshot_width_and_height(&runtimeWidth, &runtimeHeight);
 
-        const device_api deviceApi = cmd_list->get_device()->get_api();
-        const bool autoSceneColour = group->isAutoSceneColourActive(deviceApi);
         const bool preserveTargetAlpha = group->getPreserveAlpha() && !sceneCopyView && !autoSceneColour && SupportsShaderCopy(deviceApi);
         const bool wantsNativeStaging =
           autoSceneColour &&
@@ -221,6 +235,9 @@ bool RenderingEffectManager::_RenderEffects(command_list* cmd_list,
                 // continuation pass may be recorded on a different command buffer, so
                 // pending work is tracked at device scope. Preserve the first applicable
                 // group/target for a technique, matching REST's first-render-wins model.
+                deviceData.vulkanBoundaryTrace.arm();
+                deviceData.vulkanBoundaryTrace.event("queue", cmd_list, active_resource.resource.handle,
+                  desc.texture.width, desc.texture.height, static_cast<uint32_t>(desc.usage));
                 group->setDebugAutoStatus("Waiting for safe Vulkan continuation or target transition");
                 if (!effectList.empty())
                     deviceData.vulkanAutoWorkPending.store(true, std::memory_order_release);
@@ -592,6 +609,11 @@ void RenderingEffectManager::_RenderDeferredVulkanAutoEffects(
         toRenderNames.insert(effect);
     }
 
+    if (deviceData.vulkanBoundaryTrace.active()) {
+        for (const auto& [target, usage] : safeTargets)
+            deviceData.vulkanBoundaryTrace.event(boundaryName, cmd_list, target, static_cast<uint32_t>(usage));
+        deviceData.vulkanBoundaryTrace.event("eligible-effects", cmd_list, 0, toRenderNames.size(), deviceData.vulkanAutoPendingEffects.size());
+    }
     if (toRenderNames.empty())
         return;
 

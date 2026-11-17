@@ -32,12 +32,25 @@
 
 #include "ShaderManager.h"
 #include <algorithm>
+#include <cstdio>
+#include <reshade.hpp>
 
 using namespace reshade::api;
 using namespace std;
 
 namespace ShaderToggler {
-ShaderManager::ShaderManager() {}
+ShaderManager::ShaderManager(const char* stageName) : _stageName(stageName) {}
+
+void ShaderManager::publishHuntedShader(uint32_t hash) {
+    // Log context through ReShade before publishing the selection to render
+    // threads. Only user navigation changes log, never every matching draw.
+    if (hash && hash != _activeHuntedShaderHash.load(memory_order_acquire)) {
+        char message[128];
+        std::snprintf(message, sizeof(message), "REST hunting selection: %s shader 0x%08x", _stageName, hash);
+        reshade::log::message(reshade::log::level::info, message);
+    }
+    _activeHuntedShaderHash.store(hash, memory_order_release);
+}
 
 void ShaderManager::addHashHandlePair(uint32_t shaderHash, uint64_t pipelineHandle) {
     if (pipelineHandle > 0 && shaderHash > 0) {
@@ -112,9 +125,7 @@ void ShaderManager::setActiveHuntedShaderHandle() {
         return;
     }
 
-    _activeHuntedShaderHash.store(
-      getCollectedShaderHash(static_cast<uint32_t>(_activeHuntedShaderIndex)),
-      memory_order_release);
+    publishHuntedShader(getCollectedShaderHash(static_cast<uint32_t>(_activeHuntedShaderIndex)));
 }
 
 void ShaderManager::huntNextShader(bool ctrlPressed) {
@@ -136,7 +147,7 @@ void ShaderManager::huntNextShader(bool ctrlPressed) {
             const uint32_t hash = getCollectedShaderHash(static_cast<uint32_t>(index));
             if (_markedShaderHashes.contains(hash)) {
                 _activeHuntedShaderIndex = index;
-                _activeHuntedShaderHash.store(hash, memory_order_release);
+                publishHuntedShader(hash);
                 return;
             }
         }
@@ -170,7 +181,7 @@ void ShaderManager::huntPreviousShader(bool ctrlPressed) {
             const uint32_t hash = getCollectedShaderHash(static_cast<uint32_t>(index));
             if (_markedShaderHashes.contains(hash)) {
                 _activeHuntedShaderIndex = index;
-                _activeHuntedShaderHash.store(hash, memory_order_release);
+                publishHuntedShader(hash);
                 return;
             }
         }
@@ -214,7 +225,7 @@ bool ShaderManager::setActiveHuntedShaderHash(uint32_t hash) {
         return false;
 
     _activeHuntedShaderIndex = static_cast<int32_t>(std::distance(_collectedActiveShaderOrder.begin(), it));
-    _activeHuntedShaderHash.store(hash, memory_order_release);
+    publishHuntedShader(hash);
     return true;
 }
 

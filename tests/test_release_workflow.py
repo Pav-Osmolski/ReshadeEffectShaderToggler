@@ -9,6 +9,16 @@ import yaml
 
 
 class ReleaseRoutingTests(unittest.TestCase):
+    def test_publisher_uses_the_packagers_named_archive(self):
+        workflow = yaml.safe_load(Path('.github/workflows/release.yml').read_text(encoding='utf-8-sig'))
+        steps = workflow['jobs']['release']['steps']
+        package_step = next(s for s in steps if s.get('name') == 'Package release')
+        publish = next(s for s in steps if s.get('name') == 'Publish GitHub release')
+        self.assertEqual(package_step['id'], 'package')
+        self.assertEqual(publish['env']['RELEASE_ARCHIVE'], '${{ steps.package.outputs.archive_name }}')
+        self.assertIn('$env:RELEASE_ARCHIVE', publish['run'])
+        self.assertNotIn('"release.zip"', publish['run'])
+
     def run_tagger(self, branch='main', version='1.7.2.680', title=None,
                    existing=False, existing_sha=None, published=False, notes=True):
         workflow = yaml.safe_load(Path('.github/workflows/msbuild.yml').read_text(encoding='utf-8-sig'))

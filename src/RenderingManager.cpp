@@ -2,6 +2,7 @@
 #include "PipelinePrivateData.h"
 #include "SceneInputPolicy.h"
 #include "SceneInput.h"
+#include "RenderingSafety.h"
 
 using namespace Rendering;
 using namespace ShaderToggler;
@@ -265,11 +266,8 @@ const ResourceViewData RenderingManager::GetCurrentResourceView(command_list* cm
                     uint32_t screenshotWidth = 0, screenshotHeight = 0;
                     deviceData.current_runtime->get_screenshot_width_and_height(&screenshotWidth, &screenshotHeight);
 
-                    if (!check_aspect_ratio(static_cast<float>(desc.texture.width),
-                                            static_cast<float>(desc.texture.height),
-                                            screenshotWidth,
-                                            screenshotHeight,
-                                            ShaderToggler::SWAPCHAIN_MATCH_MODE_ASPECT_RATIO)) {
+                    if (!MatchesAutomaticSceneDimensions(desc.texture.width, desc.texture.height,
+                                                         screenshotWidth, screenshotHeight)) {
                         if (deviceApi == device_api::vulkan) {
                             const float targetAspect = desc.texture.height != 0 ?
                               static_cast<float>(desc.texture.width) / static_cast<float>(desc.texture.height) : 0.0f;

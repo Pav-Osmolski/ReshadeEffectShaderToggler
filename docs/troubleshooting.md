@@ -1,42 +1,71 @@
 # Troubleshooting
 
-[Documentation index](README.md) · [Getting started](getting-started.md)
+Start with one known-good preset and change one setting at a time. Preserve the current log before restarting after a crash.
 
-Change one setting at a time and keep a known-good INI backup. A REST group chooses an injection boundary; the game, selected ReShade effects and other add-ons still determine the final image.
+## REST is missing from Add-ons
 
-| Symptom | First checks |
-|---|---|
-| REST does not appear under Add-ons | Correct executable, full add-on-support ReShade build, matching Modern/Legacy release and game architecture, binary beside the injected executable |
-| Helper techniques are missing or fail to compile | Supplied `REST_*.fx` files are in an effect search folder; `ReShade.fxh` is available through the include search path; reload effects and inspect errors |
-| A selected effect does not run | Technique globally enabled; group active; correct hash/renderer; correct technique filter; first matching group may have already rendered that technique |
-| The effect appears over the HUD | The marked boundary or selected target is too late, or injection was skipped and the technique used ordinary end-of-frame placement |
-| Shader list is empty or a saved hash says not seen | Show the relevant scene, collect more frames and rescan; hashes vary by renderer, game version and settings |
-| A preview is unavailable | Only single-sample, single-layer, single-mip 2D targets are supported; inspect the displayed reason |
-| Vulkan waits for a safe boundary | Inspect Auto diagnostics and the transfer-usage/pass-boundary requirements; do not force a copy inside an active pass |
-| HDR colours, brightness or alpha look wrong | Compare with REST effects disabled; identify the target encoding and effects' HDR support; leave ACES clamping off for PQ/HLG; see the HDR guide |
-| Alpha preservation is disabled/ignored | Auto ignores it, and REST's shader-based alpha preservation is unavailable on Vulkan/OpenGL |
-| Settings disappear after restarting | Use Save changes, check the INI location and write access, and ensure another REST binary/config is not being loaded |
+Check the executable ReShade actually loads into, full add-on support, the correct Modern/Legacy line, game architecture and binary location. Keep one REST binary. `ReShade.log` should identify the loaded add-on path and version. [Installation checklist](getting-started.md).
+
+## Helpers are missing or fail to compile
+
+Install the supplied `Shaders/REST_*.fx` files in a configured effect folder. Make `ReShade.fxh` available through the include path, reload effects and read the compilation error. Installing the binary alone is not the complete helper setup.
+
+## A selected effect does not run
+
+Check the group is active, the marked hash is encountered, the effect is globally enabled in ReShade and the group mode includes it. **Ticked techniques are EXCLUDED** means a tick excludes that technique from injection. Required companion techniques must be enabled and ordered correctly. Disable competing groups while comparing.
+
+Read **Successful renders** and **Last successful techniques** after Done hunting. A selected checkbox without increasing renders does not prove injection. [Effect-selection modes](effect-placement.md#understand-the-technique-checkboxes).
+
+## Effects still cover the HUD
+
+The selected boundary may be too late, a different group may render the effect first, or a skipped/excluded technique may still use ordinary end-of-frame ReShade placement. Compare the correct group on/off and choose an earlier scene boundary. HUD hiding and pre-UI effect placement are separate workflows.
+
+## Vulkan waits for a safe boundary
+
+Inspect current/last-success diagnostics and target format. The matched image needs copy support and a compatible later LOAD continuation or post-pass transition. A final UI pass may be too late. A preview alone does not prove injection is possible.
+
+For eligible FP16 targets in setups that need it, enable [Vulkan scene transfers](vulkan-scene-transfer-setting.md), save and restart. Check Active this launch and remove any old launcher override. The option does not bypass boundary guards or fix a poor shader/technique selection. Manual Auto-off Vulkan rendering also retains pass and transfer guards.
 
 ## Upscalers and target matching
 
-Auto Scene Colour targets the primary live colour RTV, not arbitrary depth or every shader resource. Its conservative matching range uses output/input scale factors between 0.5 and 1.85 with compatible aspect ratio. A 1920×1080 target at 3840×2160 output is a 2× scale and falls outside the normal range. A tested 2560×1440 to 3840×2160 path is within it.
+Auto accepts output/input ratios from **0.5 to 4.0** in both dimensions with compatible aspect ratio. It admits quarter-size to double-size targets, including DLSS combined with reduced render scale. Manual matching uses its separate policy.
 
-A first matching frame can be skipped while a new staging buffer or ReShade effect permutation is prepared. Persistent skipped work needs the diagnostic reason, rather than assuming every skipped frame is a crash. Full details are in [Automatic Scene Colour](automatic-scene-colour.md).
+After a resize, one matching frame may be skipped while staging/permutations are prepared. Subsequent eligible frames should update. Persistent failure needs the diagnostic reason; widening a size range does not turn an unrelated texture into scene colour.
+
+## A shader is missing or not seen
+
+Show the relevant element, increase collection frames and Rescan. Saved marks can be absent from one collection while still useful elsewhere. Renderer, game version and graphics settings can change hashes. [Hunting guide](shader-hunting.md).
+
+## A preview is unavailable
+
+Previews need supported single-sample, single-layer, single-mip 2D targets; Vulkan also needs a legal copy boundary. Read the displayed reason. A D3D9 surface is not necessarily sampleable. Preview colour is not an HDR reference.
+
+## HDR colours or alpha look wrong
+
+Compare with the REST group disabled, check target encoding and effects' HDR support, and leave ACES clamping off for PQ/HLG. Auto ignores alpha preservation; shader-based alpha preservation is unavailable on Vulkan/OpenGL. See [HDR](HDR.md).
+
+## Settings disappear after restarting
+
+Use **Save changes**, then check the loaded add-on/config path and folder write access. The isolated diagnostic launchers used during development may temporarily replace and restore configs; use your normal launcher for persistence testing. General settings such as scene transfers can require a full restart after saving.
+
+REST maintains the previous INI as `.ini.bak`. Close the game before manually restoring it. [Saving and recovery](groups-and-configuration.md).
+
+## Enshrouded Vulkan testing
+
+Follow the [Enshrouded guide](games/enshrouded.md) for the normal launcher, saved transfer option, scene hash and technique inclusion. Keep the graphics-hook workaround and Vulkan-layer argument in the launcher. A final HUD shader can hide UI but still be too late for effect placement.
+
+Local testing separated an unsafe Auto-off rendering crash from a shutdown problem consistent with a ReShade DirectX helper proxy outliving module unload. REST guards the first path; the process-only graphics-hook workaround addressed the latter in that setup. No blanket cause or fix is claimed for every Enshrouded crash.
 
 ## Crashes and issue reports
 
-Record the game/build, graphics API, REST version and architecture, ReShade version/fork, other add-ons, upscaler and HDR mode. Describe the exact action that failed and whether it also happens with the previous known-good configuration. For shader hunting, include the selected hash and target format/dimensions if available.
+Preserve fresh `ReShade.log` before another launch replaces it. REST logs hunting stage/hash before selection becomes render-visible; search for `REST hunting selection`. Keep the game's crash report/minidump when available, without uploading it automatically.
 
-Attach a fresh `ReShade.log`, the game's own crash/log output when relevant, and REST's **Copy diagnostics** output. Review configuration files for local paths or preferences before sharing. For image problems, include expected versus actual behaviour and screenshots/captures appropriate to the HDR mode. See the [HDR test/report checklist](HDR.md).
+Include:
 
-The Warframe hunting crash in issue #15 was confirmed fixed by its reporter in official and unofficial ReShade. That confirmation does not describe or resolve the later, unspecified HDR symptoms. Separate HDR reports with reproduction details are useful.
+- Game/build, renderer, REST/ReShade versions and game architecture.
+- Other add-ons, HDR/upscaler settings and the exact failing action.
+- Whether it reproduces with the previous known-good build/config.
+- REST **Copy diagnostics**, the shader hash/destination mode if known, and the fresh log.
+- Expected versus actual appearance and suitable screenshots for image issues.
 
-## Experimental D3D12 scene input and D3D9
-
-For a skipped scene-input group, check its status, confirm descriptor tracking was enabled before restarting the game, and verify the exact pixel SRV Slot/Binding with Auto Scene Colour off. Missing CPU snapshots, DXIL, shared-stage bindings, unsupported textures/tables and resource limits intentionally skip processing. Selected techniques also skip final-frame fallback for that attempt. See the [experimental guide](experimental-backend-support.md) before changing settings or reporting a failure.
-
-For D3D9, report whether a problem occurs during normal rendering or after a device reset (resize, Alt-Tab or fullscreen change). Surface render targets can accept effects without being usable as shader-sampled textures. Auto Scene Colour is not supported on D3D9.
-
-## Testing scope
-
-Successful x86/x64 builds verify compilation and package metadata. CPU tests cover selected format/descriptor bookkeeping and packaging. They do not run the game or certify HDR colour output, validation-layer cleanliness or performance. Read each release's recorded coverage rather than extending a BG3 result to every title and renderer.
+Review logs/configs for personal paths before sharing. [Open an issue](https://github.com/Pav-Osmolski/ReshadeEffectShaderToggler/issues/new/choose). For HDR-specific comparisons use the [HDR report checklist](HDR.md#report-an-hdr-problem).

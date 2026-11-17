@@ -106,6 +106,8 @@ void AddonUIData::AddToggleGroupRemovalCallback(std::function<void(reshade::api:
 
 void AddonUIData::SignalToggleGroupRemoved(reshade::api::effect_runtime* runtime, ShaderToggler::ToggleGroup* group)
 {
+    // Stop stale CPU work before callbacks synchronize and release GPU resources.
+    group->retire();
     for (auto& func : _removalCallbacks)
     {
         func(runtime, group);
@@ -254,6 +256,7 @@ void AddonUIData::LoadShaderTogglerIniFile(const string& fileName)
           std::format("Configuration version {} is newer than supported version {}.", configVersion, REST_CONFIG_VERSION).c_str());
     }
 
+    _vulkanSceneTransfers.Load(iniFile);
     _trackDescriptors = iniFile.GetBoolOrDefault("TrackDescriptors", "General", true);
     _warframeCompositorSplit = iniFile.GetBoolOrDefault("WarframeCompositorSplit", "General", false);
 
@@ -346,6 +349,7 @@ void AddonUIData::SaveShaderTogglerIniFile(const string& fileName)
     iniFile.SetValue("ResourceShim", _resourceShim, "", "General");
     iniFile.SetValue("ConstantBufferHookType", _constHookType, "", "General");
     iniFile.SetValue("ConstantBufferHookCopyType", _constHookCopyType, "", "General");
+    _vulkanSceneTransfers.Save(iniFile);
     iniFile.SetBool("TrackDescriptors", _trackDescriptors, "", "General");
     iniFile.SetBool("WarframeCompositorSplit", _warframeCompositorSplit, "", "General");
     iniFile.SetFloat("OverlayOpacity", _overlayOpacity, "", "General");
@@ -554,4 +558,13 @@ void AddonUIData::SetKeybinding(Keybind keybind, uint32_t keys)
         _keyBindings[keybind] = keys;
         MarkConfigDirty();
     }
+}
+void AddonUIData::InitializeVulkanSceneTransfers()
+{
+    char value[2] = {};
+    const DWORD length = GetEnvironmentVariableA("REST_VULKAN_SCENE_TRANSFERS", value, sizeof(value));
+    _vulkanSceneTransfers.Initialize(length == 1 ? value : nullptr);
+    reshade::log::message(reshade::log::level::info,
+      std::format("REST Vulkan scene transfers: configured={}, active={}, launcher override={}; startup policy frozen until restart.",
+                  _vulkanSceneTransfers.Configured(), _vulkanSceneTransfers.Active(), _vulkanSceneTransfers.HasOverride()).c_str());
 }

@@ -6,6 +6,29 @@
 - Adapt D3D9 surface-target and pre-Reset cleanup fixes from BadassBaboon/CrazyDaifu, release views before textures, and scope typed view caches by device.
 - Retain removed group objects while command-list queues may reference them; skip retired work. Evaluate PS/VS/CS effect queues independently.
 - Document setup, explicit backend limits, fork decisions and required game testing in the [experimental guide](docs/experimental-backend-support.md). These changes are not a stable compatibility claim.
+## v1.7.6.680 — 2026-11-17
+
+- Add a saved per-game Vulkan scene-transfer option, startup/pending status and diagnostic launcher override detection.
+- Keep image-creation policy fixed until restart; preserve existing safety checks and default-off behaviour.
+- Modern and Legacy local testing passed. See [release notes](docs/releases/v1.7.6.680.md).
+
+## v1.7.5.680 — 2026-11-17
+
+- Vulkan manual-injection guards, safer attachment usage, broader automatic upscaling matching and optional FP16 scene-copy support.
+- Enshrouded SDR/HDR and BG3 D3D11/Vulkan testing passed on Modern and Legacy; see the validation record for detailed coverage.
+- See [release notes](docs/releases/v1.7.5.680.md) for scope, optional setup and validation limits.
+
+## v1.7.4.680 — 2026-11-16
+
+- Adapt D3D9 standalone-surface targets and pre-Reset cleanup from BadassBaboon/CrazyDaifu.
+- Release views before resources, make cleanup repeat-safe, and isolate typed view caches by device.
+- Preserve shared device resources until the last runtime is removed; choose same-device runtime replacements.
+- Retain removed group objects for stale queues and publish retirement before GPU cleanup.
+- Evaluate PS/VS/CS effect queues independently.
+- Restore native D3D9 target/depth bindings after copies and previews; reproduce the old missing-depth failure in native tests.
+- Log hunting stage/hash before user selection becomes active.
+- Add x86/x64 production lifecycle and native D3D9 reset regressions, attribution and a release-validation record.
+- Keep Warframe/scene-input processing separate; no issue #22 resolution is claimed. BG3 D3D11/Vulkan passed on both lines, including with renodx-dlss5; Modern x86 RE4 hunting, effects/groups and resolution/fullscreen checks passed.
 
 
 ## v1.7.3.680 — 2026-10-19

@@ -24,3 +24,4 @@ if ($compilerVersion.Major -eq 14 -and $compilerVersion.Minor -lt 30) {
 }
 
 & ./scripts/test-scene-input-sdk.ps1
+& ./scripts/test-maintenance.ps1
