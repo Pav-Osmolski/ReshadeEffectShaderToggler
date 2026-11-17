@@ -93,9 +93,10 @@ void ResourceManager::OnDestroySwapchain(reshade::api::swapchain* swapchain) {
 
 bool ResourceManager::OnCreateResource(device* device, resource_desc& desc, subresource_data* initial_data, resource_usage initial_state) {
     bool ret = false;
+    const bool originalSceneTransferCandidate =
+      IsVulkanSceneTransferCandidate(device->get_api(), desc, initial_state);
 
-    if (static_cast<uint32_t>(desc.usage & resource_usage::render_target) && !static_cast<uint32_t>(desc.usage & resource_usage::shader_resource) &&
-        desc.type == resource_type::texture_2d) {
+    if (ShouldAddShaderResourceUsage(device->get_api(), desc)) {
         desc.usage |= resource_usage::shader_resource;
         ret = true;
     }
@@ -109,7 +110,8 @@ bool ResourceManager::OnCreateResource(device* device, resource_desc& desc, subr
         return GetEnvironmentVariableA("REST_VULKAN_SCENE_TRANSFERS", value, sizeof(value)) == 1 && value[0] == '1';
     }();
     const auto transfers = resource_usage::copy_source | resource_usage::copy_dest;
-    if (sceneTransfers && IsVulkanSceneTransferCandidate(device->get_api(), desc) &&
+    if (sceneTransfers && rShim == nullptr && originalSceneTransferCandidate &&
+        IsVulkanSceneTransferCandidate(device->get_api(), desc, initial_state) &&
         (desc.usage & transfers) != transfers &&
         device->check_format_support(desc.texture.format, desc.usage | transfers)) {
         desc.usage |= transfers;

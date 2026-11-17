@@ -67,6 +67,16 @@ int main() {
 
     resource_desc desc(1920, 1080, 1, 1, format::r16g16b16a16_float, 1,
                        memory_heap::default_, resource_usage::render_target);
+    // A transient Vulkan attachment loses its native transient flag in the
+    // callback descriptor. Neither sampling nor transfers may be inferred.
+    require(!Rendering::ShouldAddShaderResourceUsage(device_api::vulkan, desc));
+    require(Rendering::ShouldAddShaderResourceUsage(device_api::d3d11, desc));
+    require(Rendering::ShouldAddShaderResourceUsage(device_api::d3d10, desc));
+    require(Rendering::ShouldAddShaderResourceUsage(device_api::d3d12, desc));
+    require(!Rendering::IsVulkanSceneTransferCandidate(device_api::vulkan, desc));
+    desc.usage |= resource_usage::shader_resource;
+    require(!Rendering::ShouldAddShaderResourceUsage(device_api::d3d11, desc));
+    require(!Rendering::IsVulkanSceneTransferCandidate(device_api::vulkan, desc, resource_usage::cpu_access));
     // The Auto-off crash path must stay blocked even on otherwise valid images.
     using Block = Rendering::VulkanManualEffectBlock;
     require(Rendering::CheckVulkanManualEffect(true, desc, true) == Block::render_pass);

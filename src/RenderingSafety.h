@@ -47,18 +47,34 @@ inline VulkanManualEffectBlock CheckVulkanManualEffect(bool insideRenderPass,
     return VulkanManualEffectBlock::none;
 }
 
-// Conservative opt-in experiment: ordinary FP16 scene colour only. Shared,
-// sparse, layered, mipmapped and multisampled images retain their original usage.
-inline bool IsVulkanSceneTransferCandidate(reshade::api::device_api api,
-                                          const reshade::api::resource_desc& desc) {
+inline bool ShouldAddShaderResourceUsage(reshade::api::device_api api,
+                                         const reshade::api::resource_desc& desc) {
     using namespace reshade::api;
-    return api == device_api::vulkan && desc.type == resource_type::texture_2d &&
+    // Vulkan's callback omits transient-attachment usage. Never promote an
+    // attachment to sampled usage when its native restrictions are unknown.
+    return api != device_api::vulkan && desc.type == resource_type::texture_2d &&
+           (desc.usage & resource_usage::render_target) != resource_usage::undefined &&
+           (desc.usage & resource_usage::shader_resource) == resource_usage::undefined;
+}
+
+// Opt-in FP16 experiment using only properties exposed by ReShade. No-flags
+// here means no API resource_flags; native alias/protected/tiling information
+// is not fully represented and cannot be certified by this predicate.
+inline bool IsVulkanSceneTransferCandidate(reshade::api::device_api api,
+                                          const reshade::api::resource_desc& desc,
+                                          reshade::api::resource_usage initialState = reshade::api::resource_usage::undefined) {
+    using namespace reshade::api;
+    return api == device_api::vulkan && initialState == resource_usage::undefined &&
+           desc.type == resource_type::texture_2d &&
            desc.texture.format == format::r16g16b16a16_float &&
            desc.texture.width != 0 && desc.texture.height != 0 &&
            desc.texture.samples == 1 && desc.texture.depth_or_layers == 1 && desc.texture.levels == 1 &&
            // Vulkan create_image runs before memory is bound, so heap is unknown.
            (desc.heap == memory_heap::unknown || desc.heap == memory_heap::default_) && desc.flags == resource_flags::none &&
            (desc.usage & resource_usage::render_target) != resource_usage::undefined &&
+           // An originally sampled image cannot legally be transient. Do not
+           // infer this from usage that REST itself added earlier in the hook.
+           (desc.usage & resource_usage::shader_resource) != resource_usage::undefined &&
            (desc.usage & resource_usage::depth_stencil) == resource_usage::undefined;
 }
 
