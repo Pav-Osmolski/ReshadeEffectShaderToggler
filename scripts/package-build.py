@@ -2,6 +2,7 @@
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path, PurePosixPath
 import re
 import subprocess
@@ -24,20 +25,32 @@ def entries(root, mapping):
             yield source, str(target)
 
 
-def package(root, kind, commit):
-    if kind not in ('test', 'release') or not re.fullmatch(r'[0-9a-f]{40}', commit):
-        raise ValueError('Expected a package kind and full Git commit identity')
-    manifest = json.loads((root / 'scripts/package-manifest.json').read_text(encoding='utf-8'))
+def read_version(root):
     version = re.search(r'^#define REST_VERSION_STRING "([0-9]+(?:\.[0-9]+){3})"',
                         (root / 'src/version.h').read_text(encoding='utf-8-sig'), re.MULTILINE)
     if version is None:
         raise ValueError('Missing four-part source version')
-    version = version[1]
+    return version[1]
+
+
+def main_archive_name(version, kind, commit):
+    if kind not in ('test', 'release') or not re.fullmatch(r'[0-9a-f]{40}', commit):
+        raise ValueError('Expected a package kind and full Git commit identity')
+    suffix = version.rsplit('.', 1)[-1]
+    if suffix not in ('680', '580'):
+        raise ValueError('Expected the maintained Modern (.680) or Legacy (.580) baseline')
+    line = 'Modern' if suffix == '680' else 'Legacy'
+    return f'REST-test-{version}-{commit[:12]}.zip' if kind == 'test' else f'REST-Enhanced-{line}-v{version}.zip'
+
+
+def package(root, kind, commit):
+    version = read_version(root)
+    main_name = main_archive_name(version, kind, commit)
+    manifest = json.loads((root / 'scripts/package-manifest.json').read_text(encoding='utf-8'))
     # Validate every input before creating any output archives.
     contents = {key: list(entries(root, manifest[key])) for key in ('main', 'bg3')}
     output = root / 'test-package' if kind == 'test' else root
     output.mkdir(parents=True, exist_ok=True)
-    main_name = f'REST-test-{version}-{commit[:12]}.zip' if kind == 'test' else 'release.zip'
     bg3_name = 'BG3-Configs-D3D11+Vulkan.zip'
     info = f'REST Enhanced {version}\nCommit: {commit}\nPackage: {kind}\n'
     info += ('Test candidate for runtime validation; not a published stable release.\n' if kind == 'test' else
@@ -69,3 +82,6 @@ if __name__ == '__main__':
     root = Path(__file__).resolve().parents[1]
     commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip()
     package(root, args.kind, commit)
+    if os.environ.get('GITHUB_OUTPUT'):
+        with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
+            output.write(f'archive_name={main_archive_name(read_version(root), args.kind, commit)}\n')

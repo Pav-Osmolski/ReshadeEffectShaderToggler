@@ -10,8 +10,8 @@ def needs_native(paths, event_name, message=''):
         return True
     # Unknown file types are conservative. Only known documentation/assets skip C++.
     def documentation(path):
-        return (path.startswith(('docs/', '.github/ISSUE_TEMPLATE/'))
-                or path in ('LICENSE', '.gitignore', '.gitattributes')
+        return (path.startswith(('docs/', 'website/', '.github/ISSUE_TEMPLATE/'))
+                or path in ('LICENSE', '.gitignore', '.gitattributes', 'zensical.toml', '.github/workflows/pages.yml')
                 or ('/' not in path and path.lower().endswith('.md')))
     return any(not documentation(path) for path in paths)
 
