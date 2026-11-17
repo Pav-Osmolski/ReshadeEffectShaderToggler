@@ -33,3 +33,5 @@ For a diagnostic launch, `REST_VULKAN_BOUNDARY_TRACE=1` starts one capture per d
 ## Source and evidence
 
 Relevant files include `RenderingSafety.h`, `RenderingEffectManager.cpp`, `ResourceManager.cpp`, `VulkanSceneTransferSettings.h` and backend state tracking. [Validation records](validation.md) tie results to releases/commits and distinguish native/API-host tests from injected game testing. [Build](BUILDING.md) · [Release](RELEASING.md).
+
+Warframe issue #22 development is tracked separately in the [experimental development status](warframe-development.md).
