@@ -1,6 +1,6 @@
 # Vulkan scene-transfer experiment: safety review
 
-Status: opt-in test feature, not approved as a default allocation policy. The automatic target-size fix and manual injection guard are independent of this switch.
+Status: optional feature disabled by default; not approved as a default allocation policy. The automatic target-size fix and manual injection guard are independent of this switch.
 
 ## Concrete correction
 
@@ -20,6 +20,6 @@ The Vulkan specification guarantees colour-image memory-type bits under certain 
 
 ## Release decision
 
-Keep `REST_VULKAN_SCENE_TRANSFERS` unset for normal use. A controlled pre-release may expose it as an explicit experiment with restart instructions and a known tested profile; it must not claim universal Vulkan or HDR correctness. Native creation/allocation validation or an upstream interface exposing the missing information is needed before considering a default policy. Do not bypass boundary guards or silently fall back to processing the already-composited UI.
+Keep `REST_VULKAN_SCENE_TRANSFERS` unset for normal use. A full stable release may include this disabled-by-default advanced option with restart instructions and a known tested profile; it must not enable it globally or claim universal Vulkan or HDR correctness. Native creation/allocation validation or an upstream interface exposing the missing information is needed before considering a default policy. Do not bypass boundary guards or silently fall back to processing the already-composited UI.
 
-Enshrouded candidates before the latest safety guards passed loaded-world SDR/HDR placement with DLSS at 100% scale, and reduced-scale placement at 67% with a 1718×967 input and 3840×2160 output. Those observations support that profile on the tested system; they do not establish generic allocation safety. Regression tests cover descriptor admission/rejection. The stricter candidate needs a fresh runtime check before its result can be included in a release claim.
+The hardened Modern Enshrouded candidate passed loaded-world SDR/HDR placement with DLSS at 100% scale, and reduced-scale placement at 67% with a 1718×967 input and 3840×2160 output. Those observations support that profile on the tested system; they do not establish generic allocation safety. Regression tests cover descriptor admission/rejection. The stricter Modern candidate was game-tested on 17 November: SDR/HDR placement, hunting, toggles, scale and mode changes, and clean exit passed in that setup. Legacy runtime validation is pending.
