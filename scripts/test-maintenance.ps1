@@ -24,6 +24,10 @@ foreach ($arch in @('x64', 'x86')) {
         if ($LASTEXITCODE -ne 0) { throw 'Production lifecycle tests failed to compile.' }
         & "$out/lifecycle.exe"
         if ($LASTEXITCODE -ne 0) { throw 'Production lifecycle regression.' }
+        cl /nologo /EHsc /std:c++20 /W3 /DWIN32 /D_CRT_SECURE_NO_WARNINGS /DNOMINMAX /DWIN32_LEAN_AND_MEAN /Isrc tests/VulkanSceneTransferSettingsTests.cpp src/CDataFile.cpp /Fo"$out/" /Fe"$out/vulkan-settings.exe"
+        if ($LASTEXITCODE -ne 0) { throw 'Vulkan settings tests failed to compile.' }
+        & "$out/vulkan-settings.exe"
+        if ($LASTEXITCODE -ne 0) { throw 'Vulkan settings regression.' }
     }
 
 }
