@@ -65,3 +65,7 @@ Before any further public candidate, require a local prototype to pass:
 5. The actual compositor renderer and saved-frame/HDR checks, not only synthetic ownership helpers.
 
 No new reporter capture is needed to establish the present capacity problem. No further pool expansion or stable promotion follows from this investigation.
+
+## Restricted submission proof — 17 November 2026
+
+The [standalone bounded-scratch prototype](scene-submission-prototype.md) now passes 32 live recordings with one FP16 scratch image on one known queue. Whole-batch ordering, canonical states, concurrent CPU submissions on that queue and retained immutable versions are exercised. This does not pass the cross-queue or actual compositor acceptance criteria above and is not integrated into REST.

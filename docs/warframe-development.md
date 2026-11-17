@@ -23,3 +23,5 @@ No additional reporter capture is needed for the established capacity failure. D
 ## Validation
 
 Run `scripts/test-rendering-safety.ps1` (including scene-input SDK/native tests and maintained-backend regressions), the Python packaging/routing tests, workflow validation and complete x64/x86 CI builds on both feature branches. Use `workflow_dispatch` on each feature branch; do not tag or merge this experimental work into a stable branch.
+
+The first [restricted submission prototype](scene-submission-prototype.md) is implemented and locally verified. Its single-queue result narrows the remaining integration work; it does not resolve the full release blockers.
