@@ -1,8 +1,25 @@
 #pragma once
 #include <reshade_api.hpp>
 #include <vector>
+#include <cmath>
 
 namespace Rendering {
+inline bool MatchesAutomaticSceneDimensions(uint32_t targetWidth, uint32_t targetHeight,
+                                           uint32_t outputWidth, uint32_t outputHeight) {
+    if (targetWidth == 0 || targetHeight == 0 || outputWidth == 0 || outputHeight == 0)
+        return false;
+    const double widthScale = static_cast<double>(outputWidth) / targetWidth;
+    const double heightScale = static_cast<double>(outputHeight) / targetHeight;
+    const double aspectDelta = static_cast<double>(outputWidth) / outputHeight -
+                               static_cast<double>(targetWidth) / targetHeight;
+    // Marked scene passes may run below half output size when an upscaler is
+    // combined with the game's render scale. Keep aspect and size bounds, but
+    // admit targets down to one quarter of output dimensions. Manual matching
+    // uses its existing policy, independently of this automatic-mode filter.
+    return std::fabs(aspectDelta) <= 0.1 && widthScale >= 0.5 && widthScale <= 4.0 &&
+           heightScale >= 0.5 && heightScale <= 4.0;
+}
+
 inline bool SupportsShaderCopy(reshade::api::device_api api) {
     using reshade::api::device_api;
     return api == device_api::d3d9 || api == device_api::d3d10 ||

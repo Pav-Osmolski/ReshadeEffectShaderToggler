@@ -7,6 +7,23 @@ static void require(bool condition) {
 }
 
 int main() {
+    // DLSS Quality combined with a reduced game render scale exceeds the old
+    // 1.85x output/input limit, despite retaining the output aspect ratio.
+    require(Rendering::MatchesAutomaticSceneDimensions(2560, 1440, 3840, 2160));
+    require(Rendering::MatchesAutomaticSceneDimensions(1896, 1067, 3840, 2160));
+    require(Rendering::MatchesAutomaticSceneDimensions(1920, 1080, 3840, 2160));
+    require(Rendering::MatchesAutomaticSceneDimensions(1280, 720, 3840, 2160));
+    require(Rendering::MatchesAutomaticSceneDimensions(960, 540, 3840, 2160));
+    require(Rendering::MatchesAutomaticSceneDimensions(7680, 4320, 3840, 2160));
+    require(!Rendering::MatchesAutomaticSceneDimensions(959, 540, 3840, 2160));
+    require(!Rendering::MatchesAutomaticSceneDimensions(480, 270, 3840, 2160));
+    require(!Rendering::MatchesAutomaticSceneDimensions(1024, 1024, 3840, 2160));
+    require(!Rendering::MatchesAutomaticSceneDimensions(1920, 1200, 3840, 2160));
+    require(!Rendering::MatchesAutomaticSceneDimensions(0, 1080, 3840, 2160));
+    require(!Rendering::MatchesAutomaticSceneDimensions(1920, 0, 3840, 2160));
+    require(!Rendering::MatchesAutomaticSceneDimensions(1920, 1080, 0, 2160));
+    require(!Rendering::MatchesAutomaticSceneDimensions(1920, 1080, 3840, 0));
+
     VulkanTraceBudget trace;
     require(!trace.take());
     require(trace.start(2, 3));
