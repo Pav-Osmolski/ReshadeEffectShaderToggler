@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.6.11.580 — 2026-11-20
+
+- Add controller button and D-pad shortcuts to toggle groups in the ReShade 5.x build.
+- Save controller bindings locally for the selected Windows device.
+- See [release notes](docs/releases/v1.6.11.580.md).
+
 ## v1.6.10.580 — 2026-11-17
 
 - Add a saved per-game Vulkan scene-transfer option, startup/pending status and diagnostic launcher override detection.

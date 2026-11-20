@@ -1514,7 +1514,7 @@ static void CheckHotkeys(AddonImGui::AddonUIData& instance, reshade::api::effect
     if (*instance.ActiveCollectorFrameCounter() > 0)
         --(*instance.ActiveCollectorFrameCounter());
 
-    auto& controllers = runtime->get_private_data<RuntimeDataContainer>()->controllers;
+    auto& controllers = runtime->get_private_data<RuntimeDataContainer>().controllers;
 
     auto pressedKeys = [&](uint32_t keys) {
         if (keys == 0 || !ShaderToggler::areKeysPressed(keys, runtime))
@@ -1611,7 +1611,7 @@ static void CheckHotkeys(AddonImGui::AddonUIData& instance, reshade::api::effect
     }
 
     auto& groups = instance.GetToggleGroups();
-    const auto& device = *runtime->get_device()->get_private_data<DeviceDataContainer>();
+    const auto& device = runtime->get_device()->get_private_data<DeviceDataContainer>();
     const bool learning = controllers.Learning();
     const bool wantsController = learning || std::any_of(groups.begin(), groups.end(), [](const auto& entry) {
         return !entry.second.getControllerDevice().empty();
@@ -1643,7 +1643,7 @@ static void ShowHelpMarker(const char* desc) {
 
 static void DisplayControllerBinding(ShaderToggler::ToggleGroup& group, reshade::api::effect_runtime* runtime) {
     using ShaderToggler::ControllerInput;
-    auto& controllers = runtime->get_private_data<RuntimeDataContainer>()->controllers;
+    auto& controllers = runtime->get_private_data<RuntimeDataContainer>().controllers;
     const auto& devices = controllers.Devices();
     const auto bound = std::find_if(devices.begin(), devices.end(), [&](const auto& device) {
         return device.id == group.getControllerDevice();
