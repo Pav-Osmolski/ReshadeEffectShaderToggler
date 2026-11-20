@@ -1514,6 +1514,8 @@ static void CheckHotkeys(AddonImGui::AddonUIData& instance, reshade::api::effect
     if (*instance.ActiveCollectorFrameCounter() > 0)
         --(*instance.ActiveCollectorFrameCounter());
 
+    auto& controllers = runtime->get_private_data<RuntimeDataContainer>().controllers;
+
     auto pressedKeys = [&](uint32_t keys) {
         if (keys == 0 || !ShaderToggler::areKeysPressed(keys, runtime))
             return false;
@@ -1604,12 +1606,22 @@ static void CheckHotkeys(AddonImGui::AddonUIData& instance, reshade::api::effect
         if (changed)
             instance.UpdateToggleGroupsForShaderHashes();
 
+        controllers.WaitForRelease();
         return;
     }
 
-    for (auto& [_, group] : instance.GetToggleGroups()) {
-        const uint32_t toggleKey = group.getToggleKey();
-        if (!pressedKeys(toggleKey))
+    auto& groups = instance.GetToggleGroups();
+    const auto& device = runtime->get_device()->get_private_data<DeviceDataContainer>();
+    const bool learning = controllers.Learning();
+    const bool wantsController = learning || std::any_of(groups.begin(), groups.end(), [](const auto& entry) {
+        return !entry.second.getControllerDevice().empty();
+    });
+    controllers.Poll(static_cast<HWND>(runtime->get_hwnd()), wantsController && device.current_runtime == runtime);
+
+    for (auto& [_, group] : groups) {
+        const bool controllerPressed = !learning && !group.getControllerDevice().empty() &&
+            controllers.Pressed(group.getControllerDevice(), group.getControllerControl());
+        if (!pressedKeys(group.getToggleKey()) && !controllerPressed)
             continue;
 
         group.toggleActive();
@@ -1627,6 +1639,67 @@ static void ShowHelpMarker(const char* desc) {
         ImGui::PopTextWrapPos();
         ImGui::EndTooltip();
     }
+}
+
+static void DisplayControllerBinding(ShaderToggler::ToggleGroup& group, reshade::api::effect_runtime* runtime) {
+    using ShaderToggler::ControllerInput;
+    auto& controllers = runtime->get_private_data<RuntimeDataContainer>().controllers;
+    const auto& devices = controllers.Devices();
+    const auto bound = std::find_if(devices.begin(), devices.end(), [&](const auto& device) {
+        return device.id == group.getControllerDevice();
+    });
+    if (!group.getControllerDevice().empty()) {
+        const auto control = ControllerInput::ControlName(group.getControllerControl());
+        ImGui::Text("Controller: %s (%s)", control.c_str(),
+                    bound == devices.end() ? "device unavailable" : bound->name.c_str());
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Clear controller"))
+            group.setControllerBinding({});
+    }
+    if (ImGui::Button("Bind controller button")) {
+        controllers.selectedDevice.clear();
+        controllers.LearnFor(group.getId());
+        ImGui::OpenPopup("Controller binding");
+    }
+    if (!ImGui::BeginPopup("Controller binding"))
+        return;
+    controllers.LearnFor(group.getId());
+
+    const auto selected = std::find_if(devices.begin(), devices.end(), [&](const auto& device) {
+        return device.id == controllers.selectedDevice;
+    });
+    if (ImGui::BeginCombo("Controller", selected == devices.end() ? "Choose controller" : selected->name.c_str())) {
+        for (const auto& device : devices) {
+            ImGui::PushID(device.id.c_str());
+            const std::string label = device.name + " (" + device.id + ")";
+            if (ImGui::Selectable(label.c_str(), controllers.selectedDevice == device.id)) {
+                controllers.selectedDevice = device.id;
+                controllers.WaitForRelease();
+            }
+            ImGui::PopID();
+        }
+        ImGui::EndCombo();
+    }
+    if (devices.empty())
+        ImGui::TextWrapped("Connect a controller and keep the game window focused.");
+    else if (selected != devices.end()) {
+        ImGui::TextWrapped("Release all controls, then press one button or D-pad direction.");
+        if (selected->pressed.count() == 1) {
+            for (uint32_t control = 0; control < ControllerInput::ControlCount; ++control) {
+                if (selected->pressed[control]) {
+                    group.setControllerBinding(selected->id, control);
+                    controllers.StopLearning();
+                    ImGui::CloseCurrentPopup();
+                    break;
+                }
+            }
+        }
+    }
+    if (ImGui::Button("Cancel")) {
+        controllers.StopLearning();
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
 }
 
 static void DisplaySettings(AddonImGui::AddonUIData& instance, reshade::api::effect_runtime* runtime) {
@@ -1900,6 +1973,7 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, reshade::api::eff
                 if (key_input_box(ShaderToggler::reshade_key_name(keys).c_str(), &keys, runtime))
                     group.setToggleKey(keys);
                 ImGui::PopItemWidth();
+                DisplayControllerBinding(group, runtime);
 
                 if (ImGui::Button("OK"))
                     group.setEditing(false);

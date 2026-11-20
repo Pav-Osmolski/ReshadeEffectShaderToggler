@@ -16,6 +16,16 @@ A REST group stores shader hashes, effect-selection rules, target/binding settin
 
 Imported groups also start inactive with no hotkey. Check technique names, target assumptions and game/API compatibility before activating them. REST warns about conflicting group/REST shortcuts.
 
+## Bind a controller button
+
+1. Open ReShade → **Add-ons** → **REST Enhanced**, then edit the toggle group.
+2. Select **Bind controller button** and choose the controller from the list. Release its controls, then press one button or one D-pad direction.
+3. Close the editor and select **Save changes**. The binding toggles the group once per press with the game focused. A keyboard shortcut can also be assigned. Use **Clear controller** to remove only the controller binding.
+
+Choose the device Windows exposes to the game. That can be a native controller or a DS4Windows virtual controller. If DS4Windows exposes both the physical and virtual devices, select the one you intend to use. The binding belongs to that Windows device instance. If a connection change or a virtual device recreation gives it a new identity, bind it again. Controller bindings are local and are omitted when you copy or export groups.
+
+REST reads game controllers through Windows DirectInput in non-exclusive mode. Available buttons depend on the device, connection and driver. Sticks and analogue triggers are outside this binding UI. Extra controls such as Edge paddles, Xbox Share, haptic feedback or touch input require separate handling if the driver does not expose them as ordinary buttons. Controller shortcuts pause while shader hunting or learning a binding.
+
 ## Saving is explicit
 
 Use **Save changes** when REST shows **Unsaved changes**. Done hunting commits the current marks to the group; it does not by itself write the INI. Closing the overlay or game is not a substitute for saving.

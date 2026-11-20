@@ -209,6 +209,7 @@
     <ClInclude Include="EffectData.h" />
     <ClInclude Include="GameHookT.h" />
     <ClInclude Include="KeyMonitor.h" />
+    <ClInclude Include="ControllerInput.h" />
     <ClInclude Include="GlobalResourceView.h" />
     <ClInclude Include="D3D9StateSnapshot.h" />
     <ClInclude Include="RenderingBindingManager.h" />
@@ -235,6 +236,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AddonUIData.cpp" />
+    <ClCompile Include="ControllerInput.cpp" />
     <ClCompile Include="CDataFile.cpp" />
     <ClCompile Include="ConstantCopyBase.cpp" />
     <ClCompile Include="ConstantCopyFFXIV.cpp">
