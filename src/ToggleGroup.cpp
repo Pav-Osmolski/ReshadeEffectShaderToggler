@@ -108,6 +108,8 @@ ToggleGroup::ToggleGroup(const ToggleGroup& other)
     _id = other._id;
     _name = other._name;
     _keybind = other._keybind;
+    _controllerDevice = other._controllerDevice;
+    _controllerControl = other._controllerControl;
     _vertexShaderHashes = other._vertexShaderHashes;
     _pixelShaderHashes = other._pixelShaderHashes;
     _computeShaderHashes = other._computeShaderHashes;
@@ -161,6 +163,8 @@ ToggleGroup ToggleGroup::cloneForNewId(int newId) const {
     clone._id = newId;
     clone._name = _name + " Copy";
     clone._keybind = 0;
+    clone._controllerDevice.clear();
+    clone._controllerControl = 0;
     clone._isActive = false;
     clone._isEditing = false;
     clone._cbCycle = CYCLE_NONE;
@@ -188,7 +192,8 @@ std::string ToggleGroup::configurationSignature() const {
         ss << ';';
     };
 
-    ss << _name.size() << ':' << _name << ';' << _keybind << ';' << _isActive << ';';
+    ss << _name.size() << ':' << _name << ';' << _keybind << ';' << _isActive << ';'
+       << _controllerDevice.size() << ':' << _controllerDevice << ';' << _controllerControl << ';';
     appendUIntSet(_vertexShaderHashes);
     appendUIntSet(_pixelShaderHashes);
     appendUIntSet(_computeShaderHashes);
@@ -302,7 +307,7 @@ bool ToggleGroup::RemoveVarMapping(string& variable) {
     return true;
 }
 
-void ToggleGroup::saveState(CDataFile& iniFile, int groupCounter) const {
+void ToggleGroup::saveState(CDataFile& iniFile, int groupCounter, bool includeControllerBinding) const {
     const string sectionRoot = "Group" + std::to_string(groupCounter);
     const string vertexHashesCategory = sectionRoot + "_VertexShaders";
     const string pixelHashesCategory = sectionRoot + "_PixelShaders";
@@ -342,6 +347,10 @@ void ToggleGroup::saveState(CDataFile& iniFile, int groupCounter) const {
 
     iniFile.SetValue("Name", _name, "", sectionRoot);
     iniFile.SetUInt("ToggleKey", _keybind, "", sectionRoot);
+    if (includeControllerBinding && !_controllerDevice.empty()) {
+        iniFile.SetValue("ControllerDevice", _controllerDevice, "", sectionRoot);
+        iniFile.SetUInt("ControllerControl", _controllerControl, "", sectionRoot);
+    }
     iniFile.SetBool("Active", _isActive, "", sectionRoot);
 
     stringstream ss("");
@@ -491,6 +500,8 @@ void ToggleGroup::loadState(CDataFile& iniFile, int groupCounter) {
         _keybind = toggleKeyValue;
     }
 
+    _controllerDevice = iniFile.GetValue("ControllerDevice", sectionRoot);
+    _controllerControl = _controllerDevice.empty() ? 0 : iniFile.GetUInt("ControllerControl", sectionRoot);
     _isActive = iniFile.GetBool("Active", sectionRoot);
 
     const int32_t invocationLocation = iniFile.GetUInt("InvocationLocation", sectionRoot);
