@@ -414,7 +414,7 @@ std::string AddonUIData::ExportToggleGroup(const ToggleGroup& group) const
 {
     CDataFile data;
     data.SetInt("FormatVersion", 1, "", "RESTGroupExport");
-    group.saveState(data, 0);
+    group.saveState(data, 0, false);
     return data.Serialize();
 }
 
@@ -434,6 +434,7 @@ ToggleGroup* AddonUIData::ImportToggleGroup(const std::string& serialized)
     if (imported.isActive())
         imported.toggleActive();
     imported.setToggleKey(0);
+    imported.setControllerBinding({});
     imported.SetConfigDirtyFlag(&_configDirty);
     imported.setEditing(false);
 

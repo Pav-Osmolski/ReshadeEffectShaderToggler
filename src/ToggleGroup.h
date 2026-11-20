@@ -130,7 +130,7 @@ class ToggleGroup {
     /// </summary>
     /// <param name="iniFile"></param>
     /// <param name="groupCounter"></param>
-    void saveState(CDataFile& iniFile, int groupCounter) const;
+    void saveState(CDataFile& iniFile, int groupCounter, bool includeControllerBinding = true) const;
     /// <summary>
     /// Loads the shader hashes, name and toggle key from the ini file specified, using a Group + groupCounter section.
     /// </summary>
@@ -149,6 +149,15 @@ class ToggleGroup {
     void setEditing(bool isEditing) { _isEditing = isEditing; }
 
     uint32_t getToggleKey() const { return _keybind; }
+    const std::string& getControllerDevice() const { return _controllerDevice; }
+    uint32_t getControllerControl() const { return _controllerControl; }
+    void setControllerBinding(const std::string& device, uint32_t control = 0) {
+        if (_controllerDevice == device && _controllerControl == control)
+            return;
+        _controllerDevice = device;
+        _controllerControl = control;
+        markConfigDirty();
+    }
     const std::string& getName() const { return _name; }
     bool isActive() const { return !isRetired() && _isActive; }
     bool isRetired() const { return _retired.load(std::memory_order_acquire); }
@@ -406,6 +415,8 @@ class ToggleGroup {
     int _id;
     std::string _name;
     uint32_t _keybind;
+    std::string _controllerDevice;
+    uint32_t _controllerControl = 0;
     std::unordered_set<uint32_t> _vertexShaderHashes;
     std::unordered_set<uint32_t> _pixelShaderHashes;
     std::unordered_set<uint32_t> _computeShaderHashes;

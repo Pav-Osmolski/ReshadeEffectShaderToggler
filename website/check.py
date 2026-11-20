@@ -28,7 +28,14 @@ class Page(HTMLParser):
 
 
 def main():
-    pages = {p: Page(p.read_text(encoding='utf-8')) for p in SITE.rglob('*.html')}
+    verification = set()
+    for source in (ROOT / 'website/static').glob('google*.html'):
+        target = SITE / source.name
+        if not target.is_file() or target.read_bytes() != source.read_bytes():
+            raise RuntimeError(f'Missing or modified verification output: {source.name}')
+        verification.add(target)
+    pages = {p: Page(p.read_text(encoding='utf-8')) for p in SITE.rglob('*.html')
+             if p not in verification}
     if not pages or SITE / 'index.html' not in pages:
         raise RuntimeError('Build the documentation website first')
     errors = []

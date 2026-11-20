@@ -51,6 +51,22 @@ int main() {
         queued->retire();
         ShaderToggler::ToggleGroup copied(*queued);
         Check(!copied.isRetired()); // New objects do not inherit terminal retirement.
+        const std::string controller = "{A48E5950-BC63-4D31-8A1C-5FAE1A37410F}";
+        group.setControllerBinding(controller, 4);
+        CDataFile saved;
+        group.saveState(saved, 0);
+        CDataFile reloaded;
+        Check(reloaded.LoadFromString(saved.Serialize()));
+        ShaderToggler::ToggleGroup restored("Restored", 11);
+        restored.loadState(reloaded, 0);
+        Check(restored.getControllerDevice() == controller && restored.getControllerControl() == 4);
+        Check(group.cloneForNewId(12).getControllerDevice().empty());
+        CDataFile portableGroup;
+        group.saveState(portableGroup, 0, false);
+        Check(portableGroup.GetValue("ControllerDevice", "Group0").empty());
+        restored.loadState(portableGroup, 0);
+        Check(restored.getControllerDevice().empty());
+
         ShaderToggler::ToggleGroup concurrent("Concurrent", 10);
         concurrent.toggleActive();
         std::atomic_bool stop{false};
