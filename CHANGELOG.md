@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.7.7.680 — 2026-11-20
+
+- Add controller button and D-pad bindings for toggle groups alongside keyboard shortcuts.
+- Save bindings per Windows device and keep them local to the game's configuration.
+- Add Google Search Console verification for the documentation site.
+- See the [release notes](docs/releases/v1.7.7.680.md) for setup and tested coverage.
+
 ## v1.7.6.680 — 2026-11-17
 
 - Add a saved per-game Vulkan scene-transfer option, startup/pending status and diagnostic launcher override detection.
