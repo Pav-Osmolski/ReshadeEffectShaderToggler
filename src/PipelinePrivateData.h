@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CDataFile.h"
+#include "ControllerInput.h"
 #include "VulkanBoundaryTrace.h"
 #include "EffectData.h"
 #include "ToggleGroup.h"
@@ -199,6 +200,7 @@ struct __declspec(uuid("C63E95B1-4E2F-46D6-A276-E8B4612C069A")) DeviceDataContai
 };
 
 struct __declspec(uuid("838BAF1D-95C0-4A7E-A517-052642879986")) RuntimeDataContainer {
+    ShaderToggler::ControllerInput controllers;
     std::shared_mutex technique_mutex;
     std::unordered_map<std::string, EffectData> allTechniques;
     std::unordered_set<EffectData*> allEnabledTechniques;
