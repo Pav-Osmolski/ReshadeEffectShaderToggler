@@ -96,6 +96,12 @@ def main():
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, target)
     shutil.copytree(ROOT / 'website/assets', STAGE / 'assets')
+    for source in (ROOT / 'website/static').glob('google*.html'):
+        if not re.fullmatch(r'google[0-9a-f]+\.html', source.name):
+            raise ValueError(f'Invalid Google verification filename: {source.name}')
+        if source.read_bytes().strip() != f'google-site-verification: {source.name}'.encode('ascii'):
+            raise ValueError(f'Invalid Google verification contents: {source.name}')
+        shutil.copyfile(source, STAGE / source.name)
     home = (ROOT / 'website/index.md').read_text(encoding='utf-8')
     values = {f'{line}_{field}': value for line, entry in releases.items() for field, value in entry.items()}
     home = home.replace('template: home.html', 'template: home.html\n' + yaml.safe_dump(values, sort_keys=False).strip())
