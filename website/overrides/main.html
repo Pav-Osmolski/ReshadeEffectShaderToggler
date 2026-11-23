@@ -1,4 +1,8 @@
 {% extends "base.html" %}
+{% block site_meta %}
+<link rel="icon" type="image/svg+xml" href="{{ 'assets/rest-mark.svg' | url }}">
+{{ super() }}
+{% endblock %}
 {% block extrahead %}
 {% if page and page.meta and page.meta.search and page.meta.search.exclude %}
 <meta name="robots" content="noindex,follow">
