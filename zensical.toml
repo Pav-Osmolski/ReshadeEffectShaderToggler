@@ -52,7 +52,7 @@ nav = [
 [project.theme]
 custom_dir = "website/overrides"
 logo = "assets/rest-mark.svg"
-favicon = "assets/rest-mark.svg"
+favicon = "assets/rest-mark.webp"
 language = "en"
 font = false
 features = ["navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.path", "navigation.top", "navigation.footer", "search.highlight", "content.code.copy"]
